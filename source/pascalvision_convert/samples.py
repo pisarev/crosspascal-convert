@@ -1,0 +1,122 @@
+# -*- coding: utf-8 -*-
+# Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
+"""Known-good models with recorded numbers - is the installation healthy?
+
+WHY. Someone who has just set up an environment has no way of learning that it
+works until they bring their own model, and then it is unclear whether the model
+or the installation is at fault. A pair of models with RECORDED numbers answers
+that at once.
+
+For us the same pair is a regression: if the numbers move tomorrow, we see it on
+our own models before anyone sees it on theirs.
+
+THE NUMBERS ARE RECORDED BUT DO NOT PASS THE VERDICT. The verdict comes from the
+same comparison as always: the 99.9th percentile below tolerance. The recorded
+numbers are printed BESIDE it, for the eye. Demanding that they repeat digit for
+digit would be wrong: another machine, another instruction set, another order of
+summation, and the last digit moves lawfully. Prove the PREDICATE (it agrees),
+not a proxy (it agrees to five digits).
+
+WHAT IS DELIBERATELY ABSENT: download links. None of them have been walked by us,
+and promising a road you have not travelled is the worst kind of directions. A
+sample whose file is not on the machine is reported as "not checked", which is a
+state of its own.
+"""
+
+import os
+
+from . import pipeline
+from .report import Report
+
+
+
+
+
+
+SAMPLES_VARIABLE = 'PASCALVISION_SAMPLES'
+DEFAULT_DIRECTORY = os.path.abspath('samples')
+
+
+def samples_directory(given=None):
+    if given:
+        return given
+    from_environment = os.environ.get(SAMPLES_VARIABLE, '')
+    if from_environment:
+        return from_environment
+    return DEFAULT_DIRECTORY
+
+SAMPLES = (
+    {
+        'name': 'yolo11n',
+        'file': 'yolo11n.simplified.onnx',
+        'kind': 'onnx',
+        'what': 'detector, input 1x3x640x640, output 1x84x8400',
+        'recorded': {'smooth': 1.796e-06, 'noise': 2.176e-06, 'flat': 3.221e-06},
+        'measured': '31.08.2026, clean environment, apache-tvm 0.26.0',
+    },
+    {
+        'name': 'mobilenet_v2',
+        'file': 'mobilenet_v2_1.0_224.tflite',
+        'kind': 'tflite',
+        'what': 'classifier, input 1x224x224x3 NHWC, output 1x1001',
+        'recorded': {'smooth': 4.321e-07, 'noise': 9.239e-07, 'flat': 3.651e-07},
+        'measured': '31.08.2026, reference is the ai-edge-litert interpreter',
+    },
+)
+
+
+
+
+NOTEWORTHY_RATIO = 100
+
+
+def check_installation(directory=None, work_dir=None, on_step=None):
+    """Build the samples and compare. Returns a report, prints nothing."""
+    directory = samples_directory(directory)
+    work_dir = work_dir or os.path.join(directory, 'installation-check')
+    report = Report('Installation check on known-good models')
+
+    for sample in SAMPLES:
+        step = report.step('Sample %s' % sample['name'])
+        step.say(sample['what'])
+        path = os.path.join(directory, sample['file'])
+        if not os.path.isfile(path):
+            step.say('no such file: %s' % path)
+            step.say('this is NOT CHECKED - neither a pass nor a failure')
+            if on_step:
+                on_step(step)
+            continue
+
+        run = pipeline.run(path, os.path.join(work_dir, sample['name']), 'cpu')
+        comparison = None
+        for other in run.steps:
+            if other.name.startswith('Comparison'):
+                comparison = other
+        if comparison is None:
+            step.refuse('the comparison was never reached; see the build report')
+            for other in run.steps:
+                for line in other.lines:
+                    step.say(line)
+            if on_step:
+                on_step(step)
+            continue
+
+        for label, recorded in sample['recorded'].items():
+            keys = [k for k in comparison.numbers if k.startswith(label + '.')]
+            if not keys:
+                step.say('%-8s recorded %.3e, no fresh number' % (label, recorded))
+                continue
+            fresh = max(comparison.numbers[k] for k in keys)
+            note = ''
+            if fresh > recorded * NOTEWORTHY_RATIO:
+                note = '   ABOVE THE RECORDED VALUE by more than %dx' % NOTEWORTHY_RATIO
+            step.say('%-8s recorded %.3e, now %.3e%s' % (label, recorded, fresh, note))
+        step.say('measured: %s' % sample['measured'])
+        if run.sound:
+            step.done('comparison passed')
+        else:
+            step.refuse('comparison failed')
+        if on_step:
+            on_step(step)
+
+    return report

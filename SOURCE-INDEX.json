@@ -1,0 +1,177 @@
+{
+  "RELEASE_READY": false,
+  "final_native_validation": "NOT_APPLICABLE_TO_DECLARED_SOURCE_ONLY_SCOPE",
+  "local_metadata": [
+    {
+      "kind": "file_or_directory",
+      "path": ".git",
+      "reason": "Git working-copy metadata; excluded from distributed payload"
+    }
+  ],
+  "manifest_self_excluded": true,
+  "members": [
+    {
+      "bytes": 8,
+      "path": ".gitattributes",
+      "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da"
+    },
+    {
+      "bytes": 1070,
+      "path": "LICENSE",
+      "sha256": "04b643fe3d2d95be3b9a0ad9d3882d00a9b2d9dfb74694f35fe8edfc77e67815"
+    },
+    {
+      "bytes": 1599,
+      "path": "README.md",
+      "sha256": "e2460959a02f5bda7c07afd6c27621c332e669b02d962c949e200533175b6046"
+    },
+    {
+      "bytes": 5968,
+      "path": "docs/SOURCE-NOTES.md",
+      "sha256": "4d3d47ab0f0d65f3125681f198063aa2ecc294328e81d37285aa3c5d91a10220"
+    },
+    {
+      "bytes": 13487,
+      "path": "scripts/verify_source.py",
+      "sha256": "baaa76f4b0328b889d09acb390a5f5f7baed1c4c6accbb0a074db4b8c050426c"
+    },
+    {
+      "bytes": 261,
+      "path": "source/pascalvision_convert/__init__.py",
+      "sha256": "8222783836cde775362a86f1d5207e8f17fa7d9a4a767016f7518f5846b85649"
+    },
+    {
+      "bytes": 15951,
+      "path": "source/pascalvision_convert/build_plan.py",
+      "sha256": "54a8a26d32a467fa38eddafd12d543030c468d9208d6b56de26e00c4190b2c2f"
+    },
+    {
+      "bytes": 13354,
+      "path": "source/pascalvision_convert/bundle_atomic.py",
+      "sha256": "66d151d9dc76fdcd8ed618f5d1841c99296171e37a5796a6018ec2ab77f5d74f"
+    },
+    {
+      "bytes": 45308,
+      "path": "source/pascalvision_convert/bundle_publication.py",
+      "sha256": "28e41a6d6a5e33463a1d0b5a22994ccd84f15007cd4d4d78214b67d707ddb4ff"
+    },
+    {
+      "bytes": 13057,
+      "path": "source/pascalvision_convert/cli.py",
+      "sha256": "95aba17e3df025db217c2dd36896d35dca47f500bccc19d2badc03ddfe30205e"
+    },
+    {
+      "bytes": 23453,
+      "path": "source/pascalvision_convert/contract.py",
+      "sha256": "8137ee5370f6daaa1a7499f78c61c712d15e181c8fa91a6ee00d137044f5f3bb"
+    },
+    {
+      "bytes": 52613,
+      "path": "source/pascalvision_convert/convert.py",
+      "sha256": "9436540506bd72dd65b622a7c35fa2f18fc21ab615a821991ad8432492dc4110"
+    },
+    {
+      "bytes": 23161,
+      "path": "source/pascalvision_convert/detect.py",
+      "sha256": "018f1614d2914737a536a91c9a809b3030ec411d543e14a26f6c0a6f048c3e24"
+    },
+    {
+      "bytes": 26455,
+      "path": "source/pascalvision_convert/environment.py",
+      "sha256": "7227c6625d2860fc6dc1f8fb7a551cae06cc2e56900ed3ba9a8230c043e0ddb5"
+    },
+    {
+      "bytes": 14799,
+      "path": "source/pascalvision_convert/exported_onnx_hold.py",
+      "sha256": "9e26c16827c79c88d024966f40e32df4ca986f833b0ff3757d8fb716094bee61"
+    },
+    {
+      "bytes": 22591,
+      "path": "source/pascalvision_convert/manifest.py",
+      "sha256": "fea59d9d6712a700e859b76710f63c82398fafe418280047a51c426af6d40916"
+    },
+    {
+      "bytes": 6205,
+      "path": "source/pascalvision_convert/native_consumer_hold.py",
+      "sha256": "90d16966b0808b038dc8e55d34a7eda9f83fc60b3cb81190b8e215fed10c5edf"
+    },
+    {
+      "bytes": 23336,
+      "path": "source/pascalvision_convert/onnx_closure.py",
+      "sha256": "823610bf9b503318b9686abccaf18d6568526d8376058b02aec742d3adf0ddc2"
+    },
+    {
+      "bytes": 53022,
+      "path": "source/pascalvision_convert/pipeline.py",
+      "sha256": "29b742dee4cb46d45dd0e99508dc89ff14358bf2186dbbba56a7ce663c8baaad"
+    },
+    {
+      "bytes": 50303,
+      "path": "source/pascalvision_convert/recipe.py",
+      "sha256": "298aab76385772ec3b8c2f4ffa7b378d72cbcb14eb37b25598dded167f30f84a"
+    },
+    {
+      "bytes": 33458,
+      "path": "source/pascalvision_convert/recipe_file.py",
+      "sha256": "ebdac65080314bf756fefa33ec3202692025714fe005266b251fd2efd5dcf165"
+    },
+    {
+      "bytes": 3455,
+      "path": "source/pascalvision_convert/report.py",
+      "sha256": "d447168bc33a7e780df642260e29de21146df932e0d61c8489d5745a52122488"
+    },
+    {
+      "bytes": 18849,
+      "path": "source/pascalvision_convert/runtime.py",
+      "sha256": "6aee12b2c972e0e131bbe8c1d8f4a1e3082ab25756d6fe404d4883a4f7b15e97"
+    },
+    {
+      "bytes": 4433,
+      "path": "source/pascalvision_convert/samples.py",
+      "sha256": "3801e164d6b65dac4a12e4995e2e34fe22985746d38b4e4054404caec85940fd"
+    },
+    {
+      "bytes": 14317,
+      "path": "source/pascalvision_convert/selftest_tuning.py",
+      "sha256": "d8f8262d5490ebc9d9c795f04291ed8b993fa67931090da613462628b066120f"
+    },
+    {
+      "bytes": 24827,
+      "path": "source/pascalvision_convert/source_freeze.py",
+      "sha256": "2e374fb13a82e5cac937f1ce4ff58c618beb9e255d7ab817d4ce4b58d551ecd5"
+    },
+    {
+      "bytes": 26573,
+      "path": "source/pascalvision_convert/source_lock.py",
+      "sha256": "ff2fe4a9be2999a61df66b428c31b94a4a93fe494390211bcc628c81700cb796"
+    },
+    {
+      "bytes": 5994,
+      "path": "source/pascalvision_convert/stage_inspection.py",
+      "sha256": "d8e80afe084458010a1651184e4b9d6790ba0e620a923a5bf5ff241190dc5e36"
+    },
+    {
+      "bytes": 45341,
+      "path": "source/pascalvision_convert/support_inventory.py",
+      "sha256": "a6342c5be50947136bd90cc788acc7cc05c53a4577c4835a34abbdbddd6ca54a"
+    },
+    {
+      "bytes": 21667,
+      "path": "source/pascalvision_convert/targets.py",
+      "sha256": "6a38bb7ce751b70b341732c1c3ed542e737eda3e1e8330d498d1565ea8aabf21"
+    },
+    {
+      "bytes": 52579,
+      "path": "source/pascalvision_convert/verify.py",
+      "sha256": "722f169a1edf125e6362cd4495c180355d73204c8a0bf90751a29d73b1b40e36"
+    }
+  ],
+  "preparation_complete": true,
+  "preparation_scope": "Declared source preview only",
+  "private_testing_draft": true,
+  "public_opening_authorized": false,
+  "publication_copy_date": "2026-11-04",
+  "repository": "crosspascal-convert",
+  "schema": "crosspascal-private-source-preview-index-v1",
+  "source_preview_ready_for_private_testing": true
+}
