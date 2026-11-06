@@ -1,20 +1,11 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""The core on the command line - the face the build recipe wears.
+"""Build a TVM bundle from a model or a saved recipe.
 
-    python -m pascalvision_convert.recipe URL-OR-PATH --into out --target cpu
+    python -m pascalvision_convert.recipe MODEL --into out --target cpu
 
-WHY A SEPARATE ENTRY RATHER THAN LINES IN THE RECIPE ITSELF. While the order of
-steps lived in shell text, only the recipe knew it. Three of the seven defects
-found on 31.08.2026 sat exactly there - and would have repeated in the wizard
-word for word, because the wizard would have retold the recipe in its own words.
-
-Here the shell calls the CORE. The wizard calls THE SAME core. There is nowhere
-for them to drift apart.
-
-EXIT CODE: zero when every step passed, one when any of them refused. The report
-goes both to the screen and to a file - the file travels with the artifact, so
-whoever downloads the module can see what it was checked against.
+The report records which comparisons ran. Native family builds can complete
+without an independent numerical comparison.
 """
 
 import argparse
@@ -26,7 +17,7 @@ import shutil
 import sys
 import tempfile
 
-from . import build_plan, detect, pipeline, targets
+from . import build_plan, detect, pipeline, targets, llm_build_profile
 from .contract import build_contract_input, parse_float_csv
 from .recipe_file import (contract_from_recipe, read_recipe,
                           write_family_receipt)
@@ -43,37 +34,25 @@ def _unheld_onnx_external_data(path):
     """
     if not isinstance(path, (str, os.PathLike)) or not os.path.isfile(path):
         return False
-    
-    
-    
+
     with open(path, 'rb') as handle:
         head = handle.read(64)
     if (head[4:8] == b'TFL3' or head[:4] == b'PK\x03\x04' or
             (head[:1] == b'\x80' and len(head) > 1 and
              head[1] in (2, 3, 4, 5)) or detect._looks_like_safetensors(head)):
         return False
-    
-    
-    
+
     detect._admit_onnx_preparse(path)
     import onnx
     from google.protobuf.message import DecodeError
     try:
         model = onnx.load(path, load_external_data=False)
     except DecodeError as error:
-        
-        
-        
-        
-        
-        
+
         raise ValueError('cannot prove unheld ONNX source self-contained '
                          'after protobuf DecodeError: %s' % error) from error
     except Exception as error:
-        
-        
-        
-        
+
         raise ValueError('cannot prove unheld ONNX source is self-contained '
                          'after an uncertain read/parse failure: %s'
                          % error) from error
@@ -126,11 +105,8 @@ def main(argv=None):
                         help='path to a file, or a URL pointing at one; omit it '
                              'only when repeating a saved build with --recipe')
     parser.add_argument('--recipe', default='', metavar='RECIPE_JSON',
-                        help='repeat a saved build: read its inputs (source, '
-                             'target, sm, shape, name, tuning, model contract) '
-                             'from RECIPE_JSON and build from those, ignoring the '
-                             'model argument and the model-shaping options. --into '
-                             'and --report still say where the output goes')
+                        help='repeat the source and settings from RECIPE_JSON; '
+                             'use --into and --report to select output paths')
     parser.add_argument('--into', default='out', help='directory for module and runtime')
     parser.add_argument('--native-family-atomic', action='store_true',
                         help='opt in to a complete native LLM family bundle committed '
@@ -150,10 +126,9 @@ def main(argv=None):
                              'compiler input, not an independently trained-model PASS')
     parser.add_argument('--target', default='cpu', choices=['cpu', 'cuda'])
     parser.add_argument('--sm', default='', metavar='SM',
-                        help='the CUDA architecture to compile for (sm_89, 89 or '
-                             '8.9); controls the TVM target and bundle metadata. '
-                             'Requires --target cuda. Omit for the legacy CUDA '
-                             'compiler default.')
+                        help='CUDA architecture for --target cuda (for example '
+                             'sm_89, 89 or 8.9). If omitted, the converter uses the '
+                             'detected architecture. Specify it if detection fails.')
     parser.add_argument('--target-os', default='', metavar='OS',
                         help='target operating system; default is this machine. '
                              'A foreign OS needs a separate native build runner.')
@@ -172,16 +147,21 @@ def main(argv=None):
                         help='optional destination CUDA driver API, e.g. 12080; '
                              'checking it prevents shipping a CUDA 13 build to '
                              'a CUDA 12-only driver. Omit when unknown.')
-    parser.add_argument('--shape', default='', help='for example images:1,3,640,640')
+    parser.add_argument('--shape', action='append', default=[],
+                        help='one input shape, for example images:1,3,640,640')
     parser.add_argument('--dtype', default='float32', choices=('float32', 'float16'),
                         help='LLM family weight precision; raw ONNX/TFLite uses float32')
     parser.add_argument('--name', default='model', help='base name of the module')
+    parser.add_argument('--llm-profile', default='',
+                        help='explicit native LLM profile; saved recipes retain their profile')
+    parser.add_argument('--llm-python', default='', metavar='PYTHON_EXE',
+                        help='native LLM compiler interpreter; pinned before a child starts')
     parser.add_argument('--report', default='', help='where to write the report')
     parser.add_argument('--tune', default='', metavar='WORK_DIR',
                         help='tune the cpu build, keeping the database in WORK_DIR')
-    parser.add_argument('--trials-per-task', type=int, default=0, metavar='N',
-        help='trials per tuning task; the budget is N times the '
-             'number of tasks the model turns out to have')
+    parser.add_argument('--trials-per-task', type=int, metavar='N',
+        help='trials per task with --tune; the total budget is N times '
+             'the number of tasks')
     parser.add_argument('--paddle-role', default='', choices=('det', 'rec'),
                         help='explicit Paddle inference role for selected source')
     parser.add_argument('--paddle-dictionary', default='', metavar='PATH',
@@ -192,9 +172,6 @@ def main(argv=None):
                         help='require native Win32-held selected Paddle stage during WSL '
                              'export; no unheld fallback (not release grade)')
 
-    
-    
-    
     contract_group = parser.add_argument_group(
         'model contract',
         'describe the model so a bundle manifest can be written; --task turns '
@@ -237,6 +214,9 @@ def main(argv=None):
              'the recipe; RAW manifest may record this label, native LLM '
              'manifest does not attest model licence or redistribution rights')
     args = parser.parse_args(argv)
+    if args.recipe and (args.llm_profile or args.llm_python):
+        parser.error('saved --recipe defines its LLM profile and compiler interpreter; '
+                     'do not override them with --llm-profile/--llm-python')
     if args.recipe and (args.cpu_codegen_mode or args.cpu_mcpu):
         parser.error('saved --recipe defines its own CPU codegen target; '
                      'do not override it with --cpu-codegen-mode/--cpu-mcpu')
@@ -272,10 +252,6 @@ def main(argv=None):
                      'saved recipe; selected Paddle CLI replay is not yet wired')
     saved_paddle = None
 
-    
-    
-    
-    
     if args.recipe:
         if args.license:
             parser.error('saved --recipe defines its own model license; '
@@ -293,11 +269,7 @@ def main(argv=None):
         except (OSError, ValueError) as trouble:
             parser.error(str(trouble))
         if recipe.get('source_closure') is not None:
-            
-            
-            
-            
-            
+
             parser.error('saved ONNX external_data source_closure requires '
                          'native multi-file staged replay, not yet wired to '
                          'plain CLI; use a new wizard Preview/Build instead')
@@ -326,25 +298,29 @@ def main(argv=None):
             parser.error('the saved recipe already defines its destination; '
                          'do not override it silently')
         trials = recipe.get('trials_per_task') or None
-        
-        
-        
-        
+
         license = recipe.get('license') or None
-        
-        
-        
-        
+
         tune_work_dir = (os.path.join(args.into, 'tuning-db')
                          if recipe.get('tune') else None)
     else:
         if not args.model:
             parser.error('a model (a path or a URL) is required unless --recipe '
                          'is given')
-        
-        
-        
-        
+        if args.trials_per_task is not None and not args.tune:
+            parser.error('--trials-per-task requires --tune')
+        if len(args.shape) > 1:
+            parser.error('--shape accepts one input shape')
+        shape = args.shape[0] if args.shape else None
+        if shape is not None:
+            dims = shape.rpartition(':')[2]
+            try:
+                if any(not dim.strip() for dim in dims.split(',')):
+                    raise ValueError('empty dimension')
+                pipeline.parse_shape(shape)
+            except ValueError as trouble:
+                parser.error('invalid --shape: %s' % trouble)
+
         try:
             contract = build_contract_input(
                 args.task, args.adapter,
@@ -367,7 +343,6 @@ def main(argv=None):
                         'mcpu': args.cpu_mcpu if args.cpu_codegen_mode == 'explicit' else None}
                        if args.cpu_codegen_mode else None)
         dtype = args.dtype
-        shape = args.shape or None
         name = args.name
         req_sm = args.sm or None
         req_os = args.target_os or None
@@ -378,8 +353,8 @@ def main(argv=None):
         license = args.license or None
 
     if native_family_atomic:
-        
-        
+
+
         if (not isinstance(source, str) or not os.path.isabs(source) or
                 not os.path.isdir(source) or source.lower().startswith(
                     ('http://', 'https://'))):
@@ -396,8 +371,8 @@ def main(argv=None):
         try:
             bundle_atomic._local_absolute(args.into)
             bundle_atomic._local_absolute(args.consumer_kit_source)
-            
-            
+
+
             parent = os.path.normcase(os.path.realpath(
                 os.path.dirname(os.path.abspath(args.into))))
             for owner in (source, args.consumer_kit_source):
@@ -405,7 +380,7 @@ def main(argv=None):
                 try:
                     overlapping = os.path.commonpath((original, parent)) == original
                 except ValueError:
-                    overlapping = False  
+                    overlapping = False
                 if overlapping:
                     raise ValueError('private native family stage would be '
                                      'inside an original selected owner tree')
@@ -420,15 +395,12 @@ def main(argv=None):
     if cpu_codegen is not None and isinstance(source, str) and os.path.isdir(source):
         parser.error('selected CPU codegen requires an ONNX file, not a model directory')
 
-    
+
     try:
         req_sm = validate_target_sm(target, req_sm)
     except ValueError as trouble:
         parser.error(str(trouble))
 
-    
-    
-    
     if isinstance(source, str) and os.path.isfile(source):
         try:
             if cpu_codegen is not None and detect.recognise(source).kind != detect.ONNX:
@@ -440,10 +412,6 @@ def main(argv=None):
         except (ImportError, OSError, ValueError) as trouble:
             parser.error('cannot prove direct CLI source self-contained: %s' % trouble)
 
-    
-    
-    
-    
     paddle_approved = None
     selected_role = (saved_paddle['role'] if saved_paddle is not None
                      else args.paddle_role)
@@ -488,8 +456,8 @@ def main(argv=None):
                 if saved_paddle is not None and paddle_approved != saved_paddle:
                     raise ValueError('saved Paddle selected closure differs from '
                                      'actual original model/dictionary bytes')
-                
-                
+
+
                 preflight = build_plan.resolve(
                     targets.host(), route='raw', source=source,
                     target=target, req_sm=req_sm, req_os=req_os,
@@ -503,11 +471,7 @@ def main(argv=None):
                 try:
                     shared_root = os.path.commonpath((source_root, destination))
                 except ValueError:
-                    
-                    
-                    
-                    
-                    
+
                     shared_root = None
                 if shared_root == source_root:
                     raise ValueError('selected Paddle output inside original model')
@@ -524,12 +488,6 @@ def main(argv=None):
               file=sys.stderr)
         return 1
 
-    
-    
-    
-    
-    
-    
     path = source
     if path.lower().startswith(('http://', 'https://')):
         print('Downloading the model...')
@@ -549,7 +507,7 @@ def main(argv=None):
                 if not os.path.isdir(args.into):
                     os.makedirs(args.into)
                 path = os.path.join(args.into, 'model.bin')
-                
+
                 with open(downloaded, 'rb') as original, open(path, 'xb') as output:
                     shutil.copyfileobj(original, output, length=1048576)
         except (ImportError, OSError, ValueError) as trouble:
@@ -559,10 +517,6 @@ def main(argv=None):
     elif not native_family_atomic and not os.path.isdir(args.into):
         os.makedirs(args.into)
 
-    
-    
-    
-    
     adapter = None
     if (family_recipe or os.path.isdir(path) or
             str(path).lower().endswith(('.pt', '.pth', '.pdmodel', '.safetensors'))):
@@ -581,6 +535,12 @@ def main(argv=None):
               'full-build LLM adapter; no output created', file=sys.stderr)
         return 1
 
+    if (args.llm_profile or args.llm_python) and (
+            adapter is None or getattr(adapter, 'kind', None) != 'full_build'):
+        print('FAILED: LLM profile and Python options require a native LLM source',
+              file=sys.stderr)
+        return 1
+
     if family_recipe or (adapter is not None and
                          getattr(adapter, 'kind', None) == 'full_build'):
         if adapter is None or getattr(adapter, 'kind', None) != 'full_build':
@@ -592,9 +552,7 @@ def main(argv=None):
             print('FAILED: saved model-family key disagrees with source: %r vs %r'
                   % (family_recipe['model_key'], key), file=sys.stderr)
             return 1
-        
-        
-        
+
         if args.hf_selected_tree_sha256:
             try:
                 if adapter.name != 'llm' or key not in ('qwen2.5-0.5b', 'gemma-2-2b'):
@@ -621,13 +579,24 @@ def main(argv=None):
         private_stage = None
         private_stage_identity = None
         try:
+            if expected_family_plan is not None:
+                llm_options = expected_family_plan['options'].get('llm')
+                compiler_python = expected_family_plan['options'].get('compiler_python')
+            else:
+                llm_options = llm_build_profile.select(args.llm_profile, model_key=key)
+                compiler_python = (llm_build_profile.python_snapshot(
+                    args.llm_python or adapter.PYTHON)
+                    if args.llm_python or llm_options else None)
+            if compiler_python is not None:
+                llm_build_profile.check_python(compiler_python)
             plan = build_plan.resolve(
                 targets.host(), target=target, req_sm=req_sm,
                 req_os=req_os, req_arch=req_arch,
                 req_driver_api=req_driver_api, route='family_full_build',
                 source=source, dtype=dtype,
                 shape=shape, tune=bool(tune_work_dir),
-                trials_per_task=trials)
+                trials_per_task=trials, llm_options=llm_options,
+                compiler_python=compiler_python)
             if expected_family_plan is not None:
                 selected = plan['target_profile']['deployment']
                 original = expected_family_plan['target_profile']['deployment']
@@ -640,9 +609,7 @@ def main(argv=None):
             consumer_inventory = None
             kwargs = {}
             if args.hf_selected_tree_sha256:
-                
-                
-                
+
                 kwargs['approved_hf_source_tree_sha256'] = (
                     args.hf_selected_tree_sha256)
             if native_family_atomic:
@@ -669,9 +636,7 @@ def main(argv=None):
                 bundle_publication.stage_selected_native_consumer_kit(
                     args.consumer_kit_source, output, consumer_inventory,
                     model_key=key, device=target)
-                
-                
-                
+
                 kwargs.update({
                     'consumer_kit_source': args.consumer_kit_source,
                     'approved_consumer_inventory': consumer_inventory})
@@ -681,18 +646,13 @@ def main(argv=None):
                     output, consumer_inventory, model_key=key, device=target)
             else:
                 custody = nullcontext()
-            
-            
-            
-            
+
             with custody:
                 built = adapter.build(path, output, target=target,
                                       arch=arch, dtype=dtype, build_plan=plan,
                                       **kwargs)
                 if args.hf_selected_tree_sha256:
-                    
-                    
-                    
+
                     provenance = built.get('provenance') if type(built) is dict else None
                     selected_source = (provenance.get('hf_source_closure')
                                        if type(provenance) is dict else None)
@@ -749,8 +709,8 @@ def main(argv=None):
                     plan, output, model_key=key,
                     provenance=built['provenance'], license=license)
             if native_family_atomic:
-                
-                
+
+
                 after = bundle_publication.inspect_selected_native_consumer_kit(
                     args.consumer_kit_source, model_key=key, device=target,
                     expected_tree_sha256=args.consumer_kit_tree_sha256)
@@ -768,9 +728,7 @@ def main(argv=None):
         except Exception as trouble:
             print('FAILED native family build/replay: %s' % trouble, file=sys.stderr)
             if native_family_atomic and private_stage is not None:
-                
-                
-                
+
                 try:
                     retained = bundle_atomic._guard_stat(private_stage,
                                                          directory=True)
@@ -839,8 +797,8 @@ def main(argv=None):
                 exported = adapter.export(path, args.into)
             path = exported['onnx']
             if paddle_approved is not None:
-                
-                
+
+
                 selected_paddle_export_provenance = exported['provenance']
             else:
                 with open(os.path.join(args.into, 'import-provenance.json'), 'x',
@@ -852,9 +810,6 @@ def main(argv=None):
             print('FAILED source family export: %s' % trouble, file=sys.stderr)
             return 1
 
-        
-        
-        
         if paddle_approved is None:
             try:
                 if _unheld_onnx_external_data(path):
@@ -882,11 +837,7 @@ def main(argv=None):
                             approved_build_plan=saved_raw_plan, **run_kwargs)
 
     if paddle_approved is not None:
-        
-        
-        
-        
-        
+
         try:
             from . import exported_onnx_hold, paddle_consumer_dictionary
             provenance = selected_paddle_export_provenance
@@ -894,9 +845,7 @@ def main(argv=None):
                     provenance.get('selected_source_closure') != paddle_approved):
                 raise ValueError('selected Paddle original exporter receipt missing')
             source_exported_onnx = os.path.abspath(path)
-            
-            
-            
+
             exported_onnx_hold.await_post_wsl_ram_admission(
                 os.path.getsize(source_exported_onnx))
             with exported_onnx_hold.hold_private_exported_onnx(
@@ -927,17 +876,14 @@ def main(argv=None):
                 if after != paddle_approved:
                     raise RuntimeError('Paddle original selected graph, weights '
                                        'or dictionary changed during compiler')
-            
-            
+
+
             provenance['compiler_window_held_exported_onnx'] = {
                 'status': 'POST_LOCK_AUDIT_PASSED_NOT_RELEASE_GRADE',
                 'exporter_sha256': ticket.original_export_sha256,
                 'staged_model_sha256': ticket.staged_model_sha256,
                 'bytes': ticket.bytes,
-                
-                
-                
-                
+
                 'held_during_pipeline_run': True,
                 'pipeline_sound': report.sound is True,
                 'verification_status': 'NOT_CHECKED',
@@ -945,10 +891,7 @@ def main(argv=None):
                 'retained_after_context': True,
             }
             if dictionary_receipt is not None:
-                
-                
-                
-                
+
                 if (dictionary_receipt['status'] !=
                         'POST_WIN32_HELD_SELECTED_REC_DICTIONARY_NOT_MODEL_UAT' or
                         dictionary_receipt['source_tree_sha256'] !=
@@ -965,8 +908,8 @@ def main(argv=None):
                 json.dump(provenance, handle, ensure_ascii=False, indent=2)
                 handle.write('\n')
         except Exception as trouble:
-            
-            
+
+
             print('FAILED selected Paddle exported-ONNX compiler custody: %s'
                   % trouble, file=sys.stderr)
             return 1

@@ -4,9 +4,9 @@ A gate exists only once a known fault has turned it red. This module builds a
 synthetic tuning database, corrupts it in the ways that matter, and checks that
 the coverage gate answers correctly each time.
 
-Synthetic and not a real database on purpose: the check has to run anywhere,
-including a machine that has never tuned anything. The shape of the files is
-taken from a real database produced on 01.09.2026 - a workload line is
+These synthetic records let the check run without tuning a model.
+The records use the TVM database format.
+A workload line is
 ``["<hash>", "<payload>"]`` and a record line is ``[<workload index>, ...]``.
 
 Run it directly::
@@ -39,10 +39,7 @@ def _database(work_dir: str, tuned_tasks: List[int],
     os.makedirs(work_dir, exist_ok=True)
     workload_path, record_path = tuning.database_files(work_dir)
     _write(workload_path, [['hash-%d' % i, 'payload'] for i in range(workloads)])
-    
-    
-    
-    
+
     records = [[i, [['trace'], [0.001], {}, []]] for i in tuned_tasks]
     records += [[i, [['trace'], [1e10], {}, []]] for i in unmeasured_tasks]
     _write(record_path, records)
@@ -163,11 +160,11 @@ def _input_name_cases(root: str) -> Tuple[int, int]:
     put = os.path.join(root, 'tiny.onnx')
     entry = helper.make_tensor_value_info('pixel_values', TensorProto.FLOAT,
                                          [1, 3, 8, 8])
-    vyhod = helper.make_tensor_value_info('y', TensorProto.FLOAT, [1, 3, 1, 1])
-    graf = helper.make_graph([helper.make_node('GlobalAveragePool',
+    output_info = helper.make_tensor_value_info('y', TensorProto.FLOAT, [1, 3, 1, 1])
+    graph = helper.make_graph([helper.make_node('GlobalAveragePool',
                                                ['pixel_values'], ['y'])],
-                             'tiny', [entry], [vyhod])
-    model = helper.make_model(graf,
+                             'tiny', [entry], [output_info])
+    model = helper.make_model(graph,
                               opset_imports=[helper.make_opsetid('', 13)])
     model.ir_version = 9
     onnx.save(model, put)
@@ -177,13 +174,13 @@ def _input_name_cases(root: str) -> Tuple[int, int]:
     try:
         convert._refuse_unknown_input_names(loaded, {'image': (1, 3, 8, 8)})
     except ValueError as exc:
-        nazval = 'pixel_values' in str(exc) and 'image' in str(exc)
+        named_in_error = 'pixel_values' in str(exc) and 'image' in str(exc)
         print('  %-38s refused%s -> %s'
               % ('shape for an input that does not exist',
-                 ', and named both' if nazval else ', but named neither',
-                 'AS EXPECTED' if nazval else 'WRONG'))
-        good += nazval
-        bad += not nazval
+                 ', and named both' if named_in_error else ', but named neither',
+                 'AS EXPECTED' if named_in_error else 'WRONG'))
+        good += named_in_error
+        bad += not named_in_error
     else:
         print('  %-38s went through -> WRONG' % 'shape for a missing input')
         bad += 1
@@ -221,40 +218,40 @@ def _free_dimension_cases(root):
     def model(shape):
         entry = helper.make_tensor_value_info('pixel_values', TensorProto.FLOAT,
                                              shape)
-        vyhod = helper.make_tensor_value_info('y', TensorProto.FLOAT,
+        output_info = helper.make_tensor_value_info('y', TensorProto.FLOAT,
                                               [1, 3, 1, 1])
-        graf = helper.make_graph([helper.make_node('GlobalAveragePool',
+        graph = helper.make_graph([helper.make_node('GlobalAveragePool',
                                                    ['pixel_values'], ['y'])],
-                                 'tiny', [entry], [vyhod])
-        m = helper.make_model(graf,
+                                 'tiny', [entry], [output_info])
+        m = helper.make_model(graph,
                               opset_imports=[helper.make_opsetid('', 13)])
         m.ir_version = 9
         put = os.path.join(root, 'free.onnx')
         onnx.save(m, put)
         return onnx.load(put)
 
-    
-    svobodnaya = model(['batch', 3, 'height', 'width'])
-    fiksirovannaya = model([1, 3, 8, 8])
+
+    dynamic_model = model(['batch', 3, 'height', 'width'])
+    static_model = model([1, 3, 8, 8])
 
     good = bad = 0
     try:
-        convert._refuse_free_dimensions(svobodnaya, None)
+        convert._refuse_free_dimensions(dynamic_model, None)
     except ValueError as exc:
         text = str(exc)
-        nazval = 'pixel_values' in text and '0' in text and '2' in text
+        named_in_error = 'pixel_values' in text and '0' in text and '2' in text
         print('  %-38s refused%s -> %s'
               % ('free axes, no shape given',
-                 ', and named them' if nazval else ', but named them badly',
-                 'AS EXPECTED' if nazval else 'WRONG'))
-        good += nazval
-        bad += not nazval
+                 ', and named them' if named_in_error else ', but named them badly',
+                 'AS EXPECTED' if named_in_error else 'WRONG'))
+        good += named_in_error
+        bad += not named_in_error
     else:
         print('  %-38s went through -> WRONG' % 'free axes, no shape given')
         bad += 1
 
     try:
-        convert._refuse_free_dimensions(svobodnaya,
+        convert._refuse_free_dimensions(dynamic_model,
                                         {'pixel_values': (1, 3, 640, 640)})
     except ValueError as exc:
         print('  %-38s refused a named shape -> WRONG (%s)'
@@ -264,26 +261,23 @@ def _free_dimension_cases(root):
         print('  %-38s accepted -> AS EXPECTED' % 'free axes, shape given')
         good += 1
 
-    
-    
-    
     try:
-        convert._refuse_free_dimensions(svobodnaya,
+        convert._refuse_free_dimensions(dynamic_model,
                                         {'pixel_values': (-1, -1, -1, -1)})
     except ValueError as exc:
-        nazval = '-1' in str(exc)
+        named_in_error = '-1' in str(exc)
         print('  %-38s refused%s -> %s'
               % ('the model own free shape echoed back',
-                 ', and quoted it' if nazval else ', but quoted nothing',
-                 'AS EXPECTED' if nazval else 'WRONG'))
-        good += nazval
-        bad += not nazval
+                 ', and quoted it' if named_in_error else ', but quoted nothing',
+                 'AS EXPECTED' if named_in_error else 'WRONG'))
+        good += named_in_error
+        bad += not named_in_error
     else:
         print('  %-38s went through -> WRONG' % 'free shape echoed back')
         bad += 1
 
     try:
-        convert._refuse_free_dimensions(fiksirovannaya, None)
+        convert._refuse_free_dimensions(static_model, None)
     except ValueError as exc:
         print('  %-38s refused a fixed model -> WRONG (%s)'
               % ('no free axes at all', exc))
@@ -351,23 +345,14 @@ def main() -> int:
         os.makedirs(missing)
         passed += _case('no database on disk', missing, TASKS, False, 0)
 
-        
-        
         nothing = os.path.join(root, 'nothing')
         _database(nothing, [], workloads=0)
         passed += _case('database with zero workloads', nothing, TASKS, False, 0)
 
-        
-        
-        
         alien = os.path.join(root, 'alien')
         _database(alien, list(range(TASKS + 3)), workloads=TASKS + 3)
         passed += _case('database of a different model', alien, TASKS, False, 0)
 
-        
-        
-        
-        
         sentinel = os.path.join(root, 'sentinel')
         _database(sentinel, [], unmeasured_tasks=list(range(TASKS)))
         passed += _case('every record is the unmeasured sentinel', sentinel,
@@ -408,9 +393,6 @@ def main() -> int:
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
-    
-    
-    
     expected_checks = 14 + expected_extra + expected_names + expected_free
     print('')
     print('RESULT: %d of %d passed' % (passed, expected_checks))

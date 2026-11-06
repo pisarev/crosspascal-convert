@@ -1,23 +1,13 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Standalone, bounded-RAM local model source snapshot CANDIDATE.
+"""Copy local model sources into a new directory for conversion.
 
-The current master.py Preview/Build fingerprint hashes all original source
-bytes, but does not prevent a transient edit and restoration WHILE a compiler
-reads that original. This opt-in helper copies one local ONNX/TFLite file or a
-whole local directory tree into an exclusive, independently hashed directory.
-The path handed to a compiler is the COPIED path, never the mutable original.
+The converter can pin a content inventory at preview time and verify the copy
+again before compilation. A ready marker records a successful byte check.
+The marker does not lock the files or include dependencies outside the copy.
 
-This helper is deliberately NOT called from master/pipeline. Its completed
-marker means only COPIED_AND_RECHECKED, NOT immutable or VERIFIED. The staged
-copy can itself be modified after validation; format-specific dependencies
-outside the copied directory are not closed. Transient writes during capture,
-filesystems without atomic snapshot semantics, and cross-process TOCTOU
-remain open. Do not promote the existing strict master XFAIL into a PASS.
-
-No deletion, overwrite, reuse or cleanup of any PREEXISTING user file occurs.
-An interrupted copy may leave its OWN new partial directory without a ready
-marker, preventing that path from being treated as a finished snapshot.
+The helper never replaces an existing destination. Interrupted copies may
+leave a new partial directory without a ready marker.
 """
 
 from __future__ import annotations
@@ -125,15 +115,14 @@ def _safe_ancestors(path, *, leaf_may_be_missing=False):
 
 
 def _identity(info):
-    
+
     return (info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns,
             info.st_dev, info.st_ino)
 
 
 def _descriptor_identity(info):
-    
-    
-    
+
+
     return (info.st_mode, info.st_size, info.st_mtime_ns,
             info.st_dev, info.st_ino)
 
@@ -224,9 +213,8 @@ def _scan_source(source, *, max_entries, max_bytes, block_bytes):
     inventory_bytes = 0
     inventory = []
     for path, relative, kind in sorted(paths, key=lambda p: p[1]):
-        
-        
-        
+
+
         path_bytes = len(relative.encode('utf-8', 'surrogatepass'))
         if len(relative.split('/')) > 64 or path_bytes > MAX_RELATIVE_PATH_BYTES:
             _fail('relative source model path exceeds safe depth/length bound')
@@ -266,7 +254,7 @@ def _tree_sha(inventory):
 def fingerprint_content(source, *, max_entries=DEFAULT_MAX_ENTRIES,
                         max_bytes=DEFAULT_MAX_BYTES,
                         block_bytes=DEFAULT_BLOCK_BYTES):
-    """Independent Preview-time content pin for a future caller integration.
+    """Compute the source content pin used by Preview.
 
     This does not replace master._source_fingerprint; that value also hashes
     provenance/NTFS metadata and is a separate, independently checked gate.
@@ -331,9 +319,9 @@ def _publish_marker(destination, content):
         os.fsync(handle.fileno())
     if scratch.read_bytes() != payload:
         raise SnapshotNotReady('ready-marker scratch bytes disagree after fsync')
-    
+
     os.link(scratch, path)
-    
+
     scratch.unlink()
     return path
 
@@ -363,8 +351,8 @@ def freeze_source(source, destination, *, expected_tree_sha256=None,
 
     expected_tree_sha256 and expected_source_kind are OPTIONAL preview-time
     content-tree/kind pins, never substitutes for a Preview token or master's
-    metadata-sensitive _source_fingerprint. An external caller must keep both
-    approved facts bound to its request; this helper is not auto-wired.
+    metadata-sensitive source fingerprint. Keep both facts bound to the
+    conversion request.
     """
     _limits(max_entries, max_bytes, block_bytes, min_disk_headroom)
     origin = _absolute_path(source, 'source')
@@ -398,9 +386,7 @@ def freeze_source(source, destination, *, expected_tree_sha256=None,
     if _free_bytes(target.parent) < required_free:
         _fail('insufficient disk space for complete source copy and headroom')
 
-    
-    
-    
+
     target.mkdir(exist_ok=False)
     target_info = _lstat(target)
     stage_identity = (target_info.st_dev, target_info.st_ino,
@@ -420,21 +406,21 @@ def freeze_source(source, destination, *, expected_tree_sha256=None,
         else:
             _copy_stream(original_file, copied, entry['sha256'],
                          entry['bytes'], block_bytes)
-    
-    
+
+
     second = _scan_source(origin, max_entries=max_entries, max_bytes=max_bytes,
                           block_bytes=block_bytes)
     _compare_sources(first, second, prefix='post-copy recheck')
     staged = _scan_source(target, max_entries=max_entries, max_bytes=max_bytes,
                           block_bytes=block_bytes)
-    
+
     if staged['entries'] != first['entries']:
         raise SourceChanged('private snapshot files are not byte-exact source '
                             'copies (or were changed during validation)')
     _assert_owned_stage(target, stage_identity)
     identity_after = _lstat(target)
-    
-    
+
+
     if (identity_after.st_dev, identity_after.st_ino,
             identity_after.st_mode) != (
             target_info.st_dev, target_info.st_ino, target_info.st_mode):
@@ -452,7 +438,6 @@ def freeze_source(source, destination, *, expected_tree_sha256=None,
         'total_bytes': first['total_bytes'],
         'entries': first['entries'],
         'limitations': [
-            'Master Preview/Build does not yet use this source-freeze candidate.',
             'Staging copies and original bytes can change during/after the '
             'last SHA scan; this is not an OS-level immutable snapshot/lock.',
             'External tensors, absolute paths, downloads, plugin-specific '
@@ -494,7 +479,7 @@ def audit_frozen_source(destination, *, block_bytes=DEFAULT_BLOCK_BYTES):
             manifest = json.load(stream)
     except (OSError, json.JSONDecodeError, SourceFreezeError) as exc:
         raise SnapshotNotReady('snapshot has no valid ready marker: %s' % exc) from exc
-    if (manifest.get('schema') != SCHEMA or
+    if (not isinstance(manifest, dict) or manifest.get('schema') != SCHEMA or
             manifest.get('schema_version') != VERSION or
             manifest.get('status') != 'COPIED_RECHECKED_NOT_IMMUTABLE'):
         raise SnapshotNotReady('snapshot manifest is not a completed candidate')
@@ -503,8 +488,8 @@ def audit_frozen_source(destination, *, block_bytes=DEFAULT_BLOCK_BYTES):
         raise SnapshotNotReady('snapshot manifest has no entries')
     if manifest.get('source_kind') not in ('file', 'directory'):
         raise SnapshotNotReady('snapshot kind is invalid')
-    
-    
+
+
     scanned = _scan_snapshot_without_marker(target, block_bytes)
     if (scanned['entries'] != expected or
             _tree_sha(scanned) != manifest.get('snapshot_tree_sha256') or
@@ -530,12 +515,12 @@ def audit_frozen_source(destination, *, block_bytes=DEFAULT_BLOCK_BYTES):
 
 
 def _scan_snapshot_without_marker(target, block_bytes):
-    
+
     root_names = [p.name for p in target.iterdir()]
     if READY_MARKER not in root_names:
         raise SnapshotNotReady('ready marker vanished')
     _sibling_names(root_names)
-    
+
     paths = []
 
     def walk(folder, prefix, depth=0):

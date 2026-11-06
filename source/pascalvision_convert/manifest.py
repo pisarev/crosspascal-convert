@@ -1,27 +1,19 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Emit a model bundle manifest from a model contract.
+"""Write a model bundle manifest from a converter contract.
 
-The bundle manifest (``manifest.txt``) is the single source of truth a converted
-model carries: the converter (the master) writes it, and the Pascal facade
-(``CrossVision.ML.Facade`` -> ``TModelBundle``) reads it. This module turns a
-"model contract" - a plain description of one model - into exactly the flat text
-the facade parses, plus the structured JSON companion meant for tools.
+The Pascal runtime reads the line-oriented ``manifest.txt``. Each structural
+line starts with its record type followed by ``field=value`` tokens. The JSON
+companion preserves the contract structure for tools. The writer uses the
+Python standard library.
 
-Only the standard library is used, on purpose: the converter's promise is that
-nothing has to be installed to run it, and that promise reaches down to here.
-
-The flat format is line oriented: ``key rest``. Structural lines carry
-``field=value`` tokens after the key. The facade reads fields by name, so it is
-order insensitive, but the manifests already shipped in the model zoo fix a
-particular field order; this emitter reproduces it byte for byte.
 
 Contract schema
 ---------------
 A contract is a plain ``dict`` built from ``dict`` / ``list`` / ``str`` / ``int``
 / ``float`` only, so it maps straight onto JSON and back. This one shape can
-express every model kind in the zoo today - vision detectors, classifiers,
-segmenters, oriented boxes, pose, and the two LLM families::
+express vision detectors, classifiers, segmenters, oriented boxes, pose, and
+text generation::
 
     {
         "format_version": 1,               # int, optional (defaults to 1)
@@ -58,10 +50,9 @@ segmenters, oriented boxes, pose, and the two LLM families::
         "tokenizer": {"style": "byte_bpe"},  # byte_bpe | sentencepiece
     }
 
-Optional audit fields make a bundle a verifiable artifact. They are absent from
-the contracts the byte-for-byte tests build, so those keep their exact output; the
-pipeline adds them on a real build (see :func:`pipeline._emit_manifest` and
-``state/MANIFEST-SPEC.md``). Each is emitted only when present::
+The converter can record artifact hashes, source provenance, toolchain versions,
+and source licenses. The writer emits these fields when the contract supplies
+them::
 
     "artifact": {..., "hash": "<sha256 hex of the built module>"},  # rides the
                                     # artifact line as an extra token after format
@@ -80,11 +71,8 @@ The internal contract keys stay snake_case (source_hash, built_at, tvm_runtime),
 as score_threshold and adapter_api_version already are; the flat text renders them
 camelCase (sourceHash, builtAt, tvmRuntime), as scoreThreshold already is.
 
-The line ending is a property of the file, not of the contract: the facade reads
-CRLF and LF alike (``TStringList.LoadFromFile``), and the manifests in the zoo
-happen to use both. ``emit_manifest_text`` therefore takes a ``newline`` - it
-defaults to ``"\n"`` (what the converter's own report writer uses) and can be set
-to ``"\r\n"`` to reproduce a CRLF manifest exactly.
+The Pascal runtime accepts CRLF and LF. ``emit_manifest_text`` defaults to LF.
+Pass a CRLF string as the newline argument to write CRLF.
 """
 
 import json
@@ -133,22 +121,19 @@ def emit_manifest_text(contract, newline="\n"):
         _artifact_line(data["artifact"]),
     ]
     if data["adapter"] == "omdet":
-        
-        
-        
+
+
         lines.extend(_io_line(item) for item in data["io"])
         lines.extend(_omdet_output_line(item) for item in data["omdet_outputs"])
         lines.append(_omdet_line(data["omdet"]))
     elif data.get("io"):
         lines.append(_io_line(data["io"]))
-    
-    
-    
+
+
     if data.get("output"):
         lines.append(_output_line(data["output"]))
-    
-    
-    
+
+
     if data.get("defaults"):
         lines.append(_defaults_line(data["defaults"]))
     if data.get("vision"):
@@ -160,10 +145,7 @@ def emit_manifest_text(contract, newline="\n"):
     if data.get("tokenizer"):
         lines.append(_tokenizer_line(data["tokenizer"]))
 
-    
-    
-    
-    
+
     if data.get("provenance"):
         lines.append(_provenance_line(data["provenance"]))
     if data.get("toolchain"):
@@ -175,15 +157,8 @@ def emit_manifest_text(contract, newline="\n"):
 
 
 def emit_manifest_json(contract, indent=2):
-    """Render *contract* as structured JSON (path A of MANIFEST-SPEC).
-
-    This is the companion for tooling; the flat text is what Pascal reads. The
-    JSON mirrors the contract faithfully, so ``json.loads(emit_manifest_json(c))``
-    returns the same contract.
-    """
+    """Render the validated model contract as JSON for external tools."""
     return json.dumps(_validated(contract), indent=indent, ensure_ascii=False)
-
-
 
 
 def _artifact_line(artifact):
@@ -193,26 +168,21 @@ def _artifact_line(artifact):
         "arch=%s" % artifact["arch"],
         "device=%s" % artifact["device"],
     ]
-    
-    
-    
-    
-    
+
+
     if artifact.get("device_arch"):
         parts.append("deviceArch=%s" % artifact["device_arch"])
     parts += [
         "dtype=%s" % artifact["dtype"],
         "file=%s" % artifact["file"],
     ]
-    
-    
+
+
     if artifact.get("entry") is not None:
         parts.append("entry=%s" % artifact["entry"])
     parts.append("format=%s" % artifact["format"])
-    
-    
-    
-    
+
+
     if artifact.get("hash") is not None:
         parts.append("hash=%s" % artifact["hash"])
     return " ".join(parts)
@@ -303,6 +273,14 @@ def _provenance_line(provenance):
         parts.append("sourceHash=%s" % provenance["source_hash"])
     if provenance.get("built_at") is not None:
         parts.append("builtAt=%s" % provenance["built_at"])
+    if provenance.get('source_pack') is not None:
+        pack = provenance['source_pack']
+        from .onnx_source_pack import validate_binding
+        validate_binding(pack)
+        parts.extend(('sourcePack=' + pack['path'],
+                      'sourcePackHash=' + pack['sha256'],
+                      'sourceProfile=' + pack['profile_id'],
+                      'sourceLicense=' + pack['license']))
     return " ".join(parts)
 
 
@@ -325,8 +303,6 @@ def _license_line(license_value):
     the labels line - so a value with spaces (a full licence name) survives. The
     facade skips the unknown ``license`` key, so this is informational."""
     return "license %s" % license_value
-
-
 
 
 def _integer(value):
@@ -356,8 +332,6 @@ def _int_csv(values):
 
 def _number_csv(values):
     return ",".join(_number(v) for v in values)
-
-
 
 
 def _validated(contract):
@@ -407,8 +381,7 @@ def _validated(contract):
                 or contract.get("adapter") != "rtdetr"):
             raise ValueError("fused RT-DETR output ABI cannot label another adapter")
 
-    
-    
+
     provenance = contract.get("provenance")
     if provenance is not None:
         if not isinstance(provenance, dict):
@@ -428,21 +401,15 @@ def _validated(contract):
             any(ord(char) < 32 or ord(char) == 127 or
                 char in '\u0085\u2028\u2029'
                 for char in license_value)):
-        
-        
-        
-        
+
+
         raise ValueError("contract['license'] must be one bounded text line")
 
     return contract
 
 
 def _validate_omdet(contract):
-    """EXACT pinned tiny-v7 Pascal transport; no synthetic one-input fallback.
-
-    A candidate profile still has verification=NOT_CHECKED until the actual
-    trained Pascal/ORT acceptance. Schema validation alone does not grant it.
-    """
+    """Validate the four-input OmDet Tiny manifest used by Pascal."""
     optional = {"provenance", "toolchain", "license"}
     required = {"format_version", "task_kind", "adapter", "adapter_api_version",
                 "artifact", "io", "omdet_outputs", "omdet"}

@@ -1,6 +1,16 @@
 # Converter source notes
 
-This source snapshot shows selected parts of the converter architecture. It is not a complete installable package or a working conversion SDK. Several package and family modules are absent, including dependencies needed by the package entry point. Its documentation and examples describe the included source; they do not establish support for another model, toolchain, or machine.
+This source snapshot contains the converter package, its browser interface, the existing family and support modules, and the native language-model builder. Packaging metadata and entry points are included, while the Windows SDK supplies portable Python and a pinned dependency installer. Inclusion of an adapter does not establish support for every model, toolchain, or machine it can describe.
+
+## Named language-model route
+
+The Qwen CUDA profile defines FP32, all 24 Qwen layers, batch size 1 and context and prefill capacities of 64 tokens. BuildPlan records the resolved CUDA architecture separately. The native builder checks the plan before compilation.
+
+The official Qwen source is pinned to revision `7ae557604adf67be50417f59c2c2f167def9a775`. Selection and download check its recorded source closure. A local model with a familiar directory name is not sufficient. The builder records model source identity and computes the serialized weight digest during the existing weight write; an older CPU or GPU weight digest is not substituted for that measurement.
+
+The named route requires the selected consumer kit and its tokenizer and license files before compilation. It retains the distinction between build success, bundle consistency, source identity, target identity, and consumer execution. Missing required checks remain `NOT_RUN`; diagnostic results cannot turn a required failure into a pass. The build receipt leaves consumer execution `NOT_RUN` and asks the user to run the Pascal example. This aggregation applies to the named LLM route and does not redesign the generic or multi-input verifier.
+
+Captured Python child processes use the selected console interpreter. When the interface runs through `pythonw.exe`, the sibling `python.exe` is required rather than an unrelated interpreter from PATH. The generic verifier uses the same interpreter selection for its child processes.
 
 ## Inputs and model contracts
 
@@ -16,7 +26,7 @@ The deployment OS, CPU architecture, GPU architecture, and driver requirements a
 
 The selected CPU tuning route uses a local runner, so a compiler target that the local processor cannot execute is not a valid tuning choice. A tuning database must cover the actual model's tasks with measured records; file presence and unmeasured sentinel records do not establish coverage. Historical timings in the source describe specific observations, not a general performance promise.
 
-The cuDNN helper still lacks a complete guard for grouped convolution. Removing explanatory comments does not resolve that limitation or validate CUDA execution.
+The cuDNN helper still lacks a complete guard for grouped convolution.
 
 ## File handling and runtime bundles
 
@@ -32,17 +42,8 @@ The included verifier has several comparison profiles with different rules. Outp
 
 In the generic probe path, matching labels or confidence-threshold decisions are diagnostic observations. They cannot cancel a failed numeric comparison of scores, boxes, or another output. Judging probes also reject invalid shapes, types, empty tensors, and nonfinite values. A deliberately nonjudging noise probe retains its diagnostic role; an output-count mismatch remains a required failure for every probe.
 
-The generic and multi-input profiles still need explicit selection from a complete consumer contract. Some selection and row-matching rules remain heuristic. The outer report also needs consistent separation of an execution error, an unattempted comparison, and a numeric mismatch. These are remaining converter tasks; the separately accepted two-case OmDet decision cannot be applied to arbitrary inputs of this verifier.
+The generic and multi-input profiles still need explicit selection from a complete consumer contract. Some selection and row-matching rules remain heuristic. Their outer reporting also needs consistent separation of an execution error, an unattempted comparison, and a numeric mismatch. These remain tasks for those routes even though the new named LLM route has an explicit profile and required-check aggregation. OmDet remains outside the supported Early Access conversion routes.
 
 A comparison that did not run does not establish acceptance. Native library loading can outlive Python objects, which is why the source isolates certain checks in a child process and checks its actual exit. Do not invoke these paths as an import smoke test.
 
-Thirteen isolated regressions passed for the actual generic comparison helpers using Python 3.12.14 and NumPy 2.3.5 in a separate Linux environment. They cover incorrect boxes, shapes, types, nonfinite values, output counts, failed numeric comparisons with matching labels, and preservation of the noise probe's role. They do not import the package initializer or execute TVM, ONNX Runtime, a model, or the converter CLI.
-
-The sample measurements and support inventory are executable, dated data retained from the source snapshot. Their presence does not update any model's acceptance status.
-
-## Publication cleanup
-
-The initial publication cleanup removed reviewed explanatory line comments while retaining encoding declarations, linter directives, docstrings, diagnostic strings, schemas, and test data. One historical installation path in a docstring was replaced with generic wording. Copyright notices were then added to the 25 component modules; the synthetic test runner was excluded.
-
-The later generic-comparison correction is a behavior change, recorded separately from that text cleanup and checked by the isolated regressions above. This preparation does not run models or certify the package's missing dependency closure. Historical measurements retained in the source describe their original experiments.
-
+The sample measurements are dated data retained from the source snapshot. Run pascalvision-convert support-inventory for the documented Early Access routes. This command reports the distribution scope and does not test the current machine.

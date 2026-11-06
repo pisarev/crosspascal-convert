@@ -1,0 +1,10 @@
+{
+  "schema": "crosspascal-firstparty-llm-helpers-v1",
+  "sha256": {
+    "build_llm.py": "bb5140c6a0d35e63caf9247574ed5cca8a9c0f47f3ae1697e0bcdcbd7e2885de",
+    "qwen2_model.py": "00fdc21d51969f2d174515421f47acad806464bcfcefbc563e1ec009022f0d42",
+    "gemma2_model.py": "50a60adfbce71e38d611588352c2c7ea547ced458b83052acab7977c306fe25e",
+    "weights.py": "ac1866416f38d4f2ffb30a6ef0504e071d24b3c46a4af276b506707fa48f8755"
+  },
+  "scope": "Exact first-party builder sources; source identity does not attest model execution."
+}

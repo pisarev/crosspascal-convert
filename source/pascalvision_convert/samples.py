@@ -1,37 +1,11 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Known-good models with recorded numbers - is the installation healthy?
-
-WHY. Someone who has just set up an environment has no way of learning that it
-works until they bring their own model, and then it is unclear whether the model
-or the installation is at fault. A pair of models with RECORDED numbers answers
-that at once.
-
-For us the same pair is a regression: if the numbers move tomorrow, we see it on
-our own models before anyone sees it on theirs.
-
-THE NUMBERS ARE RECORDED BUT DO NOT PASS THE VERDICT. The verdict comes from the
-same comparison as always: the 99.9th percentile below tolerance. The recorded
-numbers are printed BESIDE it, for the eye. Demanding that they repeat digit for
-digit would be wrong: another machine, another instruction set, another order of
-summation, and the last digit moves lawfully. Prove the PREDICATE (it agrees),
-not a proxy (it agrees to five digits).
-
-WHAT IS DELIBERATELY ABSENT: download links. None of them have been walked by us,
-and promising a road you have not travelled is the worst kind of directions. A
-sample whose file is not on the machine is reported as "not checked", which is a
-state of its own.
-"""
+"""Optional installation diagnostics for local sample models."""
 
 import os
 
 from . import pipeline
-from .report import Report
-
-
-
-
-
+from .report import DONE, Report
 
 SAMPLES_VARIABLE = 'PASCALVISION_SAMPLES'
 DEFAULT_DIRECTORY = os.path.abspath('samples')
@@ -63,9 +37,6 @@ SAMPLES = (
         'measured': '31.08.2026, reference is the ai-edge-litert interpreter',
     },
 )
-
-
-
 
 NOTEWORTHY_RATIO = 100
 
@@ -112,10 +83,14 @@ def check_installation(directory=None, work_dir=None, on_step=None):
                 note = '   ABOVE THE RECORDED VALUE by more than %dx' % NOTEWORTHY_RATIO
             step.say('%-8s recorded %.3e, now %.3e%s' % (label, recorded, fresh, note))
         step.say('measured: %s' % sample['measured'])
-        if run.sound:
+        if not run.sound:
+            step.refuse('comparison failed')
+        elif comparison.state == DONE:
             step.done('comparison passed')
         else:
-            step.refuse('comparison failed')
+            step.say('comparison not checked')
+            for line in comparison.lines:
+                step.say(line)
         if on_step:
             on_step(step)
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Step08 I-02: native-held *exported* lean Paddle ONNX, pilot candidate.
+"""Experimental staging of exported Paddle ONNX with Win32-held handles.
 
 This is separate from the 64 MiB RAW/ONNX-external-data freeze contract.
 The source Paddle exporter may emit an >84 MiB server-recognition ONNX.
@@ -113,9 +113,8 @@ def _format_check(path, *, expected_bytes):
     if (not model.graph or not model.graph.input or not model.graph.output or
             model.training_info or model.functions):
         raise ExportedOnnxHoldError('unsupported ONNX graph/function dependency')
-    
-    
-    
+
+
     stack = [(model, 0)]
     messages = 0
     while stack:
@@ -136,10 +135,8 @@ def _format_check(path, *, expected_bytes):
                     'plugins and is not supported by the exported holder')
         for field, value in message.ListFields():
             if field.type == field.TYPE_MESSAGE:
-                
-                
-                
-                
+
+
                 repeated = getattr(field, 'is_repeated', None)
                 if repeated is None:
                     repeated = field.label == field.LABEL_REPEATED
@@ -188,8 +185,8 @@ def _copy_handle_exact(api, handle, dest, size, block_bytes):
 
 def _exact_stage(root, root_identity, leaf):
     hf_held_stage._assert_owned_root(root, root_identity)
-    
-    
+
+
     with os.scandir(root) as children:
         one = next(children, None)
         second = next(children, None)
@@ -249,8 +246,8 @@ def await_post_wsl_ram_admission(model_bytes, *, attempts=13, interval=5):
             _admit_protobuf_ram(model_bytes)
             return
         except ExportedOnnxHoldUnavailable as exc:
-            
-            
+
+
             if ('requires >=5 GiB free physical RAM' not in str(exc) or
                     index + 1 == attempts):
                 raise
@@ -298,8 +295,8 @@ def hold_private_exported_onnx(exported_path, *, stage_parent,
             api, source, original_handle, original_identity, size, sha,
             block_bytes)
         _format_check(source, expected_bytes=size)
-        
-        
+
+
         stage = Path(tempfile.mkdtemp(prefix=_PREFIX, dir=parent))
         root_identity = hf_held_stage._object_id(source_freeze._lstat(stage))
         output_path = stage / source.name

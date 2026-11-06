@@ -1,0 +1,2547 @@
+<!-- Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE. -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="crosspascal-session" content="__CROSSPASCAL_SESSION__">
+<title>CrossPascal Convert</title>
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0f172a;
+  --bg2:#1e293b;
+  --fg:#e2e8f0;
+  --muted:#94a3b8;
+  --card:#1e293b;
+  --border:#334155;
+  --accent:#3b82f6;
+  --ok:#22c55e;
+  --warn:#eab308;
+  --fp:#ef4444;
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--fg);
+  font-family:system-ui,-apple-system,sans-serif;
+  font-size:14px;
+  line-height:1.45;
+}
+
+*:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{
+  background:var(--bg2);
+  border-bottom:1px solid var(--border);
+  padding:12px 24px;
+  display:flex;
+  align-items:center;
+  gap:8px 16px;
+
+  flex-wrap:wrap;
+  position:sticky;
+  top:0;
+  z-index:5;
+}
+header h1{font-size:18px;font-weight:600;margin:0}
+header a{color:var(--muted);text-decoration:none;font-size:13px}
+header a:hover{color:var(--fg)}
+
+.stats{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--muted);margin-left:auto}
+.stats b{color:var(--fg)}
+.stats b.ok{color:var(--ok)}
+.stats b.bad{color:var(--fp)}
+.stats b.wait{color:var(--warn)}
+
+main{padding:20px 24px 48px;max-width:1080px;margin:0 auto}
+
+
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  height:32px;
+  min-width:80px;
+  padding:0 14px;
+  background:transparent;
+  border:1px solid var(--border);
+  color:var(--fg);
+  border-radius:6px;
+  font-size:13px;
+  font-family:inherit;
+  font-weight:500;
+  cursor:pointer;
+  line-height:1;
+  transition:background .12s,color .12s,border-color .12s,opacity .12s;
+}
+.btn:hover:not(:disabled){background:var(--border);color:var(--fg)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn--primary{border-color:var(--accent);color:var(--accent)}
+.btn--primary:hover:not(:disabled){background:var(--accent);color:#fff}
+.btn--success{border-color:var(--ok);color:var(--ok)}
+.btn--success:hover:not(:disabled){background:var(--ok);color:#000}
+
+.toolbar{
+  display:flex;
+  gap:8px;
+  margin-bottom:16px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+.toolbar .group{display:inline-flex;gap:8px;align-items:center}
+.toolbar .sep{width:1px;height:24px;background:var(--border);margin:0 6px;flex-shrink:0}
+.toolbar input[type=text]{
+  background:var(--bg2);
+  color:var(--fg);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:0 12px;
+  font-size:13px;
+  font-family:inherit;
+  height:32px;
+  flex:1 1 320px;
+  min-width:0;
+}
+.toolbar input[type=text]:focus{outline:0;border-color:var(--accent)}
+.toolbar .note{font-size:13px;color:var(--muted)}
+
+.toolbar label.note{white-space:nowrap}
+
+
+.toolbar input[type=text].short{flex:0 1 auto;width:auto;min-width:72px;field-sizing:content}
+.toolbar input[type=text]:disabled{opacity:.4;cursor:not-allowed}
+
+
+.toolbar .group:has(> #input-shape),
+.toolbar .group:has(> #contract-labels){flex:1 1 320px;min-width:0}
+.toolbar select{
+  height:32px;
+  background-color:var(--bg2);
+  color:var(--fg);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:0 30px 0 12px;
+  font-size:13px;
+  font-family:inherit;
+
+  appearance:none;
+  -webkit-appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%2394a3b8' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 10px center;
+}
+.toolbar select:focus{outline:0;border-color:var(--accent)}
+
+.toolbar[hidden]{display:none}
+
+.toolbar .group[hidden]{display:none}
+
+.toolbar #result-download[hidden],
+.toolbar #result-download-note[hidden]{display:none}
+
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:8px;
+  transition:border-color .15s;
+  padding:16px;
+  margin-bottom:16px;
+}
+.card:hover{border-color:var(--accent)}
+.card.locked{opacity:.45;pointer-events:none}
+.card > h2{
+  font-size:15px;
+  font-weight:600;
+  margin:0 0 4px;
+}
+.card > .hint{color:var(--muted);font-size:13px;margin:0 0 14px}
+
+
+.dropzone{
+  border:1px dashed var(--border);
+  border-radius:8px;
+  padding:22px 16px;
+  margin:0 0 8px;
+  text-align:center;
+  color:var(--muted);
+  font-size:13px;
+  cursor:pointer;
+  transition:border-color .15s,color .15s,background .15s;
+}
+.dropzone:hover{border-color:var(--accent);color:var(--fg)}
+.dropzone.dragover{border-color:var(--accent);color:var(--fg);background:var(--bg2)}
+.dropzone.busy{cursor:progress;border-color:var(--accent)}
+.dropzone.failed{border-color:var(--fp);color:var(--fp)}
+
+.dropzone .dz-text{pointer-events:none}
+.dropzone-note{margin:0 0 14px}
+
+
+.pm-group{
+  display:inline-flex;
+  min-height:32px;
+  box-sizing:border-box;
+  border:1px solid var(--border);
+  border-radius:6px;
+  overflow:hidden;
+}
+.pm-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:0 14px;
+  background:transparent;
+  border:0;
+  color:var(--muted);
+  font-family:inherit;
+  font-size:13px;
+  font-weight:500;
+  cursor:pointer;
+  line-height:1;
+  transition:background .12s,color .12s;
+}
+.pm-btn + .pm-btn{border-left:1px solid var(--border)}
+.pm-btn.on{background:var(--accent);color:#fff}
+.pm-btn:disabled{opacity:.4;cursor:not-allowed}
+
+.rows{display:block}
+.rows .row{
+  display:flex;
+  align-items:baseline;
+  gap:12px;
+  padding:7px 0;
+  border-bottom:1px solid var(--border);
+  font-size:13px;
+}
+.rows .row:last-child{border-bottom:0}
+.rows .row .k{color:var(--muted);flex:0 0 200px}
+.rows .row .v{color:var(--fg);min-width:0;overflow-wrap:anywhere}
+.rows .row .v.ok{color:var(--ok)}
+.rows .row .v.bad{color:var(--fp)}
+.rows .row .v.wait{color:var(--warn)}
+
+.step{padding:9px 0;border-bottom:1px solid var(--border)}
+.step:last-child{border-bottom:0}
+.step .line{display:flex;align-items:center;gap:10px;font-size:13px}
+.step .name{font-weight:500}
+.step .state{margin-left:auto;font-size:12px;color:var(--muted)}
+.step .state.done{color:var(--ok)}
+.step .state.refused{color:var(--fp)}
+.step .state.unchecked{color:var(--warn)}
+
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:0 0 auto}
+.dot.done{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.dot.refused{background:var(--fp);box-shadow:0 0 6px var(--fp)}
+.dot.unchecked{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+.dot.running{background:var(--warn);box-shadow:0 0 8px var(--warn);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+.log-wrap{
+  background:#0a1024;
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:10px 12px;
+  margin-top:8px;
+  max-height:60vh;
+  overflow-y:auto;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+  font-size:12px;
+  line-height:1.5;
+  color:#cbd5e1;
+  white-space:pre-wrap;
+  word-break:break-word;
+}
+.log-wrap .err{color:#fca5a5}
+.log-wrap .warn{color:#fcd34d}
+
+.summary{font-size:13px;color:var(--muted);margin:0 0 12px}
+
+
+.card[hidden]{display:none}
+.wizard-progress{display:flex;align-items:center;justify-content:space-between;gap:16px;
+  margin:12px 0 18px;padding:12px 16px;border:1px solid var(--border);border-radius:9px}
+.wizard-progress strong{font-size:14px}
+.wizard-actions{display:flex;align-items:center;gap:12px;justify-content:flex-end;
+  margin:14px 0 28px;flex-wrap:wrap}
+.wizard-actions .note{margin-right:auto;max-width:620px}
+.wizard-actions .btn[hidden], .stats > span[hidden]{display:none}
+details > summary{cursor:pointer;font-weight:600;color:var(--fg)}
+details[open] > summary{margin-bottom:12px}
+details .card:last-child{margin-bottom:0}
+.technical-details{margin-top:14px;border-top:1px solid var(--border);padding-top:12px}
+.technical-details .hint{color:var(--muted);font-size:13px}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important;animation:none !important}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CrossPascal Convert</h1>
+  <a href="#environment">Environment</a>
+  <a href="#model">Model</a>
+  <a href="#contract">Settings</a>
+  <a href="#build">Build</a>
+  <button type="button" class="btn" id="btn-quit">Quit converter</button>
+  <span class="note" id="quit-note"></span>
+  <div class="stats" id="stats">
+
+
+
+
+
+
+
+    <span id="stat-graph-item">Graph compiler <b class="wait" id="stat-cpu">checking</b></span>
+    <span><span id="stat-full-label">Family compiler</span> <b class="wait" id="stat-full">checking</b></span>
+    <span>CUDA <b class="wait" id="stat-gpu">checking</b></span>
+
+
+    <span><span id="stat-check-label">Tensor comparison</span> <b class="wait" id="stat-check">checking</b></span>
+  </div>
+</header>
+
+<main>
+
+  <div class="wizard-progress" aria-live="polite">
+    <strong id="wizard-position">Step 1 of 6</strong>
+    <span class="note" id="wizard-title">Choose a model</span>
+  </div>
+
+  <section class="card" id="environment">
+    <h2>Environment</h2>
+    <p class="hint">Review the detected computer, compiler and CUDA tools.
+    A missing or unchecked component is shown explicitly. These checks do not
+    convert a model or run your application.</p>
+    <div class="toolbar">
+      <div class="group">
+        <button type="button" class="btn" id="btn-environment">Refresh</button>
+      </div>
+    </div>
+    <div id="environment-steps"></div>
+    <details class="technical-details">
+      <summary>Optional sample builds</summary>
+      <p class="hint">This separate diagnostic compiles sample models. It is
+      optional and is not part of the Qwen first-run instructions.</p>
+      <div class="toolbar">
+        <button type="button" class="btn" id="btn-samples">Run sample builds</button>
+        <span class="note" id="samples-note">Samples with recorded reference results</span>
+      </div>
+      <div id="samples-steps"></div>
+    </details>
+  </section>
+
+  <section class="card" id="model">
+    <h2>Model</h2>
+    <div class="toolbar">
+      <button type="button" class="btn" id="btn-download-qwen">Download Qwen 0.5B</button>
+      <span class="note" id="qwen-download-note">Qwen2.5-0.5B-Instruct,
+        revision 7ae5576, Apache 2.0. About 1 GB; all file checksums are checked.
+        You can also select an existing folder below.</span>
+    </div>
+    <p class="hint">For the first Qwen conversion, use the download button above.
+    It fills in the model folder when the files are ready. To reuse a model you
+    already have, paste its complete local path below and click <b>Recognise</b>.</p>
+    <p class="hint">For a supplied CPU vision source pack, extract the whole ZIP first.
+    In Windows Explorer, right-click its ONNX file and choose <b>Copy as path</b>
+    (or Shift + right-click on older Windows). Paste that path below. Keep
+    <b>SOURCE.json</b> and the other extracted files beside the model: Recognise
+    checks them and fills in the exact CPU settings. Enclosing quotes are accepted.</p>
+    <div class="dropzone" id="model-drop">
+      <div class="dz-text" id="model-drop-text">Drop a model file here, or click to choose</div>
+      <input type="file" id="model-file"
+             accept=".onnx,.tflite,.pt,.pth,.safetensors" hidden>
+    </div>
+    <p class="hint dropzone-note">Dragging or choosing a file saves a local copy in the converter data folder.
+    Paste the original path for model folders and ONNX models with external
+    weights. For a source pack, paste the extracted ONNX path so the converter
+    can find SOURCE.json, licences and export records beside it. Use the path
+    field for a large file or an HTTPS model URL.</p>
+    <div class="toolbar">
+      <input type="text" id="model-path" aria-label="Full local model path or HTTPS URL" placeholder="Paste the full local ONNX path for a source pack, or a model folder / HTTPS URL">
+      <button type="button" class="btn btn--primary" id="btn-recognise">Recognise</button>
+    </div>
+    <div class="rows" id="recognised"></div>
+    <div class="log-wrap" id="recognise-advice" hidden></div>
+  </section>
+
+  <section class="card locked" id="contract" inert>
+    <h2>Model contract</h2>
+    <p class="hint">The optional vision contract describes the model task and input layout.
+    Select a task to write manifest.txt and manifest.json beside the module.
+    Leave the task empty to build without a vision contract.</p>
+    <div class="toolbar">
+      <div class="group">
+        <label class="note" for="contract-task">Task</label>
+        <select id="contract-task">
+          <option value=""></option>
+          <option value="object_detection">object_detection</option>
+          <option value="classification">classification</option>
+          <option value="instance_segmentation">instance_segmentation</option>
+          <option value="semantic_segmentation">semantic_segmentation</option>
+          <option value="foreground_segmentation">foreground_segmentation</option>
+          <option value="pose">pose</option>
+          <option value="oriented_detection">oriented_detection</option>
+        </select>
+      </div>
+      <span class="sep"></span>
+      <div class="group">
+        <label class="note" for="contract-adapter">Adapter</label>
+        <input type="text" class="short" id="contract-adapter" placeholder="yolo11">
+      </div>
+      <span class="sep"></span>
+      <div class="group">
+        <label class="note">Layout</label>
+        <div class="pm-group" id="layout-group">
+          <button type="button" class="pm-btn on" id="layout-nchw" data-layout="NCHW">NCHW</button>
+          <button type="button" class="pm-btn" id="layout-nhwc" data-layout="NHWC">NHWC</button>
+        </div>
+      </div>
+    </div>
+    <div class="toolbar" id="contract-detection" hidden>
+      <div class="group">
+        <label class="note" for="contract-score">Score threshold</label>
+        <input type="text" class="short" id="contract-score" placeholder="0.25">
+      </div>
+      <span class="sep"></span>
+      <div class="group">
+        <label class="note" for="contract-nms">NMS threshold</label>
+        <input type="text" class="short" id="contract-nms" placeholder="0.45">
+      </div>
+    </div>
+    <div class="toolbar" id="contract-classification" hidden>
+      <div class="group">
+        <label class="note" for="contract-mean">Mean</label>
+        <input type="text" class="short" id="contract-mean" placeholder="0.485,0.456,0.406">
+      </div>
+      <span class="sep"></span>
+      <div class="group">
+        <label class="note" for="contract-std">Std</label>
+        <input type="text" class="short" id="contract-std" placeholder="0.229,0.224,0.225">
+      </div>
+    </div>
+    <div class="toolbar" id="contract-pose" hidden>
+      <div class="group">
+        <label class="note" for="contract-keypoints">Keypoint count</label>
+        <input type="text" class="short" id="contract-keypoints" placeholder="17">
+      </div>
+    </div>
+    <div class="toolbar">
+      <div class="group">
+        <label class="note" for="contract-labels">Labels file</label>
+        <input type="text" id="contract-labels" placeholder="path to a labels file (optional)">
+      </div>
+    </div>
+    <div class="toolbar" id="paddle-selected-row" hidden>
+      <div class="group">
+        <label class="note" for="paddle-role">Paddle model role (required)</label>
+        <select id="paddle-role">
+          <option value="">Choose Det or Rec</option>
+          <option value="det">Detection (det)</option>
+          <option value="rec">Recognition (rec)</option>
+        </select>
+      </div>
+      <div class="group">
+        <label class="note" for="paddle-dictionary">Rec dictionary (absolute file path)</label>
+        <input type="text" id="paddle-dictionary" disabled
+               placeholder="C:\Models\ppocr_keys_v1.txt">
+      </div>
+      <div class="group">
+        <label class="note" for="paddle-held">Win32 source stage (EXPERIMENTAL)</label>
+        <input type="checkbox" id="paddle-held" disabled>
+      </div>
+    </div>
+    <p class="summary" id="paddle-selected-note" hidden>
+      Choose the actual Det or Rec role. Rec requires an explicitly selected
+      dictionary, never an inferred file. Preview hashes the selected graph,
+      weights, config and dictionary and Build refuses changed bytes.
+      This is SCANNED_NOT_LOCKED, not a WSL compiler-held snapshot or an OCR
+      numerical verification. Optional experimental Win32-held stage is OFF by
+      default; WSL/DrvFs compatibility has not been accepted. On failure there
+      is no fallback to the mutable original. Private stages are retained for
+      owner inspection and occupy disk space.
+    </p>
+    <p class="summary" id="contract-summary">An adapter is required once a task is
+    chosen. It names the pre/post-processor, for example yolo11, rtdetr,
+    tensorflow or birefnet. The task-specific fields appear for the task that uses
+    them: thresholds for detection, mean and std for classification, the keypoint
+    count for pose. A detector such as rtdetr that carries no thresholds simply
+    leaves them blank. The labels file is recorded with the build but not yet
+    written into the manifest.</p>
+  </section>
+
+  <section class="card" id="llm-settings" hidden>
+    <h2>Language model settings</h2>
+    <p class="hint">The selected profile supplies the model settings. Review them
+    here; use <b>Back</b> to change the target or profile.</p>
+    <div class="rows" id="llm-settings-rows"></div>
+    <p class="summary" id="llm-settings-note"></p>
+    <p class="summary" id="llm-context-note">The 64-token Qwen profile counts the chat template, your
+    prompt and the generated answer together. The QwenChat example starts with
+    a short prompt and six new tokens. A build does not check the generated text;
+    that check happens when you run the example.</p>
+  </section>
+
+  <section class="card locked" id="target" inert>
+    <h2>Target</h2>
+    <p class="hint" id="target-hint">Detecting what this machine can build for.</p>
+    <div class="toolbar">
+      <div class="group">
+        <div class="pm-group" id="target-group">
+          <button type="button" class="pm-btn on" id="target-cpu" data-target="cpu">CPU</button>
+          <button type="button" class="pm-btn" id="target-cuda" data-target="cuda">GPU</button>
+        </div>
+        <span class="note" id="target-note"></span>
+      </div>
+      <span class="sep" id="sep-shape"></span>
+      <div class="group" id="group-shape">
+        <input type="text" id="input-shape" placeholder="images:1,3,640,640">
+      </div>
+      <span class="sep" id="sep-tune"></span>
+      <div class="group" id="group-tune">
+        <label class="note">Tune the code</label>
+        <div class="pm-group" id="tune-group">
+          <button type="button" class="pm-btn" id="tune-on">On</button>
+          <button type="button" class="pm-btn on" id="tune-off">Off</button>
+        </div>
+        <input type="text" class="short" id="input-trials" value="32" size="3"
+               title="Trials per tuning task" disabled>
+      </div>
+    </div>
+    <div class="toolbar" id="cpu-codegen-row" hidden>
+      <div class="group">
+        <label class="note" for="cpu-codegen-mode">CPU tuning target</label>
+        <select id="cpu-codegen-mode" disabled>
+          <option value="">Legacy host tuning (default)</option>
+          <option value="host">Pinned detected host CPU</option>
+          <option value="generic">Generic x86-64 LLVM</option>
+          <option value="explicit">Explicit LLVM CPU</option>
+        </select>
+        <input id="cpu-mcpu" class="short" placeholder="e.g. skylake"
+               spellcheck="false" disabled>
+      </div>
+      <span class="note" id="cpu-codegen-note">Available only for tuned CPU
+        ONNX; this selects real LLVM codegen, not destination verification.
+        Changing device or turning tuning off clears the selection.</span>
+    </div>
+
+
+    <div class="toolbar" id="target-arch-row" hidden>
+      <div class="group">
+        <label class="note" for="target-arch">Compute capability</label>
+        <input type="text" class="short" id="target-arch" size="7"
+               placeholder="sm_&lt;number&gt;" spellcheck="false">
+        <span class="note" id="target-arch-note"></span>
+      </div>
+      <div class="group">
+        <label class="note" for="target-driver-api">Target CUDA Driver API</label>
+        <input type="text" class="short" id="target-driver-api" size="7"
+               placeholder="unknown" inputmode="numeric" spellcheck="false">
+        <span class="note" id="target-driver-note">
+          Detected on this computer; change it for another machine, or leave
+          blank when unknown. A driver number is not proof of runtime execution.
+        </span>
+      </div>
+    </div>
+    <div class="toolbar" id="target-machine-row">
+      <div class="group">
+        <label class="note" for="target-os">Target OS</label>
+        <select id="target-os">
+          <option value="windows">Windows</option>
+          <option value="linux">Linux</option>
+          <option value="darwin">macOS</option>
+        </select>
+      </div>
+      <div class="group">
+        <label class="note" for="target-cpu-arch">CPU architecture</label>
+        <input id="target-cpu-arch" class="short" value="x86_64" spellcheck="false">
+      </div>
+      <span class="note">Defaults describe this computer. Other systems may need a separate build runner.</span>
+    </div>
+    <div class="toolbar" id="raw-source-lock-row">
+      <div class="group">
+        <label class="note" for="raw-source-lock">Protect RAW source while building</label>
+        <input type="checkbox" id="raw-source-lock" disabled>
+      </div>
+      <span class="note" id="raw-source-lock-note">Recognise a model first. Only a
+        server-checked local Windows NTFS, self-contained, unclassified RAW
+        ONNX/TFLite file can use the bounded compiler-held source lock.
+        This is not release-grade immutability.</span>
+    </div>
+    <div class="toolbar" id="atomic-complete-row">
+      <div class="group">
+        <label class="note" for="atomic-complete">Atomic RAW kit (EXPERIMENTAL)</label>
+        <input type="checkbox" id="atomic-complete" disabled
+               aria-describedby="atomic-complete-note">
+      </div>
+      <span class="note" id="atomic-complete-note">OFF by default. Requires a
+        server-measured RAW source and the checked Win32 source-lock option,
+        with tuning OFF and no Pascal task/adapter or family full build.
+        Windows NTFS only; at most 512 MiB and 512 entries. A complete
+        private output directory, including source/ with the original RAW
+        model and approved sidecars, is renamed into place. The namespace
+        change is not durable and the result is not immutable. Tuning-db
+        is excluded. Native end-target execution: NOT_CHECKED.</span>
+    </div>
+
+
+
+
+    <div class="toolbar" id="llm-profile-row" hidden>
+      <div class="group">
+        <label for="llm-profile">Language model profile</label>
+        <select id="llm-profile">
+          <option value="">Family defaults</option>
+          <option value="qwen2.5-0.5b-cuda-f32-64-v1">Qwen 0.5B (CUDA, FP32, 64 tokens)</option>
+        </select>
+      </div>
+      <span class="note">The Qwen CUDA profile uses batch 1 and 64 tokens for both
+        the context and each prefill chunk. The context includes the prompt and
+        generated response. Building does not verify generated text.</span>
+    </div>
+    <details class="technical-details" id="llm-path-details" hidden>
+      <summary>Runtime and compiler paths</summary>
+      <p class="hint">The complete Windows bundle fills these paths automatically.
+      Leave them as supplied for your first conversion.</p>
+      <div class="toolbar" id="native-family-atomic-row" hidden>
+        <div class="group">
+          <label for="native-family-atomic">Include tokenizer and runtime</label>
+          <input type="checkbox" id="native-family-atomic" checked disabled>
+        </div>
+        <div class="group">
+          <label for="native-consumer-source">Tokenizer and runtime folder</label>
+          <input type="text" id="native-consumer-source" spellcheck="false" placeholder="Absolute path to the supplied consumer kit">
+        </div>
+        <span class="note">Required for a complete LLM bundle. Preview checks
+        the selected files before a build starts.</span>
+      </div>
+      <div class="toolbar" id="llm-python-row" hidden>
+        <div class="group">
+          <label for="llm-python">LLM toolchain Python</label>
+          <input type="text" id="llm-python" spellcheck="false"
+                 placeholder="Python executable supplied with the TVM toolchain">
+          <button type="button" class="btn" id="btn-toolchain">Check toolchain</button>
+        </div>
+        <span class="note" id="toolchain-note">The selected executable is checked
+        again before the build. Your source model is kept separate from output.</span>
+      </div>
+    </details>
+    <div class="toolbar">
+      <div class="group">
+        <label for="output-directory">New output directory</label>
+        <input type="text" id="output-directory" spellcheck="false"
+               placeholder="Leave blank to use your CrossPascal data folder">
+      </div>
+    </div>
+    <div class="toolbar" id="target-dtype-row" hidden>
+      <div class="group">
+        <label class="note">Weight precision</label>
+        <div class="pm-group" id="dtype-group">
+          <button type="button" class="pm-btn on" id="dtype-f32" data-dtype="float32">float32</button>
+          <button type="button" class="pm-btn" id="dtype-f16" data-dtype="float16">float16</button>
+        </div>
+        <span class="note" id="dtype-note"></span>
+      </div>
+    </div>
+    <p class="summary" id="target-graph-note" hidden>The language-model profile
+    defines the context and input shapes. This route uses the selected device
+    and does not perform a separate tuning search.</p>
+    <p class="summary" id="graph-shape-note">The shape is taken from the model itself. It needs
+    changing only when the model leaves dimensions unspecified. Enter the required
+    dimensions before building.</p>
+    <p class="summary" id="graph-tuning-note">Tuning is off by default. It runs
+    additional measurements and can take much longer than compilation. Use the
+    ordinary build for a first run; tune a supported graph only when you need to
+    measure and improve its performance.</p>
+  </section>
+
+  <section class="card" id="preview">
+    <h2>Expected result</h2>
+    <p class="hint">Check the model, target and destination below. Preview checks
+    the selected inputs and prepares the build plan. Compilation starts only
+    when you click <b>Build</b> on the next page.</p>
+    <div class="rows" id="preview-rows"></div>
+    <p class="summary" id="preview-next-step"></p>
+    <details class="technical-details" id="preview-technical">
+      <summary>Source identities, planned files and technical details</summary>
+      <div class="rows" id="preview-technical-rows"></div>
+      <div class="log-wrap" id="preview-files"></div>
+      <p class="summary" id="preview-warning"></p>
+    </details>
+  </section>
+
+  <section class="card locked" id="build" inert>
+    <h2>Build</h2>
+    <p class="hint">The selected model route controls compilation, runtime
+    packaging, and verification. For a language model, build the bundle here,
+    then open and run the included example in Delphi or Lazarus. The result states which
+    checks ran and which still need an application run.</p>
+    <div class="toolbar">
+      <div class="group">
+        <button type="button" class="btn btn--success" id="btn-build">Build</button>
+        <span class="dot" id="build-dot"></span>
+        <span class="note" id="build-note"></span>
+      </div>
+    </div>
+    <div id="build-steps"></div>
+  </section>
+
+  <section class="card locked" id="result" inert>
+    <h2>Result</h2>
+    <p class="hint" id="result-summary">The output directory and the checks
+    actually completed are listed below. Application execution is recorded
+    separately from compilation and tensor comparisons.</p>
+    <div class="rows" id="result-rows"></div>
+    <details class="technical-details" id="result-diagnostics" hidden>
+      <summary>Recorded tensor comparisons and diagnostics</summary>
+      <p class="hint">These are the recorded comparator results. Their role is
+      defined by the selected acceptance profile. They do not replace running
+      the application.</p>
+      <div class="rows" id="result-diagnostic-rows"></div>
+    </details>
+    <div class="log-wrap" id="result-files" hidden></div>
+    <div class="toolbar">
+      <a class="btn btn--primary" id="result-download"
+         href="#" download hidden>Download bundle ZIP</a>
+      <span class="note" id="result-download-note" hidden>Includes the completed
+        files and checksums. The recorded checks above describe their validation.</span>
+    </div>
+  </section>
+
+  <details class="card" id="experimental-routes">
+    <summary>Experimental vision workflows</summary>
+    <p class="summary">These separate packaging workflows are for prepared
+    vision-model inputs. They are optional and are not needed for the Qwen
+    conversion. Their own execution and verification limits remain explicit.</p>
+  <section class="card" id="ocr-composite-draft">
+    <h2>Optional PaddleOCR Det + Rec composite DRAFT</h2>
+    <p class="hint">Package two already built, individually verified Det and Rec
+      bundles. The composite is a DRAFT; its combined execution remains
+      NOT_CHECKED. This operation does not run the Pascal facade.</p>
+    <div class="group">
+      <label for="ocr-draft-enabled">Enable composite DRAFT</label>
+      <input type="checkbox" id="ocr-draft-enabled">
+    </div>
+    <div id="ocr-draft-fields" hidden>
+      <div class="group"><label for="ocr-draft-det">Det bundle (absolute path)</label>
+        <input id="ocr-draft-det" type="text" spellcheck="false"></div>
+      <div class="group"><label for="ocr-draft-rec">Rec bundle (absolute path)</label>
+        <input id="ocr-draft-rec" type="text" spellcheck="false"></div>
+      <div class="group"><label for="ocr-draft-dictionary">Recognition dictionary (absolute path)</label>
+        <input id="ocr-draft-dictionary" type="text" spellcheck="false"></div>
+      <div class="group"><label for="ocr-draft-settings">Explicit preprocessing and CTC settings JSON</label>
+        <textarea id="ocr-draft-settings" rows="5" spellcheck="false"
+          placeholder='{"preprocessing":{},"ctc":{}}'></textarea></div>
+      <div class="toolbar"><button type="button" class="btn" id="ocr-draft-preview">Review composite DRAFT</button>
+        <button type="button" class="btn" id="ocr-draft-build" disabled>Build reviewed DRAFT</button></div>
+      <p class="summary" id="ocr-draft-status" role="status"></p>
+      <a id="ocr-draft-download" href="#" hidden download>Download OCR composite DRAFT (NOT_CHECKED)</a>
+    </div>
+  </section>
+
+  <section class="card" id="omdet-candidate-wizard">
+    <h2>OmDet-Turbo tiny v2 candidate packaging</h2>
+    <p class="hint">A separate Preview and Build route for an existing, independently
+      SHA-pinned OmDet candidate v1. It publishes a new v2 directory with the
+      exact eight pretrained classes, four native inputs and two raw outputs.
+      Native Pascal Facade UAT is <strong>NOT_RUN</strong>; verification remains
+      <strong>NOT_CHECKED</strong>, runtime provenance <strong>NOT_ATTESTED</strong>.
+      The output is an unverified candidate directory. This route does not
+      provide a verified passport or downloadable ZIP.</p>
+    <div class="group">
+      <label for="omdet-candidate-enabled">Enable separate OmDet candidate publication</label>
+      <input type="checkbox" id="omdet-candidate-enabled">
+    </div>
+    <div id="omdet-candidate-fields" hidden>
+      <div class="toolbar">
+        <label class="note" for="omdet-candidate-dir">Validated v1 candidate directory</label>
+        <input id="omdet-candidate-dir" type="text" spellcheck="false"
+               placeholder="C:\Models\omdet-v1-candidate">
+      </div>
+      <div class="toolbar">
+        <label class="note" for="omdet-candidate-expected-pins">Independent expected_pins JSON file</label>
+        <input id="omdet-candidate-expected-pins" type="text" spellcheck="false"
+               placeholder="C:\ModelChecks\omdet-expected-pins.json">
+      </div>
+      <div class="toolbar">
+        <label class="note" for="omdet-candidate-into">Unique new destination (never overwrite)</label>
+        <input id="omdet-candidate-into" type="text" spellcheck="false"
+               placeholder="C:\ConvertedModels\omdet-v2-candidate-new">
+      </div>
+      <div class="toolbar">
+        <button type="button" class="btn btn--primary" id="omdet-candidate-preview">Preview pinned candidate</button>
+        <button type="button" class="btn btn--success" id="omdet-candidate-build" disabled>Build reviewed candidate</button>
+      </div>
+      <p id="omdet-candidate-status" class="summary" role="status" aria-live="polite">
+        Select three absolute local NTFS paths. The independent pinset must be
+        outside the candidate and destination directories.
+      </p>
+      <div id="omdet-candidate-evidence" class="rows"></div>
+      <p class="hint">A successful namespace commit remains NOT_CHECKED;
+        runtime provenance is NOT_ATTESTED, Pascal Facade UAT is NOT_RUN.
+        Current ZIP export does not attest the full OmDet v2 bundle, so HTTP ZIP
+        READY is never issued by this route.</p>
+    </div>
+  </section>
+
+  </details>
+
+  <div class="wizard-actions">
+    <span class="note" id="wizard-message" role="status" aria-live="polite"></span>
+    <button type="button" class="btn" id="btn-back" disabled>Back</button>
+    <button type="button" class="btn btn--primary" id="btn-next">Next</button>
+  </div>
+
+</main>
+
+<script>
+function el(tag, cls, text){
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function row(key, value, cls){
+  const r = el('div','row');
+  r.appendChild(el('span','k', key));
+  r.appendChild(el('span','v ' + (cls || ''), value));
+  return r;
+}
+
+function drawSteps(target, steps){
+  target.textContent = '';
+  for (const step of steps){
+    const block = el('div','step');
+    const line = el('div','line');
+    line.appendChild(el('span','dot ' + step.state));
+    line.appendChild(el('span','name', step.name));
+    line.appendChild(el('span','state ' + step.state, step.state_name));
+    block.appendChild(line);
+    if (step.lines && step.lines.length){
+      block.appendChild(el('div','log-wrap', step.lines.join(String.fromCharCode(10))));
+    }
+    target.appendChild(block);
+  }
+}
+
+
+
+
+
+
+
+
+
+const SERVER_DOWN = 'The converter is not running. Open CrossPascal Convert again.';
+const SESSION_TOKEN = document.querySelector('meta[name="crosspascal-session"]').content;
+
+async function ask(route, body){
+  let answer;
+  try {
+    answer = await fetch(route, body ? {
+      method:'POST',
+      headers:{'Content-Type':'application/json', 'X-CrossPascal-Session': SESSION_TOKEN},
+      body:JSON.stringify(body)
+    } : {headers:{'X-CrossPascal-Session': SESSION_TOKEN}});
+  } catch (err) {
+
+
+    return {trouble: SERVER_DOWN};
+  }
+  try {
+    return await answer.json();
+  } catch (err) {
+
+    return {trouble: 'The server replied without the JSON this page expects (HTTP ' + answer.status + ').'};
+  }
+}
+
+let machine = {};
+let chosenTarget = 'cpu';
+let targetManuallySet = false;
+let archManuallySet = false;
+let driverManuallySet = false;
+let environmentKnown = false;
+let recognisedReady = false;
+let recognisedPath = '';
+let recognisedSourcePack = null;
+let previewReady = false;
+
+
+
+let reviewedOptionsSignature = null;
+let reviewedPreviewToken = null;
+let previewRequestNumber = 0;
+let environmentRequestNumber = 0;
+let environmentRevision = 0;
+let wizardIndex = 0;
+let furthestWizardIndex = 0;
+const wizardSteps = [
+  ['model', '1. Select a model'],
+  ['environment', '2. Detect this computer'],
+  ['target', '3. Choose the target computer'],
+  ['contract', '4. Model settings'],
+  ['preview', '5. Review the expected output'],
+  ['build', '6. Build and export']
+];
+
+let fullBuild = false;
+let recognisedModelKey = '';
+
+
+let paddleSource = false;
+
+
+
+let chosenDtype = 'float32';
+
+
+
+let rawSourceProtection = {eligible:false, recommended:false, reason:'Recognise a model first'};
+let rawProtectionOverride = null;
+
+
+
+let atomicBundleOptIn = false;
+const ATOMIC_RAW_CANDIDATE_STATES = new Set([
+  'STATIC_SELF_CONTAINED_CANDIDATE_NOT_LOCKED',
+  'SELECTED_FILES_SCANNED_NOT_LOCKED'
+]);
+const ATOMIC_DISCLOSURE =
+  'EXPERIMENTAL, OFF by default. Windows NTFS only; up to 512 MiB and ' +
+  '512 entries. The private bundle includes source/ (selected original RAW ' +
+  'model and approved sidecars) and is published by a complete-directory ' +
+  'namespace rename. This is not durable after a power loss and is not ' +
+  'immutable. No tuning-db is included. Native end-target execution: NOT_CHECKED.';
+
+function atomicBundleEligible(){
+  const lock = document.getElementById('raw-source-lock');
+  const hasContract = !!document.getElementById('contract-task').value ||
+    !!document.getElementById('contract-adapter').value;
+  return recognisedReady && rawSourceProtection.eligible === true &&
+    ATOMIC_RAW_CANDIDATE_STATES.has(rawSourceProtection.status) &&
+    !fullBuild && !hasContract && !tuneOn && !lock.disabled && lock.checked;
+}
+
+function refreshAtomicCompleteBundle(){
+  const input = document.getElementById('atomic-complete');
+  const row = document.getElementById('atomic-complete-row');
+  const note = document.getElementById('atomic-complete-note');
+  const eligible = atomicBundleEligible();
+  row.hidden = fullBuild;
+  document.getElementById('native-family-atomic-row').hidden = !fullBuild;
+  input.disabled = !eligible;
+  input.checked = !!(eligible && atomicBundleOptIn);
+  note.textContent = (eligible
+    ? 'Available only by explicit opt-in. '
+    : 'Unavailable: requires server-measured bounded RAW source, the checked '
+      + 'Win32 source-lock option, tuning OFF, and no Pascal task/adapter '
+      + 'or family full build. ') + ATOMIC_DISCLOSURE;
+}
+for (const id of ['native-family-atomic', 'native-consumer-source']) {
+  document.getElementById(id).addEventListener('input', () => {
+    previewReady = false;
+    reviewedOptionsSignature = null;
+    reviewedPreviewToken = null;
+    previewRequestNumber++;
+  });
+}
+
+function refreshRawSourceProtection(){
+  const input = document.getElementById('raw-source-lock');
+  const row = document.getElementById('raw-source-lock-row');
+  const note = document.getElementById('raw-source-lock-note');
+  const hasContract = !!document.getElementById('contract-task').value ||
+    !!document.getElementById('contract-adapter').value;
+  const eligible = !!rawSourceProtection.eligible && !fullBuild && !hasContract;
+  row.hidden = fullBuild;
+  input.disabled = !eligible;
+  input.checked = !!(eligible && (rawProtectionOverride === null
+    ? rawSourceProtection.recommended : rawProtectionOverride));
+  note.textContent = hasContract
+    ? 'A Pascal adapter/task may require model assets outside one RAW file; '
+      + 'this narrow Win32 lock is unavailable. Complete family source closure is pending.'
+    : (rawSourceProtection.reason || 'Source protection not available')
+      + '. Preview repeats dependency checks; Build must obtain a real Win32 handle. '
+      + 'This is a candidate, not release-grade immutability.';
+  refreshAtomicCompleteBundle();
+}
+document.getElementById('raw-source-lock').onchange = (event) => {
+  if (event.target.disabled) return;
+  rawProtectionOverride = !!event.target.checked;
+  previewReady = false;
+  reviewedOptionsSignature = null;
+  reviewedPreviewToken = null;
+  refreshAtomicCompleteBundle();
+};
+document.getElementById('atomic-complete').onchange = (event) => {
+  if (event.target.disabled){
+    refreshAtomicCompleteBundle();
+    return;
+  }
+  atomicBundleOptIn = !!event.target.checked;
+  previewReady = false;
+  reviewedOptionsSignature = null;
+  reviewedPreviewToken = null;
+
+
+  previewRequestNumber++;
+};
+
+function setLocked(id, locked){
+
+
+
+
+  const card = document.getElementById(id);
+  card.classList.toggle('locked', locked);
+  card.inert = locked;
+}
+
+function paintRouteStats(){
+  document.getElementById('stat-graph-item').hidden = fullBuild;
+  document.getElementById('stat-full-label').textContent = fullBuild
+    ? 'LLM compiler' : 'Family compiler';
+  document.getElementById('stat-check-label').textContent = fullBuild
+    ? 'Application check' : 'Tensor comparison';
+  const check = document.getElementById('stat-check');
+  if (fullBuild) {
+    check.textContent = 'run the example';
+    check.className = 'wait';
+    check.title = 'Building a language model does not run its consumer or compare its internal tensors.';
+    return;
+  }
+  const formats = machine.reference_formats || [];
+  check.textContent = !machine.reference_ready ? 'not available'
+    : (formats.length === 2 ? 'ready' : formats.join(', ') + ' only');
+  check.className = !machine.reference_ready ? 'bad'
+    : (formats.length === 2 ? 'ok' : 'wait');
+  check.title = machine.reference_reason || '';
+}
+
+function paintStats(){
+  const cpu = document.getElementById('stat-cpu');
+  const gpu = document.getElementById('stat-gpu');
+
+
+  const coreFormats = machine.core_formats || [];
+  cpu.textContent = !machine.cpu_ready ? 'not ready'
+    : (coreFormats.length === 2 ? 'ready' : coreFormats.join('') + ' only');
+  cpu.className = !machine.cpu_ready ? 'bad'
+    : (coreFormats.length === 2 ? 'ok' : 'wait');
+  cpu.title = machine.core_reason || '';
+
+
+
+
+
+  const full = document.getElementById('stat-full');
+  full.textContent = machine.full_build_ready ? 'ready' : 'not ready';
+  full.className = machine.full_build_ready ? 'ok' : 'bad';
+  full.title = machine.full_build_reason || '';
+
+
+
+
+  paintRouteStats();
+
+
+
+
+
+
+
+  const runtimeState = machine.cuda_compatibility;
+  gpu.textContent = !machine.gpu_ready ? 'no NVIDIA toolkit'
+    : machine.gpu_needs_arch ? 'toolkit ready, no card here'
+    : runtimeState === 'incompatible' ? 'CUDA runtime incompatible'
+    : runtimeState === 'compatible' ? 'ready'
+    : 'CUDA runtime not checked';
+  gpu.className = runtimeState === 'incompatible' && machine.gpu_ready
+    && !machine.gpu_needs_arch ? 'bad'
+    : machine.gpu_ready && !machine.gpu_needs_arch &&
+      runtimeState === 'compatible' ? 'ok' : 'wait';
+  gpu.title = machine.cuda_compatibility_reason || machine.gpu_reason || '';
+
+  const cuda = document.getElementById('target-cuda');
+  cuda.disabled = !machine.gpu_ready;
+
+
+  document.getElementById('target-note').textContent =
+    machine.gpu_reason || (machine.gpu_ready ? 'NVIDIA toolkit found'
+                                             : 'the GPU choice is locked');
+
+  const hint = document.getElementById('target-hint');
+  const parts = [];
+  parts.push(machine.card ? ('This machine reports ' + machine.card + '.')
+                          : 'No GPU is visible on this machine.');
+  parts.push(machine.has_cuda ? 'The NVIDIA toolkit is installed, so the GPU target is open.'
+                              : 'Without an NVIDIA toolkit the GPU target stays locked.');
+  if (machine.gpu_needs_arch){
+
+
+    parts.push('A GPU build is still possible for a named architecture, but what'
+             + ' it produces is for another machine. No local GPU is available to run it.');
+  }
+  if (!machine.cpu_ready){
+
+
+
+
+    parts.push('This wizard\'s own environment cannot compile ONNX models right'
+             + ' now. See Environment for details.');
+    parts.push(machine.full_build_ready
+      ? 'A model built by its own family builder, such as an LLM, uses a separate'
+        + ' interpreter, and that one was checked and is in place.'
+      : ('A full native build is not available either: '
+         + (machine.full_build_reason || 'its toolchain was not found') + '.'));
+  }
+  if (machine.cudnn_on_machine && !machine.cudnn_usable){
+    parts.push('cuDNN is present on the machine but this TVM wheel was built'
+             + ' without it. See Environment for details.');
+  } else if (machine.cudnn_usable){
+    parts.push('cuDNN is available to this TVM.');
+  }
+  hint.textContent = parts.join(' ');
+
+
+
+
+
+
+  const archField = document.getElementById('target-arch');
+  if (machine.card_arch && !archManuallySet) archField.value = machine.card_arch;
+  document.getElementById('target-arch-note').textContent = machine.card_arch
+    ? ('this machine: ' + machine.card_arch + '. Change this value to target another GPU.')
+    : 'no card to ask, so name the architecture the bundle is for';
+
+
+
+  const gpuRecommended = machine.gpu_ready && machine.card_present &&
+    machine.card_arch && machine.cuda_compatibility === 'compatible';
+  if (!targetManuallySet){
+    pickTarget(gpuRecommended ? 'cuda' : 'cpu');
+  }
+  if (machine.os){
+    const osField = document.getElementById('target-os');
+    if (!osField.dataset.edited) osField.value = machine.os;
+  }
+  if (machine.arch){
+    const arch = document.getElementById('target-cpu-arch');
+    if (!arch.dataset.edited) arch.value = machine.arch;
+  }
+
+
+
+
+  refreshDriverRecommendation();
+}
+
+function showGraphControls(on){
+
+
+
+
+  for (const id of ['sep-shape', 'group-shape', 'sep-tune', 'group-tune',
+                    'graph-shape-note', 'graph-tuning-note'])
+    document.getElementById(id).hidden = !on;
+  const hint = document.getElementById('target-graph-note');
+  if (hint) hint.hidden = on;
+  refreshCpuCodegenControls();
+}
+
+function refreshCpuCodegenControls(){
+  const mode = document.getElementById('cpu-codegen-mode');
+  const mcpu = document.getElementById('cpu-mcpu');
+  const eligible = chosenTarget === 'cpu' && !fullBuild && tuneOn;
+  document.getElementById('cpu-codegen-row').hidden = fullBuild;
+  mode.disabled = !eligible;
+  if (!eligible && mode.value){
+    mode.value = '';
+    mcpu.value = '';
+  }
+  mcpu.disabled = !eligible || mode.value !== 'explicit';
+  document.getElementById('cpu-codegen-note').textContent = eligible
+    ? 'Optional. Checked LLVM CPU target for tuned ONNX, not native UAT; '
+      + 'destination compatibility stays NOT_CHECKED.'
+    : 'Requires tuned CPU ONNX; changing target or tuning clears this selection.';
+}
+
+function pickTarget(name){
+  chosenTarget = name;
+  document.getElementById('target-cpu').classList.toggle('on', name === 'cpu');
+  document.getElementById('target-cuda').classList.toggle('on', name === 'cuda');
+
+
+
+  document.getElementById('target-arch-row').hidden = name !== 'cuda';
+
+
+  document.getElementById('target-dtype-row').hidden = !fullBuild;
+  document.getElementById('llm-profile-row').hidden = !fullBuild;
+  document.getElementById('llm-python-row').hidden = !fullBuild;
+  document.getElementById('llm-path-details').hidden = !fullBuild;
+  document.getElementById('target-driver-api').parentElement.hidden = fullBuild;
+  paintDtypeNote();
+  refreshCpuCodegenControls();
+}
+
+function refreshDriverRecommendation(){
+  if (driverManuallySet) return;
+  const arch = document.getElementById('target-arch').value.trim().toLowerCase();
+  const hostSm = String(machine.card_arch || '').toLowerCase();
+  const clean = (s) => s.replace(/^(sm_|compute_)/, '').replace('.', '');
+  const os = document.getElementById('target-os').value;
+  const cpuArch = document.getElementById('target-cpu-arch').value.trim().toLowerCase();
+  const sameMachine = hostSm && clean(arch) === clean(hostSm) &&
+    os === machine.os && cpuArch === machine.arch;
+  document.getElementById('target-driver-api').value =
+    sameMachine && machine.cuda_driver_api ? String(machine.cuda_driver_api) : '';
+}
+
+document.getElementById('target-cpu').onclick = () => {
+  targetManuallySet = true; previewReady = false; pickTarget('cpu');
+};
+document.getElementById('target-cuda').onclick = () => {
+  targetManuallySet = true; previewReady = false; pickTarget('cuda');
+};
+document.getElementById('target-arch').addEventListener('input', () => {
+  archManuallySet = true; previewReady = false;
+  refreshDriverRecommendation();
+});
+document.getElementById('target-driver-api').addEventListener('input', () => {
+  driverManuallySet = true; previewReady = false;
+});
+for (const id of ['target-os', 'target-cpu-arch']){
+  document.getElementById(id).addEventListener('input', (event) => {
+    event.target.dataset.edited = 'yes'; previewReady = false;
+    refreshDriverRecommendation();
+  });
+}
+
+function pickDtype(name){
+  chosenDtype = name;
+  document.getElementById('dtype-f32').classList.toggle('on', name === 'float32');
+  document.getElementById('dtype-f16').classList.toggle('on', name === 'float16');
+  paintDtypeNote();
+}
+
+function paintDtypeNote(){
+
+
+
+  const note = document.getElementById('dtype-note');
+  const namedProfile = document.getElementById('llm-profile').value ===
+    'qwen2.5-0.5b-cuda-f32-64-v1';
+  note.textContent = namedProfile
+    ? (chosenDtype === 'float32'
+      ? 'The Qwen CUDA profile uses FP32; parameters occupy about 1.84 GiB.'
+      : 'This named profile requires float32. Preview rejects a different precision.')
+    : 'Precision must be supported by the selected model and consumer. Review the resolved profile in Preview.';
+}
+
+document.getElementById('dtype-f32').onclick = () => pickDtype('float32');
+document.getElementById('dtype-f16').onclick = () => pickDtype('float16');
+
+
+
+
+
+
+function adapterForFamily(family){
+
+
+
+  const byFamily = {ultralytics: 'yolo11', yolov5: 'yolo11'};
+  return byFamily[family] || '';
+}
+
+function adapterForModel(family, detail, path){
+
+
+
+  const byFamily = adapterForFamily(family);
+  if (byFamily) return byFamily;
+  const hay = ((detail || '') + ' ' + (path || '')).toLowerCase();
+  if (/rtdetr|\bdetr\b/.test(hay)) return 'rtdetr';
+  if (/yolo/.test(hay)) return 'yolo11';
+  if (/birefnet/.test(hay)) return 'birefnet';
+  if (/paddle|ppocr|pp-ocr/.test(hay)) return 'paddleocr';
+  if (/tensorflow|mobilenet|resnet|efficientnet|deeplab/.test(hay)) return 'tensorflow';
+  return '';
+}
+
+function layoutForShape(shape){
+
+
+
+  const dims = String(shape || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (dims.length === 4 && dims[3] === '3' && dims[1] !== '3') return 'NHWC';
+  return 'NCHW';
+}
+
+let chosenLayout = 'NCHW';
+
+function pickLayout(name){
+  chosenLayout = name;
+  document.getElementById('layout-nchw').classList.toggle('on', name === 'NCHW');
+  document.getElementById('layout-nhwc').classList.toggle('on', name === 'NHWC');
+}
+
+document.getElementById('layout-nchw').onclick = () => pickLayout('NCHW');
+document.getElementById('layout-nhwc').onclick = () => pickLayout('NHWC');
+
+
+
+
+let tuneOn = false;
+
+function pickTune(on){
+  if (tuneOn !== on){
+    previewReady = false;
+    reviewedOptionsSignature = null;
+    reviewedPreviewToken = null;
+    previewRequestNumber++;
+  }
+  tuneOn = on;
+  document.getElementById('tune-on').classList.toggle('on', on);
+  document.getElementById('tune-off').classList.toggle('on', !on);
+
+
+  document.getElementById('input-trials').disabled = !on;
+  refreshAtomicCompleteBundle();
+  refreshCpuCodegenControls();
+}
+
+document.getElementById('tune-on').onclick = () => pickTune(true);
+document.getElementById('tune-off').onclick = () => pickTune(false);
+document.getElementById('cpu-codegen-mode').addEventListener('change', () => {
+  const mode = document.getElementById('cpu-codegen-mode');
+  if (mode.value !== 'explicit') document.getElementById('cpu-mcpu').value = '';
+  previewReady = false;
+  reviewedOptionsSignature = null;
+  reviewedPreviewToken = null;
+  previewRequestNumber++;
+  refreshCpuCodegenControls();
+});
+document.getElementById('cpu-mcpu').addEventListener('input', () => {
+  previewReady = false;
+  reviewedOptionsSignature = null;
+  reviewedPreviewToken = null;
+  previewRequestNumber++;
+});
+
+function updateContractFields(){
+
+
+  const task = document.getElementById('contract-task').value;
+  document.getElementById('contract-detection').hidden = task !== 'object_detection';
+  document.getElementById('contract-classification').hidden = task !== 'classification';
+  document.getElementById('contract-pose').hidden = task !== 'pose';
+  refreshRawSourceProtection();
+
+  tidySeparators();
+}
+
+document.getElementById('contract-task').onchange = updateContractFields;
+document.getElementById('contract-adapter').addEventListener(
+  'input', refreshRawSourceProtection);
+document.getElementById('contract-adapter').addEventListener(
+  'change', refreshRawSourceProtection);
+
+function taskForModel(family, detail, path){
+
+
+
+
+
+  const hay = ((detail || '') + ' ' + (path || '')).toLowerCase();
+  if (/seg/.test(hay)) return 'instance_segmentation';
+  if (/pose|keypoint/.test(hay)) return 'pose';
+  if (/obb|oriented/.test(hay)) return 'oriented_detection';
+  if (/(-cls|_cls|classif)/.test(hay)) return 'classification';
+  if (family === 'ultralytics' || family === 'yolov5'
+      || /yolo|rtdetr|detr/.test(hay)) return 'object_detection';
+  return '';
+}
+
+function fillRecommendedValues(task){
+
+
+
+  const set = function(id, value){
+    const e = document.getElementById(id);
+    if (e && !e.value) e.value = value;
+  };
+  if (task === 'object_detection' || task === 'oriented_detection'){
+    set('contract-score', '0.25');
+    set('contract-nms', '0.45');
+  }
+  if (task === 'classification'){
+    set('contract-mean', '0.485,0.456,0.406');
+    set('contract-std', '0.229,0.224,0.225');
+  }
+  if (task === 'pose'){
+    set('contract-keypoints', '17');
+  }
+}
+
+function applySourcePack(pack){
+  const c = pack.conversion;
+  recognisedSourcePack = {sha256:pack.sha256, profile_id:pack.profile_id};
+  document.getElementById('contract-task').value = c.task;
+  document.getElementById('contract-adapter').value = c.adapter;
+  document.getElementById('input-shape').value = c.input_name + ':' + c.input_shape.join(',');
+  document.getElementById('contract-mean').value = c.mean.join(',');
+  document.getElementById('contract-std').value = c.std.join(',');
+  document.getElementById('contract-score').value = c.score_threshold ?? '';
+  document.getElementById('contract-nms').value = c.nms_threshold ?? '';
+  document.getElementById('contract-keypoints').value = '';
+  document.getElementById('contract-labels').value = '';
+  pickLayout(c.layout);
+  updateContractFields();
+  targetManuallySet = true;
+  document.getElementById('target-os').value = 'windows';
+  document.getElementById('target-os').dataset.edited = 'yes';
+  document.getElementById('target-cpu-arch').value = 'x86_64';
+  document.getElementById('target-cpu-arch').dataset.edited = 'yes';
+  pickTarget('cpu');
+  pickTune(false);
+}
+
+function suggestContract(data){
+
+
+
+
+  const adapter = adapterForModel(data.family, data.detail, data.path);
+  if (adapter) document.getElementById('contract-adapter').value = adapter;
+  if (data.inputs && data.inputs.length){
+    pickLayout(layoutForShape(data.inputs[0].shape));
+  }
+  const task = taskForModel(data.family, data.detail, data.path);
+  if (task) document.getElementById('contract-task').value = task;
+  updateContractFields();
+  fillRecommendedValues(task);
+}
+
+function refreshPaddleSelection(){
+  const role = document.getElementById('paddle-role');
+  const dictionary = document.getElementById('paddle-dictionary');
+  const held = document.getElementById('paddle-held');
+  document.getElementById('paddle-selected-row').hidden = !paddleSource;
+  document.getElementById('paddle-selected-note').hidden = !paddleSource;
+  dictionary.disabled = !paddleSource || role.value !== 'rec';
+  if (dictionary.disabled) dictionary.value = '';
+  held.disabled = !paddleSource;
+  if (!paddleSource) held.checked = false;
+}
+for (const id of ['paddle-role', 'paddle-dictionary', 'paddle-held']){
+  document.getElementById(id).addEventListener('input', () => {
+    refreshPaddleSelection();
+    previewReady = false;
+    reviewedOptionsSignature = null;
+    reviewedPreviewToken = null;
+    previewRequestNumber++;
+  });
+}
+
+function clearPreviousModelContract(){
+  recognisedSourcePack = null;
+  document.getElementById('native-family-atomic').checked = true;
+  if (!document.getElementById('native-consumer-source').value)
+    document.getElementById('native-consumer-source').value = machine.native_consumer_kit_source || '';
+  paddleSource = false;
+  document.getElementById('paddle-role').value = '';
+  document.getElementById('paddle-dictionary').value = '';
+  document.getElementById('paddle-held').checked = false;
+  refreshPaddleSelection();
+
+
+
+  for (const id of [
+    'contract-task', 'contract-adapter', 'contract-score', 'contract-nms',
+    'contract-mean', 'contract-std', 'contract-keypoints', 'contract-labels',
+    'input-shape'
+  ]){
+    document.getElementById(id).value = '';
+  }
+  pickLayout('NCHW');
+  updateContractFields();
+  setLocked('result', true);
+  document.getElementById('result-rows').textContent = '';
+  document.getElementById('result-files').textContent = '';
+  document.getElementById('result-diagnostic-rows').textContent = '';
+  document.getElementById('result-diagnostics').hidden = true;
+}
+
+function showEnvironmentOffline(message){
+
+
+
+
+
+
+  machine = {};
+  environmentKnown = false;
+  previewReady = false;
+  reviewedOptionsSignature = null;
+  for (const id of ['stat-cpu', 'stat-full', 'stat-gpu', 'stat-check']) {
+    const status = document.getElementById(id);
+    status.textContent = 'not checked';
+    status.className = 'bad';
+    status.title = message;
+  }
+  drawSteps(document.getElementById('environment-steps'), [{
+    state: 'refused', name: 'Server', state_name: 'not reached', lines: [message]
+  }]);
+}
+
+async function loadEnvironment(){
+  const request = ++environmentRequestNumber;
+  const data = await ask('/api/environment');
+
+
+  if (request !== environmentRequestNumber) return false;
+  environmentRevision++;
+  if (data.trouble){ showEnvironmentOffline(data.trouble); return false; }
+  machine = data.summary || {};
+  if (!document.getElementById('llm-python').value)
+    document.getElementById('llm-python').value = machine.llm_python || '';
+  if (!document.getElementById('native-consumer-source').value)
+    document.getElementById('native-consumer-source').value = machine.native_consumer_kit_source || '';
+  environmentKnown = true;
+  drawSteps(document.getElementById('environment-steps'), data.steps || []);
+  paintStats();
+  previewReady = false;
+  reviewedOptionsSignature = null;
+  return true;
+}
+
+document.getElementById('btn-environment').onclick = loadEnvironment;
+document.getElementById('btn-quit').onclick = async () => {
+  const result = await ask('/api/quit', {});
+  document.getElementById('quit-note').textContent = result.trouble ||
+    'Converter closed. You can close this browser tab.';
+  if (result.status === 'CLOSING') {
+    document.getElementById('btn-quit').disabled = true;
+    document.getElementById('btn-build').disabled = true;
+  }
+};
+
+document.getElementById('btn-download-qwen').onclick = async () => {
+  const button = document.getElementById('btn-download-qwen');
+  const note = document.getElementById('qwen-download-note');
+  button.disabled = true;
+  const started = await ask('/api/model-download', {model_key: 'qwen2.5-0.5b'});
+  if (started.trouble) { note.textContent = started.trouble; button.disabled = false; return; }
+  while (true) {
+    const result = await ask('/api/model-download-progress?job=' + encodeURIComponent(started.job));
+    if (result.trouble) { note.textContent = result.trouble; break; }
+    if (result.finished) {
+      note.textContent = 'The pinned model files are ready.';
+      document.getElementById('model-path').value = result.path;
+      document.getElementById('btn-recognise').click();
+      break;
+    }
+    note.textContent = 'Downloading ' + (result.file || 'model') + ': ' +
+      ((result.received_bytes || 0) / 1048576).toFixed(1) + ' MiB';
+    await new Promise(resolve => setTimeout(resolve, 750));
+  }
+  button.disabled = false;
+};
+
+document.getElementById('btn-toolchain').onclick = async () => {
+  const note = document.getElementById('toolchain-note');
+  const selected = document.getElementById('llm-python').value.trim();
+  const request = ++environmentRequestNumber;
+  note.textContent = 'Checking the selected toolchain...';
+  const data = await ask('/api/toolchain', {python: selected});
+  if (request !== environmentRequestNumber ||
+      selected !== document.getElementById('llm-python').value.trim()) return;
+  environmentRevision++;
+  previewReady = false;
+  reviewedOptionsSignature = null;
+  if (data.trouble) { note.textContent = data.trouble; return; }
+  machine = data.summary || {};
+  environmentKnown = true;
+  note.textContent = machine.full_build_reason || 'Toolchain check finished';
+  drawSteps(document.getElementById('environment-steps'), data.steps || []);
+  paintStats();
+};
+
+document.getElementById('llm-profile').onchange = () => {
+  previewReady = false;
+  reviewedOptionsSignature = null;
+  if (document.getElementById('llm-profile').value) {
+    targetManuallySet = true;
+    pickTarget('cuda');
+    pickDtype('float32');
+  }
+};
+for (const id of ['llm-python', 'output-directory', 'native-consumer-source']) {
+  document.getElementById(id).addEventListener('input', () => {
+    previewReady = false;
+    reviewedOptionsSignature = null;
+  });
+}
+
+document.getElementById('btn-samples').onclick = async () => {
+  const button = document.getElementById('btn-samples');
+  const note = document.getElementById('samples-note');
+  button.disabled = true;
+  note.textContent = 'Building the samples';
+  const data = await ask('/api/samples', {});
+  button.disabled = false;
+  if (data.trouble){ note.textContent = data.trouble; return; }
+  note.textContent = 'Samples with recorded reference results';
+  drawSteps(document.getElementById('samples-steps'), data.steps || []);
+};
+
+async function recogniseModel(){
+  const button = document.getElementById('btn-recognise');
+  if (button.disabled) return false;
+  const target = document.getElementById('recognised');
+  const advice = document.getElementById('recognise-advice');
+  button.disabled = true;
+  const selectedPath = document.getElementById('model-path').value;
+  if (selectedPath !== recognisedPath){
+    rawSourceProtection = {eligible:false, recommended:false, reason:'Recognise this new source'};
+    rawProtectionOverride = null;
+    atomicBundleOptIn = false;
+    clearPreviousModelContract();
+    refreshRawSourceProtection();
+  }
+  recognisedReady = false;
+  previewReady = false;
+  target.textContent = '';
+  recognisedSourcePack = null;
+  advice.hidden = true;
+  target.appendChild(row('reading bytes', '...', 'wait'));
+
+  const data = await ask('/api/recognise', {path: selectedPath});
+  button.disabled = false;
+  if (document.getElementById('model-path').value !== selectedPath){
+
+
+    target.textContent = '';
+    target.appendChild(row('model changed',
+      'The path changed during recognition; press Recognise again.', 'wait'));
+    return false;
+  }
+
+  fullBuild = false;
+  recognisedModelKey = '';
+  paintRouteStats();
+  paddleSource = !!(data.exportable && data.export_adapter === 'paddleocr');
+  refreshPaddleSelection();
+  target.textContent = '';
+
+  if (data.trouble){
+    rawSourceProtection = {eligible:false, recommended:false, reason:data.trouble};
+    refreshRawSourceProtection();
+    target.appendChild(row('failed', data.trouble, 'bad'));
+    return false;
+  }
+  rawSourceProtection = data.raw_source_protection ||
+    {eligible:false, recommended:false, reason:'Backend source-lock eligibility was not checked'};
+
+
+
+  const actualPath = data.path || selectedPath;
+  if (actualPath !== selectedPath){
+    document.getElementById('model-path').value = actualPath;
+  }
+  target.appendChild(row('recognised as', data.detail, data.convertible ? 'ok' : 'bad'));
+  target.appendChild(row('size', data.size + ' MB'));
+  target.appendChild(row('first bytes', data.first_bytes));
+  if (data.onnx_source_pack){
+    const pack = data.onnx_source_pack;
+    target.appendChild(row('Source pack', pack.display_name + ' / ' + pack.profile_id, 'ok'));
+    target.appendChild(row('Declared model licence', pack.license));
+    target.appendChild(row('Public source', pack.upstream.url));
+    target.appendChild(row('Settings', 'Exact Windows x86_64 CPU profile loaded; metadata will be included in the bundle.'));
+  } else if (/\.onnx$/i.test(actualPath)){
+    target.appendChild(row('Source metadata', 'No adjacent SOURCE.json. This is a generic ONNX conversion; no source-pack licence or provenance is preserved.', 'wait'));
+  }
+  for (const input of (data.inputs || [])){
+    target.appendChild(row('input ' + input.name, input.shape, input.free ? 'wait' : ''));
+  }
+
+  if (!data.convertible && !data.exportable){
+
+    advice.hidden = false;
+    advice.textContent = (data.advice || []).join(String.fromCharCode(10));
+    setLocked('contract', true);
+    setLocked('target', true);
+    setLocked('build', true);
+
+
+
+    showGraphControls(true);
+    pickTarget(chosenTarget);
+    return false;
+  }
+  if (data.exportable && data.export_kind === 'full_build'){
+
+
+
+
+
+
+
+
+
+
+
+    advice.hidden = false;
+    advice.textContent = 'This language model can be compiled into a native TVM bundle. '
+      + 'Continue through the computer check, target settings and Preview, then Build. '
+      + 'After building, run the supplied example in Delphi or Lazarus to check generated text.';
+    setLocked('contract', true);
+    setLocked('target', false);
+    fullBuild = true;
+    recognisedModelKey = data.model_key || data.detail || 'Language model';
+    paintRouteStats();
+    if (data.model_key === 'qwen2.5-0.5b') {
+      document.getElementById('llm-profile').value = 'qwen2.5-0.5b-cuda-f32-64-v1';
+      document.getElementById('llm-profile').onchange();
+    } else {
+      document.getElementById('llm-profile').value = '';
+    }
+    showGraphControls(false);
+    pickTarget(chosenTarget);
+    refreshRawSourceProtection();
+    setLocked('build', false);
+    recognisedReady = true;
+    recognisedPath = actualPath;
+    return true;
+  }
+  showGraphControls(true);
+  pickTarget(chosenTarget);
+  if (data.exportable){
+
+
+
+    advice.hidden = false;
+    advice.textContent = 'Full cycle: this ' + (data.export_adapter || 'model')
+      + ' model is exported to a canonical ONNX first, then built. Review the '
+      + 'prefilled fields and press Build.';
+  }
+  if (data.inputs && data.inputs.length){
+    const first = data.inputs[0];
+    const box = document.getElementById('input-shape');
+    if (first.free){
+
+
+
+
+
+      const dims = String(first.shape).split(',');
+      const guess = first.name + ':' +
+        dims.map((d, i) => d.trim() !== '-1' ? d.trim()
+                          : (i === 0 ? '1' : i === 1 ? '3' : '640')).join(',');
+      box.value = guess;
+      box.placeholder = guess;
+    } else {
+      box.value = first.name + ':' + first.shape;
+    }
+  } else if (data.exportable){
+
+
+    const box = document.getElementById('input-shape');
+    if (!box.value){ box.value = 'images:1,3,640,640'; box.placeholder = 'images:1,3,640,640'; }
+  }
+  setLocked('contract', false);
+  setLocked('target', false);
+  setLocked('build', false);
+  if (data.onnx_source_pack) applySourcePack(data.onnx_source_pack);
+  else suggestContract(data);
+  recognisedReady = true;
+  recognisedPath = actualPath;
+  refreshRawSourceProtection();
+  return true;
+}
+document.getElementById('btn-recognise').onclick = recogniseModel;
+document.getElementById('model-path').addEventListener('input', () => {
+  recognisedReady = false;
+  recognisedSourcePack = null;
+  previewReady = false;
+  paddleSource = false;
+  refreshPaddleSelection();
+  rawSourceProtection = {eligible:false, recommended:false, reason:'Recognise this changed source'};
+  rawProtectionOverride = null;
+  atomicBundleOptIn = false;
+  refreshRawSourceProtection();
+});
+
+function formatDiagnosticScalar(value){
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value.toExponential(3) : String(value);
+}
+
+function showResult(data, job, atomicComplete){
+  setLocked('result', false);
+  if (wizardIndex === 5) document.getElementById('result').hidden = false;
+  const target = document.getElementById('result-rows');
+  target.textContent = '';
+  const diagnostics = document.getElementById('result-diagnostic-rows');
+  diagnostics.textContent = '';
+  const acceptance = data.summary && data.summary.acceptance;
+  const familyBuild = (data.steps || []).some(step => step.name === 'Full build: llm');
+  const qwenProfile = acceptance && acceptance.profile_id ===
+    'qwen2.5-0.5b-cuda-f32-64-v1';
+  const verification = data.summary && data.summary.verification_status;
+  const outcome = !data.sound ? 'Build did not complete'
+    : familyBuild ? 'Language-model bundle built'
+    : verification === 'VERIFIED_LOCAL' ? 'Build and recorded tensor comparison completed'
+    : 'Bundle built; see the recorded checks below';
+  document.getElementById('result-summary').textContent = !data.sound
+    ? 'Read the reported error before starting another build. Incomplete output is not a completed bundle.'
+    : qwenProfile
+      ? 'Open QwenChat.dproj in Delphi or QwenChat.lpi in Lazarus and run the converted bundle. '
+        + 'The wizard has completed compilation and file checks; it has not run the application.'
+      : familyBuild
+        ? 'Run an application that supports this exact model and profile to check generated text. '
+          + 'The wizard has completed compilation and file checks; it has not run a consumer.'
+      : 'The output directory and completed checks are listed below. Application execution '
+        + 'is separate from compilation and tensor comparisons.';
+  target.appendChild(row('outcome', outcome,
+    data.sound ? 'ok' : 'bad'));
+  if (verification) diagnostics.appendChild(row('Tensor comparison status', verification));
+  if (acceptance) {
+    target.appendChild(row('Application verification', acceptance.status,
+      acceptance.required_checks_pass ? 'ok'
+        : ['FAIL', 'ERROR'].includes(acceptance.status) ? 'bad' : 'wait'));
+    for (const check of acceptance.checks || []) {
+      const checkRows = check.role === 'diagnostic' ? diagnostics : target;
+      checkRows.appendChild(row(check.id.replaceAll('_', ' '),
+        check.status + (check.detail ? ': ' + check.detail : ''),
+        check.status === 'PASS' ? 'ok'
+          : ['FAIL', 'ERROR'].includes(check.status) ? 'bad' : 'wait'));
+    }
+  }
+  if (atomicComplete){
+    target.appendChild(row('Atomic RAW kit', 'EXPERIMENTAL namespace publication; '
+      + 'not durable, not immutable'));
+    target.appendChild(row('Native end-target', 'NOT_CHECKED'));
+  }
+  if (data.summary && data.summary.directory){
+    target.appendChild(row('directory', data.summary.directory));
+  }
+  for (const step of (data.steps || [])){
+    if (step.name.indexOf('Comparison') !== 0) continue;
+    for (const key of Object.keys(step.numbers || {})){
+      if (key === 'reference' || key === 'permutation') continue;
+      diagnostics.appendChild(row('Tensor comparison, ' + key,
+        formatDiagnosticScalar(step.numbers[key])));
+    }
+  }
+  const files = (data.summary && data.summary.files) || [];
+  const diagnosticDetails = document.getElementById('result-diagnostics');
+  diagnosticDetails.hidden = diagnostics.childElementCount === 0;
+  diagnosticDetails.open = !data.sound;
+  const list = document.getElementById('result-files');
+  list.hidden = files.length === 0;
+  list.textContent = files.join(String.fromCharCode(10));
+  const download = document.getElementById('result-download');
+  const downloadNote = document.getElementById('result-download-note');
+  const downloadable = !!(job && data.finished && data.sound &&
+                          data.download_ready &&
+                          (verification === 'VERIFIED_LOCAL' ||
+                           verification === 'NOT_CHECKED'));
+  if (download){
+    download.hidden = !downloadable;
+    if (downloadable){
+      download.href = '/api/download?job=' + encodeURIComponent(job);
+    } else {
+
+
+      download.href = '#';
+    }
+  }
+  if (downloadNote) {
+    downloadNote.hidden = !downloadable;
+    downloadNote.textContent = familyBuild
+      ? 'Contains the complete converted bundle and checksums. You can also use the output folder directly. Run a matching application to check it.'
+      : 'Contains the completed files and checksums. The recorded checks above describe their validation.';
+  }
+}
+
+function selectedBuildOptions(){
+
+  const cpuMode = document.getElementById('cpu-codegen-mode').value;
+  return {
+    path: document.getElementById('model-path').value,
+    onnx_source_pack: fullBuild ? null : recognisedSourcePack,
+    target: chosenTarget,
+    target_os: document.getElementById('target-os').value,
+    target_cpu_arch: document.getElementById('target-cpu-arch').value.trim(),
+    arch: chosenTarget === 'cuda'
+      ? document.getElementById('target-arch').value.trim() : '',
+    target_driver_api: !fullBuild && chosenTarget === 'cuda'
+      ? document.getElementById('target-driver-api').value.trim() : '',
+    full_build: fullBuild,
+    llm_profile: fullBuild ? document.getElementById('llm-profile').value : '',
+    llm_python: fullBuild ? document.getElementById('llm-python').value.trim() : '',
+    output_directory: document.getElementById('output-directory').value.trim(),
+    native_family_atomic: !!(fullBuild && document.getElementById('native-family-atomic').checked),
+    native_consumer_kit_source: fullBuild && document.getElementById('native-family-atomic').checked
+      ? document.getElementById('native-consumer-source').value.trim() : '',
+    paddle_role: paddleSource ? document.getElementById('paddle-role').value : '',
+    paddle_dictionary: paddleSource
+      ? document.getElementById('paddle-dictionary').value.trim() : '',
+    paddle_native_hold: paddleSource &&
+      document.getElementById('paddle-held').checked,
+    freeze_local_raw_source: !!(rawSourceProtection.eligible && !fullBuild &&
+      !document.getElementById('contract-task').value &&
+      !document.getElementById('contract-adapter').value &&
+      !document.getElementById('raw-source-lock').disabled &&
+      document.getElementById('raw-source-lock').checked),
+    atomic_complete_bundle: !!(atomicBundleOptIn && atomicBundleEligible() &&
+      !document.getElementById('atomic-complete').disabled &&
+      document.getElementById('atomic-complete').checked),
+    dtype: fullBuild ? chosenDtype : '',
+    shape: fullBuild ? '' : document.getElementById('input-shape').value,
+    tune: !fullBuild && tuneOn,
+    trials_per_task: fullBuild ? '' : document.getElementById('input-trials').value,
+    cpu_codegen: cpuMode ? {mode:cpuMode,
+      mcpu:cpuMode === 'explicit'
+        ? document.getElementById('cpu-mcpu').value.trim() : null} : null,
+    task: fullBuild ? '' : document.getElementById('contract-task').value,
+    adapter: fullBuild ? '' : document.getElementById('contract-adapter').value,
+    layout: chosenLayout,
+    score_threshold: fullBuild ? '' : document.getElementById('contract-score').value,
+    nms_threshold: fullBuild ? '' : document.getElementById('contract-nms').value,
+    mean: fullBuild ? '' : document.getElementById('contract-mean').value,
+    std: fullBuild ? '' : document.getElementById('contract-std').value,
+    keypoint_count: fullBuild ? '' : document.getElementById('contract-keypoints').value,
+    labels: fullBuild ? '' : document.getElementById('contract-labels').value
+  };
+}
+
+document.getElementById('btn-build').onclick = async () => {
+  const button = document.getElementById('btn-build');
+  const note = document.getElementById('build-note');
+  const dot = document.getElementById('build-dot');
+  if (button.disabled) return;
+  if (!recognisedReady ||
+      document.getElementById('model-path').value !== recognisedPath){
+    note.textContent = 'The source model changed. Return to Model and recognise it again.';
+    return;
+  }
+  if (!environmentKnown){
+    note.textContent = 'Computer information is unavailable. Refresh Environment.';
+    return;
+  }
+  const approvedOptions = selectedBuildOptions();
+  if (!previewReady ||
+      !reviewedPreviewToken ||
+      JSON.stringify(approvedOptions) !== reviewedOptionsSignature){
+    previewReady = false;
+    reviewedOptionsSignature = null;
+    note.textContent =
+      'The build settings have not been reviewed. Press Back to Preview, then Next to review the current plan before Build.';
+    return;
+  }
+
+
+  button.disabled = true;
+  dot.className = 'dot running';
+  note.textContent = 'building';
+
+
+  const started = await ask('/api/build', {
+    ...approvedOptions, preview_token: reviewedPreviewToken
+  });
+  if (started.trouble){
+
+
+    button.disabled = false;
+    previewReady = false;
+    reviewedOptionsSignature = null;
+    reviewedPreviewToken = null;
+    dot.className = 'dot refused';
+    note.textContent = started.trouble;
+    return;
+  }
+
+
+  previewReady = false;
+  reviewedOptionsSignature = null;
+  reviewedPreviewToken = null;
+
+  const tick = async () => {
+    const data = await ask('/api/progress?job=' + started.job);
+    if (data.trouble){
+
+
+      button.disabled = false;
+      dot.className = 'dot refused';
+      note.textContent = data.trouble;
+      return;
+    }
+    drawSteps(document.getElementById('build-steps'), data.steps || []);
+    if (!data.finished){ setTimeout(tick, 700); return; }
+    button.disabled = false;
+    dot.className = 'dot ' + (data.sound ? 'done' : 'refused');
+    note.textContent = data.sound ? 'finished' : 'the run did not pass';
+    showResult(data, started.job, approvedOptions.atomic_complete_bundle);
+  };
+  tick();
+};
+
+
+
+
+
+
+
+(function setupModelDrop(){
+  const drop = document.getElementById('model-drop');
+  const fileInput = document.getElementById('model-file');
+  const label = document.getElementById('model-drop-text');
+  const idle = 'Drop a model file here, or click to choose';
+
+  function setState(cls){
+    drop.classList.remove('dragover', 'busy', 'failed');
+    if (cls) drop.classList.add(cls);
+  }
+  function fail(message){
+    setState('failed');
+    label.textContent = message + '. Click to try another file.';
+  }
+  function rejectFolder(){
+
+
+
+    setState('failed');
+    label.textContent = "Paste the folder path in the field below. "
+      + 'Folders (Paddle, HuggingFace, TensorFlow SavedModel) are read straight '
+      + 'from disk; drag-and-drop uploads a single file only.';
+  }
+  function probeIsFile(file){
+
+
+
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(true);
+      reader.onerror = () => resolve(false);
+      try { reader.readAsArrayBuffer(file.slice(0, 1)); }
+      catch (err) { resolve(false); }
+    });
+  }
+
+
+
+  drop.addEventListener('click', (e) => {
+    if (e.target === fileInput) return;
+    fileInput.click();
+  });
+  drop.addEventListener('dragenter', (e) => { e.preventDefault(); drop.classList.add('dragover'); });
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragover'); });
+  drop.addEventListener('dragleave', (e) => {
+
+
+    if (e.target === drop) drop.classList.remove('dragover');
+  });
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    setState('');
+
+
+
+
+
+    const item = e.dataTransfer.items && e.dataTransfer.items[0];
+    const entry = (item && item.webkitGetAsEntry) ? item.webkitGetAsEntry() : null;
+    if (entry && entry.isDirectory){ rejectFolder(); return; }
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!file){ rejectFolder(); return; }
+
+
+
+    if (entry){ upload(file); return; }
+    probeIsFile(file).then((ok) => { if (ok) upload(file); else rejectFolder(); });
+  });
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (file) upload(file);
+    fileInput.value = '';
+  });
+
+  function upload(file){
+    setState('busy');
+    label.textContent = 'uploading ' + file.name + '... 0%';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload?name=' + encodeURIComponent(file.name));
+    xhr.setRequestHeader('X-CrossPascal-Session', SESSION_TOKEN);
+    xhr.upload.addEventListener('progress', (ev) => {
+      if (ev.lengthComputable){
+        const pct = Math.round((ev.loaded / ev.total) * 100);
+        label.textContent = 'uploading ' + file.name + '... ' + pct + '%';
+      }
+    });
+    xhr.addEventListener('load', () => {
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch (err) {}
+      if (xhr.status >= 200 && xhr.status < 300 && data.path){
+        setState('');
+        label.textContent = idle;
+        document.getElementById('model-path').value = data.path;
+        document.getElementById('btn-recognise').click();
+      } else {
+        fail(data.trouble || ('upload failed (' + xhr.status + ')'));
+      }
+    });
+    xhr.addEventListener('error', () => fail('network error during upload'));
+    xhr.send(file);
+  }
+})();
+
+
+
+
+
+
+
+
+function tidySeparators(){
+  const seps = [...document.querySelectorAll('.toolbar > .sep')];
+  for (const sep of seps) sep.hidden = false;
+  const orphans = [];
+  for (const sep of seps){
+    const bar = sep.parentElement;
+    if (bar.offsetParent === null) continue;
+    const mid = (node) => node.offsetTop + node.offsetHeight / 2;
+    const kids = [...bar.children];
+    const here = kids.indexOf(sep);
+    const before = kids[here - 1], after = kids[here + 1];
+    const sameRow = (node) => node && Math.abs(mid(node) - mid(sep)) < 8;
+    if (!(sameRow(before) && sameRow(after))) orphans.push(sep);
+  }
+  for (const sep of orphans) sep.hidden = true;
+}
+
+function renderLlmSettings(){
+  const rows = document.getElementById('llm-settings-rows');
+  rows.textContent = '';
+  const profile = document.getElementById('llm-profile').value;
+  const namedProfile = profile === 'qwen2.5-0.5b-cuda-f32-64-v1';
+  rows.appendChild(row('Model', recognisedModelKey || 'Recognised language model'));
+  rows.appendChild(row('Profile', profile || 'Family defaults; resolved in Preview'));
+  rows.appendChild(row('Target', document.getElementById('target-os').value + ' / ' +
+    document.getElementById('target-cpu-arch').value + ' / ' + chosenTarget +
+    (chosenTarget === 'cuda' ? ' / ' + document.getElementById('target-arch').value : '')));
+  rows.appendChild(row('Precision', chosenDtype));
+  if (namedProfile) {
+    rows.appendChild(row('Model layers', 'All 24'));
+    rows.appendChild(row('Context / prefill chunk', '64 / 64 tokens'));
+    rows.appendChild(row('Batch size', '1'));
+  }
+  document.getElementById('llm-context-note').hidden = !namedProfile;
+  document.getElementById('llm-settings-note').textContent = namedProfile
+    ? 'This profile uses Windows x64, CUDA and float32. Confirm the detected architecture or enter the destination architecture before Preview.'
+    : 'Family defaults depend on the selected model. Review the resolved settings in Preview; a different model or profile needs its own application validation.';
+}
+
+function showWizardStep(index){
+  wizardIndex = index;
+  furthestWizardIndex = Math.max(furthestWizardIndex, index);
+  for (let i = 0; i < wizardSteps.length; i++){
+    document.getElementById(wizardSteps[i][0]).hidden = i !== index;
+  }
+  if (fullBuild) document.getElementById('contract').hidden = true;
+  document.getElementById('llm-settings').hidden = index !== 3 || !fullBuild;
+  if (index === 3 && fullBuild) renderLlmSettings();
+  document.getElementById('result').hidden = index !== 5 ||
+    document.getElementById('result').classList.contains('locked');
+  document.getElementById('wizard-position').textContent =
+    'Step ' + (index + 1) + ' of ' + wizardSteps.length;
+  document.getElementById('wizard-title').textContent = wizardSteps[index][1];
+  document.getElementById('btn-back').disabled = index === 0;
+  document.getElementById('btn-next').hidden = index === wizardSteps.length - 1;
+  document.getElementById('wizard-message').textContent = '';
+  tidySeparators();
+}
+
+async function refreshPreview(){
+  const options = selectedBuildOptions();
+  const signature = JSON.stringify(options);
+  const environmentAtStart = environmentRevision;
+  const request = ++previewRequestNumber;
+  previewReady = false;
+  reviewedOptionsSignature = null;
+  reviewedPreviewToken = null;
+  const report = await ask('/api/preview', options);
+  if (request !== previewRequestNumber ||
+      environmentAtStart !== environmentRevision ||
+      !environmentKnown || !recognisedReady ||
+      recognisedPath !== options.path ||
+      signature !== JSON.stringify(selectedBuildOptions())){
+
+
+    document.getElementById('wizard-message').textContent =
+      'The model, target or computer changed during Preview. Review the current settings again.';
+    return false;
+  }
+  if (report.trouble){
+    document.getElementById('wizard-message').textContent = report.trouble;
+    return false;
+  }
+  const rows = document.getElementById('preview-rows');
+  rows.textContent = '';
+  const technicalRows = document.getElementById('preview-technical-rows');
+  technicalRows.textContent = '';
+  document.getElementById('preview-technical').open =
+    !options.full_build || report.ready_for_build !== true;
+  const target = report.target || {};
+  rows.appendChild(row('Model', report.hf_selected_source &&
+    report.hf_selected_source.model_key || report.model));
+  rows.appendChild(row('Target', target.os + ' / ' + target.arch +
+                       ' / ' + target.device +
+                       (target.sm ? ' / ' + target.sm : '')));
+  rows.appendChild(row('Reachability', report.reachability));
+  if (report.onnx_source_pack){
+    const pack = report.onnx_source_pack;
+    rows.appendChild(row('Source profile', pack.display_name + ' / ' + pack.profile_id));
+    rows.appendChild(row('Declared model licence', pack.license));
+    technicalRows.appendChild(row('Public source', pack.upstream.url));
+    technicalRows.appendChild(row('SOURCE.json SHA-256', pack.sha256));
+    technicalRows.appendChild(row('Source metadata', pack.note));
+  }
+  technicalRows.appendChild(row('Target explanation', report.reason));
+  technicalRows.appendChild(row('Tensor-comparison plan', report.verification));
+  if (report.paddle_selected_source){
+    const selected = report.paddle_selected_source;
+    rows.appendChild(row('Paddle selected role', selected.role));
+    technicalRows.appendChild(row('Paddle source SHA-256', selected.tree_sha256));
+    if (selected.dictionary){
+      rows.appendChild(row('Rec dictionary', selected.dictionary.reference));
+      technicalRows.appendChild(row('Dictionary SHA-256', selected.dictionary.sha256));
+    }
+    technicalRows.appendChild(row('Paddle source guarantee',
+      'SCANNED_NOT_LOCKED; WSL held-source and model numerics NOT_CHECKED'));
+  }
+  if (report.native_family_consumer){
+    const selected = report.native_family_consumer;
+    rows.appendChild(row('Tokenizer and runtime folder', selected.source));
+    technicalRows.appendChild(row('Selected kit SHA-256', selected.tree_sha256));
+    technicalRows.appendChild(row('Consumer kit files', String(selected.file_count)));
+    technicalRows.appendChild(row('Native numerical comparison', 'NOT_CHECKED'));
+  }
+  if (report.hf_selected_source){
+    const selected = report.hf_selected_source;
+
+
+
+    rows.appendChild(row('Source model folder', selected.source_root));
+    if (selected.official_source) {
+      rows.appendChild(row('Source repository', selected.official_source.repository));
+      rows.appendChild(row('Source revision', selected.official_source.revision));
+      technicalRows.appendChild(row('Source identity status', selected.official_source.status));
+    }
+    technicalRows.appendChild(row('HF selected weights/tokenizer SHA-256',
+                         selected.tree_sha256));
+    technicalRows.appendChild(row('HF selected source files',
+                         String(selected.file_count)));
+    technicalRows.appendChild(row('HF selected source bytes',
+                         String(selected.total_bytes)));
+    technicalRows.appendChild(row('HF source guarantee',
+                         'SCANNED_NOT_LOCKED at Preview; selected Win32 private '
+                         + 'source custody required at Build; NOT_CHECKED'));
+  }
+  if (options.atomic_complete_bundle){
+    rows.appendChild(row('Atomic RAW kit (EXPERIMENTAL)',
+      'Opt-in ON; Windows NTFS complete-directory namespace commit'));
+    rows.appendChild(row('Native end-target', 'NOT_CHECKED'));
+  }
+  if (report.build_cuda){
+    const cuda = report.build_cuda;
+    rows.appendChild(row('Build CUDA Toolkit',
+      (cuda.toolkit_version || []).join('.') || 'unknown'));
+    technicalRows.appendChild(row('Driver CUDA API',
+      cuda.driver_api == null ? 'not checked' : String(cuda.driver_api)));
+    technicalRows.appendChild(row('CUDA Runtime API',
+      cuda.runtime_version == null ? 'not checked' : String(cuda.runtime_version)));
+    rows.appendChild(row('Toolkit compatibility', cuda.status + ': ' + cuda.reason));
+  }
+  const llmOptions = report.build_plan && report.build_plan.options &&
+    report.build_plan.options.llm;
+  if (llmOptions) {
+    rows.appendChild(row('LLM profile', llmOptions.profile_id));
+    rows.appendChild(row('Context / prefill chunk',
+      llmOptions.context_window_size + ' / ' + llmOptions.prefill_chunk_size + ' tokens'));
+    rows.appendChild(row('Batch size', String(llmOptions.max_batch_size)));
+  }
+  const compilerPython = report.build_plan && report.build_plan.options &&
+    report.build_plan.options.compiler_python;
+  if (compilerPython) technicalRows.appendChild(row('LLM toolchain Python', compilerPython.path));
+  rows.appendChild(row('Output directory', report.output_directory));
+  document.getElementById('preview-next-step').textContent = options.full_build
+    ? 'Build will produce the model library, parameters, tokenizer and runtime files. Afterward, run a matching application on the selected device to check its behavior.'
+    : 'Click Build on the next page to start. Review the planned files and checks below; a completed build does not establish an application result on another computer.';
+  document.getElementById('preview-files').textContent =
+    'Files planned if the build succeeds (confirmed AFTER Build):' +
+    String.fromCharCode(10) +
+    (report.planned_files || []).concat(options.atomic_complete_bundle &&
+      !(report.planned_files || []).some(f => f === 'source/' || f.startsWith('source/'))
+      ? ['source/ (selected original RAW model and approved sidecars)']
+      : []).map(f => '- ' + f).join(String.fromCharCode(10)) +
+    (report.runtime_inventory ?
+      String.fromCharCode(10) + 'Exact TVM libraries from this compiler:' +
+      String.fromCharCode(10) +
+      report.runtime_inventory.libraries.map(
+        f => '- ' + f.file + ' (' + f.bytes + ' bytes, SHA-256 ' +
+             f.sha256 + ')').join(String.fromCharCode(10)) +
+      String.fromCharCode(10) +
+      (report.runtime_inventory.licences || []).map(
+        f => '- ' + f).join(String.fromCharCode(10))
+      : '') +
+    ((report.conditional_files || []).length ?
+      String.fromCharCode(10) +
+      'Only after an independent numerical comparison PASSES:' +
+      String.fromCharCode(10) +
+      report.conditional_files.map(f => '- ' + f).join(String.fromCharCode(10))
+      : '');
+  document.getElementById('preview-warning').textContent =
+    ((report.warnings || []).concat(
+      options.atomic_complete_bundle ? [ATOMIC_DISCLOSURE] : [],
+      report.runtime_inventory && report.runtime_inventory.external_cuda_dependencies
+      ? [report.runtime_inventory.external_cuda_dependencies] : [])).join(' ') ||
+    'Building and independent verification have not yet started.';
+  previewReady = report.ready_for_build === true &&
+    typeof report.preview_token === 'string' && !!report.preview_token;
+  reviewedOptionsSignature = previewReady ? signature : null;
+  reviewedPreviewToken = previewReady ? report.preview_token : null;
+  return previewReady;
+}
+
+async function wizardNext(){
+  const next = document.getElementById('btn-next');
+  if (next.disabled) return;
+  const startedAt = wizardIndex;
+  next.disabled = true;
+  try {
+    const note = document.getElementById('wizard-message');
+    note.textContent = '';
+    if (wizardIndex === 0){
+      const path = document.getElementById('model-path').value;
+      if (!recognisedReady || path !== recognisedPath){
+        if (!(await recogniseModel())){
+          note.textContent = 'Choose a supported model before continuing.';
+          return;
+        }
+      }
+    }
+    if (wizardIndex === 1 && !environmentKnown){
+      if (!(await loadEnvironment())){
+        note.textContent = 'The computer could not be checked. Refresh Environment.';
+        return;
+      }
+    }
+    if (wizardIndex === 2 && chosenTarget === 'cuda' &&
+        !document.getElementById('target-arch').value.trim()){
+      note.textContent = 'Choose a GPU architecture or use the recommended CPU target.';
+      return;
+    }
+    if (wizardIndex === 3){
+      const task = document.getElementById('contract-task').value;
+      if (!fullBuild && task && !document.getElementById('contract-adapter').value.trim()){
+        note.textContent = 'This task needs a model adapter. Choose one before Next.';
+        return;
+      }
+      if (!(await refreshPreview())) return;
+      if (wizardIndex !== startedAt) return;
+    }
+    if (wizardIndex === 4 && !previewReady){
+      if (!(await refreshPreview())) return;
+      if (wizardIndex !== startedAt) return;
+    }
+    if (wizardIndex === startedAt && startedAt < wizardSteps.length - 1)
+      showWizardStep(startedAt + 1);
+  } finally {
+    next.disabled = false;
+  }
+}
+
+document.getElementById('btn-next').onclick = wizardNext;
+document.getElementById('btn-back').onclick = () => {
+  if (wizardIndex > 0) showWizardStep(wizardIndex - 1);
+};
+for (const anchor of document.querySelectorAll('header a[href^="#"]')){
+  anchor.addEventListener('click', (event) => {
+    event.preventDefault();
+    const id = anchor.getAttribute('href').slice(1);
+    const index = wizardSteps.findIndex(([key]) => key === id);
+    if (index >= 0 && index <= furthestWizardIndex) showWizardStep(index);
+  });
+}
+for (const id of ['target', 'contract']){
+  const card = document.getElementById(id);
+  for (const eventName of ['input', 'change', 'click']){
+    card.addEventListener(eventName, () => {previewReady = false;});
+  }
+}
+window.addEventListener('resize', tidySeparators);
+
+let ocrDraftApproval = null;
+let ocrDraftRequest = 0;
+function ocrDraftOptions(){
+  let settings;
+  try { settings = JSON.parse(document.getElementById('ocr-draft-settings').value); }
+  catch (error) { throw new Error('OCR settings must be valid JSON'); }
+  if (!settings || Array.isArray(settings) || typeof settings !== 'object' ||
+      Object.keys(settings).sort().join(',') !== 'ctc,preprocessing' ||
+      !settings.ctc || !settings.preprocessing ||
+      typeof settings.ctc !== 'object' || Array.isArray(settings.ctc) ||
+      typeof settings.preprocessing !== 'object' || Array.isArray(settings.preprocessing)){
+    throw new Error('Settings require preprocessing and ctc JSON objects');
+  }
+  return {det:document.getElementById('ocr-draft-det').value.trim(),
+    rec:document.getElementById('ocr-draft-rec').value.trim(),
+    dictionary:document.getElementById('ocr-draft-dictionary').value.trim(),settings};
+}
+function invalidateOcrDraft(){
+  ocrDraftApproval = null;
+  ocrDraftRequest++;
+  document.getElementById('ocr-draft-build').disabled = true;
+  document.getElementById('ocr-draft-download').hidden = true;
+}
+document.getElementById('ocr-draft-enabled').onchange = event => {
+  document.getElementById('ocr-draft-fields').hidden = !event.target.checked;
+  invalidateOcrDraft();
+};
+for(const id of ['ocr-draft-det','ocr-draft-rec','ocr-draft-dictionary','ocr-draft-settings']){
+  document.getElementById(id).addEventListener('input', invalidateOcrDraft);
+}
+document.getElementById('ocr-draft-preview').onclick = async () => {
+  const status = document.getElementById('ocr-draft-status');
+  invalidateOcrDraft();
+  const request = ocrDraftRequest;
+  let options;
+  try { options = ocrDraftOptions(); }
+  catch(error){ status.textContent = error.message; return; }
+  status.textContent = 'Validating Det, Rec, dictionary and explicit preprocessing/CTC...';
+  const result = await ask('/api/ocr-draft-preview', options);
+  if (request !== ocrDraftRequest) return;
+  if(result.trouble){ status.textContent = result.trouble; return; }
+  ocrDraftApproval = {options, token:result.preview_token};
+  document.getElementById('ocr-draft-build').disabled = false;
+  status.textContent = 'DRAFT only; NOT_CHECKED. Approved ' + result.asset_count +
+    ' SHA-pinned assets. Output: ' + result.output_directory +
+    '. Review this destination and click Build reviewed DRAFT.';
+};
+document.getElementById('ocr-draft-build').onclick = async () => {
+  if (!ocrDraftApproval) return;
+  const approved = ocrDraftApproval;
+  invalidateOcrDraft();
+  const status = document.getElementById('ocr-draft-status');
+  status.textContent = 'Assembling composite DRAFT...';
+  const result = await ask('/api/ocr-draft-build',
+    {...approved.options,preview_token:approved.token});
+  if(result.trouble){status.textContent = result.trouble;return;}
+  status.textContent = 'Committed DRAFT, composite NOT_CHECKED: ' + result.output_directory;
+  const link = document.getElementById('ocr-draft-download');
+  link.href = '/api/ocr-draft-download?job=' + encodeURIComponent(result.draft_job);
+  link.hidden = false;
+};
+
+
+
+let omdetCandidateApproval = null;
+let omdetCandidateRequest = 0;
+function omdetCandidateOptions(){
+  return {
+    candidate_dir: document.getElementById('omdet-candidate-dir').value.trim(),
+    expected_pins_file: document.getElementById('omdet-candidate-expected-pins').value.trim(),
+    into: document.getElementById('omdet-candidate-into').value.trim()
+  };
+}
+function invalidateOmDetCandidate(){
+  omdetCandidateApproval = null;
+  omdetCandidateRequest++;
+  document.getElementById('omdet-candidate-build').disabled = true;
+  document.getElementById('omdet-candidate-evidence').textContent = '';
+}
+document.getElementById('omdet-candidate-enabled').onchange = event => {
+  document.getElementById('omdet-candidate-fields').hidden = !event.target.checked;
+  invalidateOmDetCandidate();
+};
+for(const id of ['omdet-candidate-dir','omdet-candidate-expected-pins','omdet-candidate-into']){
+  document.getElementById(id).addEventListener('input', invalidateOmDetCandidate);
+}
+document.getElementById('omdet-candidate-preview').onclick = async () => {
+  const status = document.getElementById('omdet-candidate-status');
+  invalidateOmDetCandidate();
+  const request = omdetCandidateRequest;
+  const options = omdetCandidateOptions();
+  if (!Object.values(options).every(value => value.length)){
+    status.textContent = 'Provide the candidate directory, independent pinset JSON, and new destination.';
+    return;
+  }
+  status.textContent = 'Reading and SHA-256-checking the selected v1 candidate and independent pins...';
+  const result = await ask('/api/omdet-candidate-preview', options);
+  if (request !== omdetCandidateRequest ||
+      !document.getElementById('omdet-candidate-enabled').checked) return;
+  if (result.trouble){status.textContent = result.trouble;return;}
+  if (result.ready_for_build !== true || !result.preview_token ||
+      result.status !== 'NOT_CHECKED' || result.download_ready !== false){
+    status.textContent = 'OmDet Preview refused: incomplete or incorrectly promoted response.';
+    return;
+  }
+  omdetCandidateApproval = {options, token:result.preview_token};
+  document.getElementById('omdet-candidate-build').disabled = false;
+  const evidence = document.getElementById('omdet-candidate-evidence');
+  evidence.textContent = '';
+  evidence.appendChild(row('Destination', result.output_directory));
+  evidence.appendChild(row('Selected SHA-256 files', String(result.selected_file_count)));
+  evidence.appendChild(row('Selected source tree SHA-256', result.source_tree_sha256));
+  evidence.appendChild(row('Independent pinset SHA-256', result.expected_pins_sha256));
+  evidence.appendChild(row('v1 profile SHA-256', result.candidate_profile_sha256));
+  evidence.appendChild(row('Status', 'NOT_CHECKED; Pascal UAT NOT_RUN; runtime NOT_ATTESTED', 'wait'));
+  status.textContent = 'Preview approved for one Build within 10 minutes. ' +
+    'Review the exact destination; no verified model or HTTP ZIP READY is promised.';
+};
+document.getElementById('omdet-candidate-build').onclick = async () => {
+  if (!omdetCandidateApproval) return;
+  const approved = omdetCandidateApproval;
+  const status = document.getElementById('omdet-candidate-status');
+  if (JSON.stringify(approved.options) !== JSON.stringify(omdetCandidateOptions())){
+    invalidateOmDetCandidate();
+    status.textContent = 'OmDet paths changed after Preview; review the new selection.';
+    return;
+  }
+  invalidateOmDetCandidate();
+  status.textContent = 'Revalidating full selected SHA-256 bytes; publishing the separate v2 candidate...';
+  const result = await ask('/api/omdet-candidate-build',
+    {...approved.options, preview_token:approved.token});
+  if (result.trouble){status.textContent = result.trouble;return;}
+  if (result.status !== 'NOT_CHECKED' || result.pascal_facade_uat !== 'NOT_RUN' ||
+      result.runtime_provenance !== 'NOT_ATTESTED' || result.download_ready !== false){
+    status.textContent = 'OmDet publisher did not return an admissible unverified result.';
+    return;
+  }
+  const evidence = document.getElementById('omdet-candidate-evidence');
+  evidence.textContent = '';
+  evidence.appendChild(row('Published directory', result.output_directory));
+  evidence.appendChild(row('Status', 'NOT_CHECKED; Pascal UAT NOT_RUN; runtime NOT_ATTESTED', 'wait'));
+  status.textContent = 'Published a separate OmDet v2 candidate. ' +
+    'Native model/Facade UAT NOT_RUN, runtime NOT_ATTESTED; no HTTP ZIP READY.';
+};
+
+showWizardStep(0);
+refreshRawSourceProtection();
+loadEnvironment();
+tidySeparators();
+</script>
+</body>
+</html>

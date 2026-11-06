@@ -15,7 +15,7 @@ import os
 import stat
 from pathlib import Path
 
-from . import targets
+from . import targets, llm_build_profile
 
 
 BUILD_PLAN_VERSION = 1
@@ -37,7 +37,8 @@ def _checksum(record):
 def resolve(host_facts, *, target='cpu', req_sm=None, req_os=None,
             req_arch=None, req_driver_api=None, route='raw', source=None,
             shape=None, dtype='float32', tune=False, trials_per_task=None,
-            contract=None, cpu_codegen=None):
+            contract=None, cpu_codegen=None, llm_options=None,
+            compiler_python=None):
     """Resolve effective target and selections; refuse unsupported requests.
 
     No numerical success is possible here. A saved plan is valid only as a
@@ -62,15 +63,11 @@ def resolve(host_facts, *, target='cpu', req_sm=None, req_os=None,
     if trials_per_task is not None and (type(trials_per_task) is not int
                                         or trials_per_task <= 0):
         raise ValueError('BuildPlan trials_per_task must be a positive integer')
-    
-    
-    
+
     if cpu_codegen is not None and (route != 'raw' or target != 'cpu' or not tune):
         raise ValueError('CPU codegen choice requires tuned raw CPU route')
     if route == 'family_full_build':
-        
-        
-        
+
         if shape or contract or tune or trials_per_task is not None:
             raise ValueError('LLM family builder cannot honour a model shape, '
                              'vision contract or tuning controls in this route')
@@ -88,14 +85,9 @@ def resolve(host_facts, *, target='cpu', req_sm=None, req_os=None,
         admitted_cpu = targets.admit_cpu_codegen(
             cpu_codegen['mode'], cpu_codegen['mcpu'],
             host_arch=host_facts.get('arch'))
-        
-        
-        
+
         targets.require_local_cpu_tuning_target(admitted_cpu)
-        
-        
-        
-        
+
         from . import tuning
         try:
             tuning.refuse_on_windows()
@@ -114,6 +106,11 @@ def resolve(host_facts, *, target='cpu', req_sm=None, req_os=None,
                          'was measured and none was selected; choose the target '
                          'SM before Build, without a CPU fallback')
 
+    selected_llm = llm_build_profile.validate(
+        llm_options, route=route, target=target, dtype=dtype,
+        sm=profile['deployment']['sm'])
+    selected_python = llm_build_profile.validate_python(
+        compiler_python, route=route)
     output = {
         'build_plan_version': BUILD_PLAN_VERSION,
         'route': route,
@@ -133,10 +130,12 @@ def resolve(host_facts, *, target='cpu', req_sm=None, req_os=None,
             'DESTINATION_ORACLE_REQUIRED' if level == targets.COMPILE_ONLY else
             'LOCAL_ORACLE_PENDING'),
     }
+    if selected_llm is not None:
+        output['options']['llm'] = selected_llm
+    if selected_python is not None:
+        output['options']['compiler_python'] = selected_python
     if admitted_cpu is not None:
-        
-        
-        
+
         output['cpu_codegen'] = admitted_cpu
         output['compiler_target'] = admitted_cpu['tvm_target']
         output['compiler_binding_status'] = 'PENDING_ACTUAL_CODEGEN'
@@ -146,7 +145,8 @@ def resolve(host_facts, *, target='cpu', req_sm=None, req_os=None,
 
 def validate_recorded(plan, *, source=None, target=None, req_sm=None,
                       target_profile=None, shape=None, dtype=None,
-                      tune=None, trials_per_task=None, contract=None):
+                      tune=None, trials_per_task=None, contract=None,
+                      llm_options=None, compiler_python=None):
     """Validate a stored plan against its own inputs and optional recipe fields.
 
     Cannot validate the *current* source/model bytes: that belongs to the
@@ -189,6 +189,8 @@ def validate_recorded(plan, *, source=None, target=None, req_sm=None,
         shape=options.get('shape'), dtype=options.get('dtype'),
         tune=options.get('tune'), trials_per_task=options.get('trials_per_task'),
         contract=options.get('contract'),
+        llm_options=options.get('llm'),
+        compiler_python=options.get('compiler_python'),
         cpu_codegen=({'mode': selected_cpu['mode'],
                       'mcpu': (selected_cpu['mcpu'] if selected_cpu['mode'] == 'explicit'
                                else None)} if selected_cpu is not None else None))
@@ -212,12 +214,17 @@ def validate_recorded(plan, *, source=None, target=None, req_sm=None,
         raise ValueError('recipe tuning budget and BuildPlan budget disagree')
     if contract is not None and contract != options.get('contract'):
         raise ValueError('recipe model contract and BuildPlan contract disagree')
+    if llm_options is not None and llm_options != options.get('llm'):
+        raise ValueError('recipe LLM options and BuildPlan disagree')
+    if compiler_python is not None and compiler_python != options.get('compiler_python'):
+        raise ValueError('recipe compiler Python and BuildPlan disagree')
     return plan
 
 
 def validate_native_family_execution(plan, *, source, target, req_sm,
                                      dtype, host_os, host_arch,
-                                     actual_tvm_target=None):
+                                     actual_tvm_target=None, model_key=None,
+                                     context=None, chunk=None):
     """Native HF builder-side validation, separate from wizard assurances.
 
     Refuse *before loading weights* when the compiler process, actual local OS,
@@ -228,6 +235,15 @@ def validate_native_family_execution(plan, *, source, target, req_sm,
                       req_sm=req_sm, dtype=dtype)
     if plan['route'] != 'family_full_build':
         raise ValueError('native LLM process requires a family_full_build plan')
+    selected_llm = plan['options'].get('llm')
+    if selected_llm is not None:
+        if (model_key, context, chunk) != (
+                selected_llm['model_key'],
+                selected_llm['context_window_size'],
+                selected_llm['prefill_chunk_size']):
+            raise ValueError('native LLM model/context/chunk differ from BuildPlan')
+    elif context not in (None, 0) or chunk not in (None, 0):
+        raise ValueError('unplanned native LLM context/chunk override')
     profile = plan['target_profile']
     requested_sm = targets.validate_target_sm(target, req_sm)
     if requested_sm != profile['deployment'].get('sm'):
@@ -272,11 +288,7 @@ def read_native_plan(path, *, expected_sha256=None):
         info = candidate.stat()
         if not stat.S_ISREG(info.st_mode) or not 1 <= info.st_size <= 1024 * 1024:
             raise ValueError('native BuildPlan must be a regular file <= 1MiB')
-        
-        
-        
-        
-        
+
         with candidate.open('rb') as stream:
             before_read = os.fstat(stream.fileno())
             if (not stat.S_ISREG(before_read.st_mode) or
@@ -307,8 +319,8 @@ def read_native_plan(path, *, expected_sha256=None):
                     any(ch not in '0123456789abcdef' for ch in expected_sha256)):
                 raise ValueError('native BuildPlan approved SHA-256 is invalid')
             if hashlib.sha256(raw).hexdigest() != expected_sha256:
-                
-                
+
+
                 raise ValueError(
                     'native BuildPlan content changed since initial ZIP inventory')
     except OSError as exc:

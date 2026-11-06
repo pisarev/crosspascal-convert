@@ -1,26 +1,10 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Write and read the build recipe - the INPUTS of a build, so CI can repeat it.
+"""Read and write the inputs and provenance of a model build.
 
-WHY A RECIPE FILE, AND WHY IT IS NOT THE MANIFEST. Two files leave a build, and
-they answer two different questions. The manifest (manifest.txt / manifest.json)
-is the runtime CONTRACT of the finished model: what the facade must feed it and
-how to read what comes back. The recipe (recipe.json) is the INPUT of the build:
-the model source, the target, the shape, the tuning choice and the model contract
-- everything a second machine needs to produce that same artifact with no human
-in the loop. The manifest describes a model that passed; the recipe describes how
-to make one. Merging them would tie the passport of a verified model to the wish
-that built it, and the master design keeps the two apart on purpose
-(state/MASTER-DESIGN.md, point 4: the recipe is NOT to be merged with the manifest).
-
-WHY THE RECIPE IS WRITTEN ON EVERY BUILD, THE MANIFEST ONLY SOMETIMES. The
-manifest is a passport and is issued only when the recipe named a task to
-discriminate on; without a task there is nothing to write. The recipe is the
-wish, and the wish always exists - so it is written whenever a build is carried
-through, and the build can always be repeated.
-
-Only the standard library is used (json). The recipe is plain dict / list / str /
-int / float / bool / None, so it maps straight onto JSON and back.
+The recipe records the source, target, shape, tuning settings and model
+contract for replay. The separate runtime manifest describes the inputs
+and outputs that a consumer uses when a build supplies a task contract.
 """
 
 import json
@@ -32,9 +16,6 @@ from . import onnx_closure, source_freeze, paddle_closure
 from .build_plan import validate_recorded as validate_build_plan
 from .targets import (tvm_target_spec, validate_target_sm,
                       validate_recorded_profile)
-
-
-
 
 
 RECIPE_VERSION = 1
@@ -363,7 +344,7 @@ def build_recipe(source, target, shape, name, tune, trials_per_task, sm,
                      an output location, not a build input, so it is not recorded
                      - a repeat places its own database)
     trials_per_task  trials each tuning task got, or None
-    sm               the CUDA sm the target card is, e.g. "sm_89", or None
+    sm               the selected CUDA compute capability, or None
     contract_input   the model-contract dict build_contract_input produced, or
                      None when no task was given
     provenance       the audit facts _gather_provenance built (source_hash,
@@ -411,28 +392,28 @@ def build_recipe(source, target, shape, name, tune, trials_per_task, sm,
         "license": license,
         "contract": contract_input,
     }
-    
-    
-    
+
+
     if sm:
         recipe["tvm_target"] = tvm_target_spec(target, sm)
     if target_profile is not None:
         recipe['target_profile'] = target_profile
     if build_plan is not None:
-        
-        
+
+
         recipe['build_plan'] = build_plan
     if effective_cpu_codegen is not None:
         recipe['cpu_codegen_receipt_version'] = 1
         recipe['effective_cpu_codegen'] = validate_cpu_codegen_receipt(
             effective_cpu_codegen, build_plan)
     if facts.get('source_closure') is not None:
-        
-        
-        
+
+
         recipe['source_closure'] = validate_selected_source_closure(
             facts['source_closure'])
     if facts.get('paddle_selected_source') is not None:
+        if facts.get('source_pack') is not None:
+            raise ValueError('Paddle and ONNX source-pack metadata cannot be mixed')
         if facts.get('source_closure') is not None:
             raise ValueError('Paddle and ONNX source closure cannot be mixed')
         if target_profile is None or build_plan is None:
@@ -441,6 +422,8 @@ def build_recipe(source, target, shape, name, tune, trials_per_task, sm,
             raise ValueError('Paddle selected source requires RAW converter route')
         recipe['paddle_selected_source'] = validate_paddle_selected_source(
             facts['paddle_selected_source'], source=source)
+    if facts.get('source_pack') is not None:
+        recipe['source_pack'] = facts['source_pack']
     return recipe
 
 
@@ -562,7 +545,7 @@ def write_family_receipt(plan, output_directory, *, model_key, provenance,
     """Persist a native LLM build request without forging a numeric passport.
 
     Shared by wizard and CLI. All four files use exclusive creation; there is
-    still NO atomic whole-directory commit (that is a separate I-03 debt).
+    no atomic commit for the directory as a whole.
     """
     validate_build_plan(plan)
     if plan['route'] != 'family_full_build':
@@ -582,10 +565,12 @@ def write_family_receipt(plan, output_directory, *, model_key, provenance,
         'adapter': 'llm', 'model_key': model_key,
         'dtype': options['dtype'],
     }
+    from . import consumer_acceptance
+    receipt['acceptance'] = consumer_acceptance.after_native_build(plan)
     if receipt['license'] is not None:
         receipt['recipe_version'] = RECIPE_FAMILY_LICENSE_CLAIM_VERSION
-        
-        
+
+
         receipt['model_license_claim'] = _checked_model_license_claim({
             'schema': 'crosspascal.model-license-claim', 'version': 1,
             'license': receipt['license'],
@@ -595,10 +580,8 @@ def write_family_receipt(plan, output_directory, *, model_key, provenance,
     folder = os.path.abspath(output_directory)
     if not os.path.isdir(folder):
         raise ValueError('family output directory is absent: %s' % folder)
-    
-    
-    
-    
+
+
     from .llm_bundle_contract import validate_llm_output
     validate_llm_output(folder, plan, model_key, require_consumer=True)
     contents = {

@@ -1,71 +1,16 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Compare the compiled module with the original model on identical input.
+"""Compare a compiled module with its source model on reproducible inputs.
 
-WHY A STEP OF ITS OWN. A successful build does not mean the module COMPUTES the
-right thing. That is not a hunch: on 31.08.2026 a quantized TFLite model built
-without a single complaint and returned 0.02 where the reference gives 0.73.
-Without this comparison the user would be handed a file nobody knows the truth
-about.
-
-WHAT TO MEASURE WITH - a question I got wrong twice, both times by measurement.
-
-FIRST MISTAKE: absolute deviation. It only works when the magnitudes are alike.
-A detector's outputs are pixel coordinates up to 640, where a deviation of
-1.2e-03 is a relative error of 2e-06, which is agreement.
-
-SECOND MISTAKE, and subtler: the LARGEST relative deviation. Measured on
-rtdetr_r18vd, the same module against onnxruntime:
-
-    white noise         2.6e-01
-    smooth pattern      6.5e-05
-    A REAL PHOTOGRAPH   2.0
-
-On that same photograph the decoded detections agree to within half a pixel, and
-the live check is green. The disagreement sits in the logits of INSIGNIFICANT
-queries: -9.0 against -7.0 changes neither class nor box, yet shows up as a two.
-
-    the largest single point speaks of an outlier, not of agreement
-
-WHAT WAS ADOPTED. Acceptance goes by the 99.9th percentile: it reflects the
-agreement of the bulk and does not collapse under lone outliers in flat regions.
-The largest is printed beside it - as information, not as a verdict.
-
-THE LIMIT IS NAMED HERE, HONESTLY: this does not replace a live run on your own
-task. It catches the coarse - a different layout, lost outputs, quantization that
-computes the wrong thing. A subtle difference that moves the fifth detection out
-of a hundred, it will not catch.
-
-THREE DIFFERENT INPUTS ARE USED, and that follows from the same measurement:
-on a single input the agreement may be accidental. All three come from a fixed
-seed, so both roads receive exactly the same arrays.
-
-WHITE NOISE DOES NOT JUDGE, and that too is a measurement rather than a leniency.
-On rtdetr_r18vd, same module, 99.9th percentile:
-
-    smooth 4.6e-05    flat 1.7e-04    NOISE 4.0e-02
-
-Noise diverges by three orders more. The cause is not the build: no such input
-exists in nature, the model's own response to it is unstable, and two sound
-implementations disagree there lawfully. Judging by it would fail good builds.
-It stays in the run and is printed - as a note about the margin.
-
-OUTPUT ORDER IS DIAGNOSED, NOT GUESSED. Outputs are compared in order. If that
-fails, we look for a permutation under which they would agree - and if one is
-FOUND, it is NAMED OUT LOUD and remains a refusal. Accepting a permutation
-silently is not on: our Pascal code takes outputs by index, and a permuted output
-would not be the one it thinks it holds. Saying "agreed" here would trade a noisy
-check for a mute one, which is the worst of bargains.
+The generic path compares numeric outputs and reports additional diagnostics.
+Named strict paths check all required candidates or outputs. Synthetic probes
+are separate from task-specific acceptance on representative inputs.
 """
 
 import numpy as np
 from collections import deque
 
 from .report import Step
-
-
-
-
 
 
 _CUDA_DLL_DIRECTORIES = {}
@@ -116,10 +61,6 @@ MAX_PAIRED_SCALARS = 8_000_000
 MAX_MULTI_INPUT_ELEMENTS = 8_000_000
 
 
-
-
-
-
 RTDETR_FUSED_PROFILE = 'rtdetr_fused'
 RTDETR_FUSED_ATOL = 0.001
 
@@ -133,10 +74,8 @@ class NothingToCompare(Exception):
 
 
 def is_tflite(model_path):
-    
-    
-    
-    
+
+
     if str(model_path).lower().endswith('.tflite'):
         return True
     try:
@@ -147,12 +86,7 @@ def is_tflite(model_path):
 
 
 def tflite_interpreter(model_path):
-    """The real TFLite interpreter - the one that caught the quantization.
-
-    ai-edge-litert is used: wheels exist for all three machines of the recipe,
-    win_amd64 included (checked on 2.2.0). There must be no implementation of
-    our own here, or the comparison would be comparing us with ourselves.
-    """
+    """Load an available TFLite interpreter for the reference run."""
     try:
         from ai_edge_litert.interpreter import Interpreter
     except ImportError:
@@ -176,9 +110,8 @@ def model_input(model_path):
                                    % len(described))
         entry = described[0]
         if entry['dtype'] != np.float32:
-            
-            
-            
+
+
             raise NothingToCompare(
                 'the model input has type %s rather than float32: this is a'
                 ' quantized model. The converter refuses those, so there is'
@@ -199,11 +132,8 @@ def model_input(model_path):
                 dims.append(None)
                 free.append(index)
         if free:
-            
-            
-            
-            
-            
+
+
             raise NothingToCompare(
                 'input %s leaves dimensions %s free - name the shape as the third'
                 ' argument, for example 1,3,640,640' % (entry.name, free))
@@ -237,7 +167,7 @@ def _onnx_input_contract(model_path):
 
 def _validated_multi_inputs(inputs):
     """Refuse to invent shapes or types not given by the original ONNX graph."""
-    supported = {1: np.float32, 7: np.int64}  
+    supported = {1: np.float32, 7: np.int64}
     total = 0
     result = []
     for name, shape, element_type in inputs:
@@ -276,7 +206,7 @@ def _probe_multi_inputs(inputs):
         data = {}
         for index, (name, shape, dtype) in enumerate(inputs):
             if dtype == np.float32:
-                
+
                 offset = (index + 1) / (len(inputs) + 2)
                 if label == 'smooth':
                     array = 0.5 * smooth_pattern(shape) + 0.5 * offset
@@ -286,8 +216,8 @@ def _probe_multi_inputs(inputs):
                     array = np.full(shape, 0.25 + 0.5 * offset)
                 data[name] = np.ascontiguousarray(array, dtype=np.float32)
             else:
-                
-                
+
+
                 if label == 'noise':
                     array = rng.randint(0, 2, size=shape).astype(np.int64)
                     if array.size:
@@ -303,19 +233,7 @@ def _probe_multi_inputs(inputs):
 
 
 def spatial_axes(shape):
-    """Height and width axes: last two for NCHW, second and third for NHWC.
-
-    THE LAYOUT HAS TO BE TOLD FROM THE SHAPE - the file does not record it. The
-    clue: in NHWC the last dimension is the channel count (1, 3 or 4) and the
-    second cannot be a channel count. An ambiguous case such as (1, 3, 3, 3)
-    reads as NCHW.
-
-    A MISTAKE HERE DOES NOT SPOIL THE VERDICT, and that matters: both roads
-    receive THE SAME array, however it came out. A wrong guess makes the pattern
-    less photograph-like, and nothing more. Noticed 31.08.2026 on mobilenet_v2,
-    whose input is (1, 224, 224, 3) while the old code built the picture over
-    dimensions (224, 3).
-    """
+    """Return the height and width axes for NCHW or NHWC input."""
     if len(shape) != 4:
         return None
     if shape[-1] in (1, 3, 4) and shape[1] not in (1, 3, 4):
@@ -344,22 +262,17 @@ def smooth_pattern(shape):
 def probe_inputs(shape):
     """Three different inputs: smooth, noisy and flat. All from a fixed seed."""
     rng = np.random.RandomState(20260831)
-    
-    
+
+
     yield 'smooth', smooth_pattern(shape), True
     yield 'noise', rng.rand(*shape).astype(np.float32), False
-    
-    
+
+
     yield 'flat', np.full(shape, 0.5, dtype=np.float32), True
 
 
 def reference_road(model_path, input_names=None):
-    """A foreign runner of the same model: onnxruntime or the TFLite interpreter.
-
-    The reference must be a FOREIGN runner. A second implementation of our own
-    would compare us with ourselves and stay silent exactly where we are wrong
-    in the same way.
-    """
+    """Create the independent ONNX Runtime or TFLite reference runner."""
     if is_tflite(model_path):
         interpreter = tflite_interpreter(model_path)
         entry = interpreter.get_input_details()[0]
@@ -389,8 +302,8 @@ def reference_road(model_path, input_names=None):
             if set(x) != set(requested):
                 raise ValueError('ONNX Runtime needs exactly input names %s'
                                  % (requested,))
-            
-            
+
+
             return session.run(None, {name: x[name] for name in requested})
 
         return 'onnxruntime CPUExecutionProvider', run_onnx_many
@@ -410,22 +323,11 @@ def _deviation(a, b):
     return float(np.percentile(relative, 99.9)), float(relative.max())
 
 
-
-
-
 DECISION_AGREEMENT = 0.999
 
 
 def _looks_like_decision(a):
-    """Does this output hold per-class scores over positions?
-
-    FOUR DIMENSIONS AT LEAST, and that bound is deliberate. A detector emits
-    (1, 84, 8400) - three dimensions, where the 84 are four box coordinates
-    followed by eighty class scores. An argmax across them means nothing at all,
-    and letting such an output through this door would open a hole in the gate
-    rather than close a false alarm. Segmentation maps are (1, C, H, W) or
-    (1, C, D, H, W): four dimensions or five.
-    """
+    """Detect per-class scores suitable for label diagnostics."""
     return a.ndim >= 4 and a.shape[0] == 1 and a.shape[1] > 1
 
 
@@ -434,55 +336,32 @@ def _decision_agreement(a, b):
     return float((a.argmax(axis=1) == b.argmax(axis=1)).mean())
 
 
-
-
-
-
-
-
-
-
 DETECTION_THRESHOLDS = (0.5, 0.35, 0.25)
 
 
 def _probability_shift(a, b):
-    """The largest move in probability - which is where the thresholds live.
-
-    Relative deviation on logits misleads here. Logits of -6 to -12 are ordinary
-    for a detector, and a six percent relative change to one of them moves the
-    probability by less than a thousandth. The thresholds are compared against
-    probabilities, so the shift must be measured in the same currency.
-    """
+    """Find the maximum difference between sigmoid probabilities."""
     sigmoida = lambda x: 1.0 / (1.0 + np.exp(-x.astype(np.float64)))
     return float(np.abs(sigmoida(a) - sigmoida(b)).max())
 
 
 def _scores_output_index(outputs):
-    """Index of the per-candidate class scores, or None.
+    """Find class scores paired with a separate box tensor, if present.
 
-    NOT GUESSED FROM SHAPE - DERIVED FROM THE MODEL'S OWN STRUCTURE. A detector
-    that emits scores separately also emits boxes separately, and the two agree
-    on the candidate count. So an output of (B, N, C) counts as class scores
-    only when some other output is (B, N, 4).
-
-    That pairing is what keeps YOLO out. Its single output is (1, 84, 8400),
-    where the 84 are four box coordinates followed by eighty class scores in one
-    tensor; there is no companion boxes output, the rule does not fire, and the
-    numeric gate keeps judging it as before. Measured 02.09.2026: rtdetr_r18vd
-    declares logits (B, 300, 80) and pred_boxes (B, 300, 4); yolo11n declares
-    output0 (1, 84, 8400) alone.
+    The pair must share a candidate count and have shapes (B, N, C)
+    and (B, N, 4), respectively. This heuristic is for diagnostics.
     """
-    kandidatov = {}
+    by_candidate_count = {}
     for i, a in enumerate(outputs):
         if a.ndim == 3 and a.shape[2] == 4:
-            kandidatov.setdefault(a.shape[1], []).append(('boxes', i))
+            by_candidate_count.setdefault(a.shape[1], []).append(('boxes', i))
         elif a.ndim == 3 and a.shape[2] > 4:
-            kandidatov.setdefault(a.shape[1], []).append(('scores', i))
-    for _n, rows in kandidatov.items():
-        vidy = {v for v, _i in rows}
-        if {'boxes', 'scores'} <= vidy:
-            for vid, i in rows:
-                if vid == 'scores':
+            by_candidate_count.setdefault(a.shape[1], []).append(('scores', i))
+    for _n, rows in by_candidate_count.items():
+        kinds = {v for v, _i in rows}
+        if {'boxes', 'scores'} <= kinds:
+            for kind, i in rows:
+                if kind == 'scores':
                     return i
     return None
 
@@ -498,47 +377,23 @@ def _detections(a, threshold):
 
 
 def _detections_agree(a, b):
-    """Do the two roads report the same detections at every threshold?
+    """Return thresholds with matching and differing detection sets.
 
-    THE DETECTIONS ARE THE PREDICATE; THE LOGITS ARE A PROXY. Measured
-    02.09.2026 on rtdetr_r18vd, our module against onnxruntime: the largest
-    relative deviation over the whole tensor was 9 percent, which the numeric
-    gate refuses - and that 9 percent was ONE point, candidate 289 of 300, class
-    31, where the reference reads -6.680 and ours -7.436. Both are deep negative
-    logits, ranked 216th by confidence. At 0.5, 0.3, 0.1 and 0.05 the two roads
-    report identical sets: 1, 1, 6 and 42 detections, the same candidates with
-    the same classes. 23819 of 24000 elements agreed; the mean deviation was
-    0.0013.
-
-    So the refusal was about a number nobody reads. Returns the agreeing
-    thresholds and the disagreeing ones, so the report can say which.
+    Threshold agreement is diagnostic and does not change the numeric gate.
     """
-    soglasno, rashodyatsya = [], []
-    for porog in DETECTION_THRESHOLDS:
-        if _detections(a, porog) == _detections(b, porog):
-            soglasno.append(porog)
+    agreeing, differing = [], []
+    for threshold in DETECTION_THRESHOLDS:
+        if _detections(a, threshold) == _detections(b, threshold):
+            agreeing.append(threshold)
         else:
-            rashodyatsya.append(porog)
-    return soglasno, rashodyatsya
+            differing.append(threshold)
+    return agreeing, differing
 
 
 def _find_permutation(reference, ours):
-    """A permutation under which every output would agree, or None.
+    """Report an unambiguous numeric output permutation, if one exists.
 
-    WHY LOOK FOR SOMETHING THAT STAYS A REFUSAL ANYWAY. Two runners of one model
-    are not obliged to emit outputs in the same order, and then a mismatch means
-    a PERMUTATION rather than an arithmetic error. The difference matters
-    enormously to the reader: in the first case indices must be swapped, in the
-    second a fault must be hunted in the build. Saying "disagrees" without saying
-    "this is a permutation" sends them hunting a fault that is not there.
-
-    A permutation found does NOT cancel the refusal. Our Pascal code takes
-    outputs by index, and a permuted output is not the one it holds it to be.
-
-    The search runs pairwise rather than over all orderings: each of our outputs
-    looks for a reference output it agrees with, and that match must be UNIQUE.
-    An ambiguous correspondence is not a permutation but a coincidence of similar
-    magnitudes, and passing it off as the answer is not allowed.
+    The original output positions still determine verification.
     """
     if len(reference) != len(ours):
         return None
@@ -620,7 +475,7 @@ def _has_perfect_matching(adjacency):
                 parent_right[right] = left
                 occupied = right_to_left[right]
                 if occupied == -1:
-                    
+
                     while right != -1:
                         predecessor = parent_right[right]
                         previous_right = left_to_right[predecessor]
@@ -685,8 +540,8 @@ def _paired_candidates_agree(reference_boxes, reference_scores,
                                   axis=1).astype(np.float64)
         produced = np.concatenate((vm_box, vm_scores),
                                   axis=1).astype(np.float64)
-        
-        
+
+
         adjacency = []
         for original in expected:
             close = np.all(
@@ -757,9 +612,8 @@ def _rtdetr_fused_candidates_agree(reference, built):
     for name, tensor in (('reference', reference), ('TVM', built)):
         classes = tensor[:, :, 5]
         scores = tensor[:, :, 4]
-        
-        
-        
+
+
         if (np.any(classes != np.floor(classes)) or np.any(classes < 0)
                 or np.any(classes >= 80)):
             return False, ('%s fused RT-DETR class IDs are not exact integers '
@@ -968,8 +822,8 @@ def verify_here(model_path, module_path, shape_from_caller=None, device_kind='cp
     if comparison_profile not in (None, RTDETR_FUSED_PROFILE):
         return step.refuse('unknown numerical comparison profile %r'
                            % comparison_profile)
-    
-    
+
+
     search_warning = _prepare_cuda_runtime_directory(device_kind)
     if search_warning:
         step.say('CUDA runtime search: ' + search_warning)
@@ -992,9 +846,8 @@ def verify_here(model_path, module_path, shape_from_caller=None, device_kind='cp
             _validate_rtdetr_fused_source(model_path)
         if multi:
             input_specs = _validated_multi_inputs(source_inputs)
-            
-            
-            
+
+
             if (shape_from_caller
                     and tuple(shape_from_caller) != input_specs[0][1]):
                 raise NothingToCompare(
@@ -1038,18 +891,11 @@ def verify_here(model_path, module_path, shape_from_caller=None, device_kind='cp
     step.say('module runs on: %s' % device_kind)
     step.numbers['reference'] = road_name
 
-    
-    
-    
-    
-    
-    
-    
-    
+
     device = tvm.runtime.device(device_kind, 0)
     if not device.exist:
-        
-        
+
+
         step.say('this machine has no %s device, so the module was not run'
                  % device_kind)
         step.say('the module was built, but NOTHING about its numbers is known')
@@ -1124,25 +970,6 @@ def verify_here(model_path, module_path, shape_from_caller=None, device_kind='cp
     return step.refuse('the built module does not compute what the source model does')
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def verify(model_path, module_path, shape_from_caller=None, device_kind='cpu',
            comparison_profile=None):
     """Compare a built module with its source model in a child process.
@@ -1153,17 +980,18 @@ def verify(model_path, module_path, shape_from_caller=None, device_kind='cpu',
     import os
     import subprocess
     import sys
+    from .llm_build_profile import console_python
 
     step = Step('Comparison with the reference')
-    command = [sys.executable, '-m', 'pascalvision_convert.verify', model_path, module_path]
+    command = [console_python(), '-m', 'pascalvision_convert.verify', model_path, module_path]
     command.append(','.join(str(d) for d in shape_from_caller) if shape_from_caller else '')
     command.append(device_kind)
     if comparison_profile is not None:
         command.append(comparison_profile)
 
     environment = dict(os.environ)
-    
-    
+
+
     environment['PYTHONPATH'] = os.pathsep.join(
         [p for p in sys.path if p] + [environment.get('PYTHONPATH', '')])
 
@@ -1171,9 +999,8 @@ def verify(model_path, module_path, shape_from_caller=None, device_kind='cpu',
         finished = subprocess.run(command, capture_output=True, timeout=1800,
                                   env=environment)
     except Exception as trouble:
-        
-        
-        
+
+
         return step.say('NOT CHECKED: independent comparison child could not '
                         'finish (%s); no in-process verification substituted'
                         % trouble)
@@ -1181,7 +1008,7 @@ def verify(model_path, module_path, shape_from_caller=None, device_kind='cpu',
     text = (finished.stdout or b'').decode('utf-8', 'replace')
     if getattr(finished, 'returncode', None) != 0:
         step.refuse('the independent comparison child exited with code %r; '
-                    'a VERIFIED reply is invalid without natural process exit0'
+                    'verification requires the comparison process to exit successfully'
                     % getattr(finished, 'returncode', None))
         failure = (finished.stderr or b'').decode('utf-8', 'replace')
         for line in failure.splitlines()[-6:]:
@@ -1191,9 +1018,8 @@ def verify(model_path, module_path, shape_from_caller=None, device_kind='cpu',
     marker = text.rfind(chr(2))
     if marker < 0:
         step.refuse('the comparison process returned nothing usable')
-        
-        
-        
+
+
         whole = (text or (finished.stderr or b'').decode('utf-8', 'replace')).splitlines()
         shown = [line.strip() for line in whole[-8:] if line.strip()]
         if len(whole) > 8:
@@ -1230,8 +1056,8 @@ def _main(argv):
     comparison_profile = argv[5] if len(argv) > 5 and argv[5] else None
     step = verify_here(argv[1], argv[2], shape, device_kind,
                        comparison_profile)
-    
-    
+
+
     print(chr(2) + json.dumps(step.as_dict(), ensure_ascii=False))
     return 0
 

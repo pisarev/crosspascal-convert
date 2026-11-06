@@ -1,30 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""The core: recognise -> build -> place the runtime -> compare with the reference.
-
-WHY A CORE RATHER THAN A RETELLING IN EACH SHELL. The same job is presented by
-two faces: the build recipe on somebody else's machine and the wizard on this
-one. While the order of steps lived in the recipe's shell script, only the recipe
-knew it, and the wizard would have had to retell it in its own words - a second
-account of one job.
-
-THIS IS ARITHMETIC, NOT A WORRY. On 31.08.2026 the recipe turned out to hold
-seven defects, and THREE of them lived precisely in that shell text:
-
-    the TFL3 marker was looked for in the first four bytes, and it sits at 4;
-    the output name was assembled without an extension, and the loader will
-        not take such a file;
-    the linker's leftovers, .exp and .lib, matched the module's name pattern.
-
-Each of the three would have repeated in the wizard word for word had it retold
-the recipe. Here they are fixed ONCE.
-
-The same disease is described at the head of our own test builder: there were
-twenty-six recipes, each carrying its copy of the module path list; the list
-moved and nothing built at all. What rots is not the path, it is the copying.
-
-PRINTS NOTHING. Returns a report; printing belongs to whoever shows it.
-"""
+"""Convert a model, copy its runtime, and compare its output with a reference."""
 
 import datetime
 import hashlib
@@ -56,19 +32,10 @@ MODULE_EXTENSION = {
 DEFAULT_MODULE_EXTENSION = '.so'
 
 
-
-
-
 ARTIFACT_DTYPE = 'float32'
 
 
-
-
 LINKER_LEFTOVERS = ('.exp', '.lib')
-
-
-
-
 
 
 MAX_URL_MODEL_BYTES = 64 * 1024 ** 3
@@ -158,10 +125,8 @@ def download(url, target_dir):
             if declared > quota:
                 raise ValueError('URL model Content-Length exceeds admitted '
                                  'disk/transport byte quota')
-        
-        
-        
-        
+
+
         with open(path, 'xb') as handle:
             total = 0
             while True:
@@ -200,9 +165,7 @@ def _remove_leftovers(base):
 
 
 def _sha256_file(path):
-    """The SHA-256 hex digest of a file, read in blocks so a large module is not
-    pulled into memory whole. Only the standard library is used - the converter's
-    promise that nothing has to be installed reaches down to here too."""
+    """Hash a file in blocks without loading it into memory."""
     digest = hashlib.sha256()
     with open(path, 'rb') as handle:
         for block in iter(lambda: handle.read(1 << 20), b''):
@@ -265,10 +228,8 @@ def _gather_provenance(built, model_path, source, source_closure=None):
         'built_at': _utc_now_iso(),
         'toolchain': _toolchain_versions(),
     }
-    
-    
-    
-    
+
+
     if source_closure is not None:
         facts['source_closure'] = source_closure
     return facts
@@ -290,11 +251,35 @@ def _require_selected_cpu_codegen_route(plan, tuned_onnx_cpu):
                          'compilation; this model route cannot honour it')
 
 
+def _build_failure_diagnostic(error):
+    """Keep the real compiler call site and full traceback outside public reports."""
+    import traceback
+
+    captured = traceback.TracebackException.from_exception(
+        error, capture_locals=False)
+    converter = os.path.normcase(os.path.abspath(
+        os.path.join(os.path.dirname(__file__), 'convert.py')))
+    frame = next((item for item in reversed(captured.stack)
+                  if os.path.normcase(os.path.abspath(item.filename)) == converter), None)
+    scope = 'converter_call' if frame is not None else 'boundary_call'
+    if frame is None and captured.stack:
+        frame = captured.stack[-1]
+    return {
+        'exception_type': '%s.%s' % (type(error).__module__, type(error).__qualname__),
+        'call_site_scope': scope if frame is not None else 'no_traceback',
+        'call_site': ({'file': frame.filename, 'function': frame.name,
+                       'line': frame.lineno, 'source': frame.line}
+                      if frame is not None else None),
+        'traceback': ''.join(captured.format(chain=True)),
+    }
+
+
 def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         on_step=None, tune_work_dir=None, trials_per_task=None, contract=None,
         req_sm=None, source=None, license=None, req_os=None, req_arch=None,
         req_driver_api=None, approved_build_plan=None, cpu_codegen=None,
-        approved_source_closure=None, approved_paddle_source=None):
+        approved_source_closure=None, approved_paddle_source=None,
+        approved_onnx_source_pack=None):
     """Walk the whole path and return a report.
 
     model_path       a file on disk (already downloaded)
@@ -333,10 +318,8 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
                       compiler version; it is recorded in the profile and
                       checked before compiling for that destination.
 
-    Tuning is off by default and that is deliberate. It costs eleven to fifty
-    minutes of machine time against five seconds for an untuned build, and the
-    person who just wants to see whether a model converts at all should not pay
-    that. What it buys, measured 01.09.2026: 32 to 58 times faster on CPU.
+    Tuning is disabled by default. When enabled, it searches for schedules
+    for the selected CPU target and stores measurements in the tuning database.
     """
     report = Report('Converting a model to the TVM format')
 
@@ -346,12 +329,20 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         return step
 
     try:
-        if str(target).strip().lower() not in ('cpu', 'cuda'):
+        normalized_target = str(target).strip().lower()
+        if normalized_target not in ('cpu', 'cuda'):
             raise ValueError('the pipeline target must be cpu or cuda, got %r'
                              % target)
+        target = normalized_target
         req_sm = targets.validate_target_sm(target, req_sm)
     except ValueError as trouble:
         finished(report.step('Checking target reachability').refuse(str(trouble)))
+        return report
+    try:
+        input_name, dims = parse_shape(shape)
+    except (AttributeError, TypeError, ValueError) as trouble:
+        finished(report.step('Checking input shape').refuse(
+            'invalid input shape %r: %s' % (shape, trouble)))
         return report
     step = report.step('Recognising the model')
     try:
@@ -360,9 +351,8 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         finished(step.refuse('the file cannot be read: %s' % trouble))
         return report
     step.say('recognised: %s' % recognised.detail)
-    
-    
-    
+
+
     if os.path.isfile(model_path):
         step.say('size %.1f MB' % (os.path.getsize(model_path) / 1048576.0))
     step.numbers['kind'] = recognised.kind
@@ -415,10 +405,7 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
             from . import onnx_closure
             from .recipe_file import validate_selected_source_closure
 
-            
-            
-            
-            
+
             source_closure = validate_selected_source_closure(
                 approved_source_closure)
             if (recognised.kind != detect.ONNX or source is None or
@@ -446,19 +433,10 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         finished(check.done())
         report.summary['source_closure'] = source_closure
 
-    
-    
-    
-    
-    
-    
-    
-    
+
     host_facts = targets.host()
-    
-    
-    
-    
+
+
     if approved_build_plan is not None and 'cpu_codegen' in approved_build_plan:
         recorded = approved_build_plan['cpu_codegen']
         if not isinstance(recorded, dict):
@@ -484,10 +462,8 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
     except ValueError as trouble:
         finished(report.step('Checking target reachability').refuse(str(trouble)))
         return report
-    
-    
-    
-    
+
+
     if approved_build_plan is not None and chosen_plan != approved_build_plan:
         finished(report.step('Checking target reachability').refuse(
             'effective BuildPlan differs from reviewed Preview: source, '
@@ -507,8 +483,8 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
     reach.say('target os=%s arch=%s device=%s sm=%s'
               % (selected_os, selected_arch, target,
                  req_sm or '(host default)'))
-    
-    
+
+
     tuned_cpu = (target.lower() == 'cpu' and bool(tune_work_dir)
                  and recognised.kind != detect.TFLITE)
     try:
@@ -530,10 +506,8 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         return report
     if (target_profile['deployment'].get('driver_api') is not None
             and target.lower() == 'cuda'):
-        
-        
-        
-        
+
+
         from . import cuda_preflight, environment
         compiler = environment.find_cuda()
         toolkit = cuda_preflight.installed_toolkit_version(
@@ -556,9 +530,7 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
                   'and verify need the target device and cannot run here')
     finished(reach.done())
 
-    
-    
-    
+
     if contract and contract.get('task'):
         adapter_check = report.step('Checking Pascal facade adapter availability')
         try:
@@ -579,13 +551,7 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
                               'TModelLoader.Build* implementation')
         finished(adapter_check.done())
 
-    
-    
-    
-    
-    
-    
-    
+
     adapter_output_mode = None
     adapter_output_signature = None
     if contract and requires_adapter_output_check(
@@ -593,8 +559,7 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         check = report.step('Checking Pascal adapter output signature')
         try:
             signature = _source_output_signature(model_path, recognised.kind)
-            _, chosen_shape = parse_shape(shape)
-            input_batch = chosen_shape[0] if chosen_shape else None
+            input_batch = dims[0] if dims else None
             adapter_output_mode = validate_adapter_outputs(
                 contract['task'], contract['adapter'], signature,
                 input_batch=input_batch)
@@ -611,8 +576,8 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         check.numbers['adapter_output_mode'] = adapter_output_mode
         report.summary['adapter_output_mode'] = adapter_output_mode
         if adapter_output_mode == 'rtdetr_fused':
-            
-            
+
+
             adapter_output_signature = signature
         check.say('Pascal %s output shape compatible (%s): %s' % (
             contract['adapter'], adapter_output_mode,
@@ -636,10 +601,9 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
                                  'requires ONNX source; unsupported foreign '
                                  'formats may only compile without this contract')
             signature = _source_output_signature(model_path, recognised.kind)
-            _, chosen_shape = parse_shape(shape)
             adapter_output_mode = validate_paddleocr_outputs(
                 contract['task'], contract['adapter'], signature,
-                input_shape=chosen_shape)
+                input_shape=dims)
         except Exception as trouble:
             finished(check.refuse(str(trouble)))
             return report
@@ -655,10 +619,8 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         finished(check.done())
 
     step = report.step('Building the module')
-    
-    
-    
-    
+
+
     if (not isinstance(module_name, str) or
             not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]*', module_name) or
             module_name in ('.', '..') or module_name.endswith('.')):
@@ -666,9 +628,8 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
                              'without path separators, parent traversal or '
                              'trailing dot'))
         return report
-    
-    
-    
+
+
     dos_base = module_name.split('.', 1)[0].upper()
     if (dos_base in ('CON', 'PRN', 'AUX', 'NUL') or
             re.fullmatch(r'(?:COM|LPT)[1-9]', dos_base)):
@@ -688,8 +649,8 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         os.makedirs(target_dir)
     module_path = os.path.join(target_dir,
                                module_name + '.' + target + module_extension())
-    
-    
+
+
     reserved = (
         module_path, module_path + '.inputs',
         os.path.join(target_dir, 'manifest.txt'),
@@ -697,8 +658,8 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         os.path.join(target_dir, 'recipe.json'),
         os.path.join(target_dir, 'report.txt'),
     )
-    
-    
+
+
     previous = [item for item in reserved if os.path.lexists(item)]
     if previous:
         finished(step.refuse(
@@ -706,14 +667,11 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
             'replaced; select a fresh output directory.'
             % ', '.join(os.path.basename(item) for item in previous)))
         return report
-    input_name, dims = parse_shape(shape)
     shapes = {input_name: dims} if (input_name and dims) else None
     step.say('target %s, extension %s' % (target, module_extension()))
     if req_sm:
         step.say('CUDA compiler architecture %s' % req_sm)
 
-    
-    
 
     if shapes:
         step.say('input shape given: %s = %s'
@@ -731,9 +689,7 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
                 extra['cpu_codegen_target'] = chosen_plan['cpu_codegen']
                 extra['cpu_codegen_receipt'] = cpu_receipt
             step.say('tuning is on; the database goes to %s' % tune_work_dir)
-            step.say('an untuned build takes seconds, a tuned one tens of '
-                     'minutes - and comes out 32 to 58 times faster on the '
-                     'three models measured 01.09.2026')
+            step.say('tuning may take longer than a build without tuning')
             extra['tune_work_dir'] = tune_work_dir
             if trials_per_task:
                 extra['trials_per_task'] = trials_per_task
@@ -753,6 +709,15 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
                         '' if covered['complete'] else
                         ' - INCOMPLETE: ' + str(covered['reason'])))
     except Exception as trouble:
+        try:
+            step._build_failure_diagnostic = _build_failure_diagnostic(trouble)
+        except Exception as diagnostic_error:
+            step._build_failure_diagnostic = {
+                'exception_type': '%s.%s' % (type(trouble).__module__,
+                                            type(trouble).__qualname__),
+                'capture_error': '%s.%s' % (type(diagnostic_error).__module__,
+                                           type(diagnostic_error).__qualname__),
+            }
         finished(step.refuse(str(trouble)))
         return report
     step.say('produced %s' % os.path.basename(built))
@@ -772,15 +737,18 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
     report.summary['req_sm'] = req_sm
     finished(step.done())
 
-    runtime_step = runtime.place(target_dir, target)
+    runtime_options = {'include_ffi_licences': True} if approved_onnx_source_pack is not None else {}
+    runtime_step = runtime.place(target_dir, target, **runtime_options)
     report.steps.append(runtime_step)
     finished(runtime_step)
+    if runtime_step.state != 'done':
+        report.summary['verification_status'] = 'NOT_CHECKED'
+        return report
 
-    
-    
+
     if target.lower() == 'cuda' and req_sm and level == targets.COMPILE_ONLY:
-        
-        
+
+
         verify_step = report.step('Comparison with the reference')
         verify_step.say('NOT CHECKED: built for %s, host GPU is %s. Verification '
                         'requires a device matching the requested architecture.'
@@ -795,17 +763,14 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
             verify_step = verify.verify(model_path, built, dims, device_kind)
         report.steps.append(verify_step)
     finished(verify_step)
-    
-    
-    
+
+
     report.summary['verification_status'] = (
         'VERIFIED_LOCAL' if verify_step.state == 'done' else
         'NOT_CHECKED' if verify_step.state == 'unchecked' else 'FAILED')
     if paddle_selected is not None:
-        
-        
-        
-        
+
+
         report.summary['exported_onnx_comparison_status'] = (
             report.summary['verification_status'])
         report.summary['verification_status'] = 'NOT_CHECKED'
@@ -813,15 +778,7 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
             'Exported ONNX comparison is not independent Paddle original '
             'inference/CTC verification; source-level SHA remains nonimmutable')
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
     if paddle_selected is not None:
         check = report.step('Rechecking selected Paddle source after native build')
         try:
@@ -843,18 +800,25 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
                                         source_closure=source_closure)
     if paddle_selected is not None:
         provenance['paddle_selected_source'] = paddle_selected
+    if approved_onnx_source_pack is not None:
+        pack_step = report.step('Preserving declared ONNX source metadata')
+        try:
+            from . import onnx_source_pack
+            if (license != approved_onnx_source_pack['metadata']['license'] or
+                    provenance.get('source_hash') !=
+                    approved_onnx_source_pack['metadata']['model']['sha256']):
+                raise ValueError('Built model or licence differs from the approved source pack')
+            provenance['source_pack'] = onnx_source_pack.install(
+                approved_onnx_source_pack, model_path, target_dir)
+            report.summary['onnx_source_pack'] = provenance['source_pack']
+            pack_step.say('Original metadata and declared ancillary bytes copied to model-source/.')
+            pack_step.say('The licence is a source declaration, not independent legal clearance.')
+            finished(pack_step.done())
+        except (OSError, ValueError, TypeError, KeyError) as trouble:
+            finished(pack_step.refuse(str(trouble)))
+            return report
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
     if contract and contract.get('task'):
         manifest_step = report.step('Writing the bundle manifest')
         if paddle_selected is not None:
@@ -881,16 +845,7 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
                 finished(manifest_step.refuse(str(trouble)))
                 return report
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
     recipe_step = report.step('Writing the build recipe')
     try:
         recipe = build_recipe(
@@ -928,7 +883,7 @@ def _source_output_signature(model_path, kind):
     if kind == detect.ONNX:
         import onnx
 
-        
+
         graph = onnx.load(model_path, load_external_data=False).graph
         rows = []
         for value in graph.output:
@@ -961,7 +916,7 @@ def _source_output_signature(model_path, kind):
         if subgraph is None:
             raise ValueError('the TFLite graph has no first subgraph')
         tensor_types = tflite.TensorType
-        
+
         if hasattr(tensor_types, 'TensorType'):
             tensor_types = tensor_types.TensorType
         dtypes = {tensor_types.FLOAT32: 'float32',
@@ -1082,9 +1037,8 @@ def _emit_manifest(target_dir, built, target, contract, step,
         if (not isinstance(adapter_output_signature, (tuple, list))
                 or len(adapter_output_signature) != 1):
             raise ValueError('verified RT-DETR fused output signature is absent')
-        
-        
-        
+
+
         validate_adapter_outputs(
             contract['task'], contract['adapter'], adapter_output_signature,
             input_batch=io_shape[0] if io_shape else None)
@@ -1105,19 +1059,13 @@ def _emit_manifest(target_dir, built, target, contract, step,
     if target_profile is not None:
         targets.validate_recorded_profile(
             target_profile, target=target, req_sm=req_sm)
-        
-        
-        
+
+
         built_contract['target_profile'] = target_profile
 
     _enrich_contract(built_contract, provenance, license)
 
-    
-    
-    
-    
-    
-    
+
     manifest_txt = os.path.join(target_dir, 'manifest.txt')
     manifest_json = os.path.join(target_dir, 'manifest.json')
     if any(os.path.lexists(path) for path in (manifest_txt, manifest_json)):
@@ -1171,10 +1119,8 @@ def _emit_manifest(target_dir, built, target, contract, step,
     step.say('wrote manifest.txt and manifest.json')
     labels = contract.get('labels')
     if labels:
-        
-        
-        
-        
+
+
         step.say('labels source recorded: %s (not yet emitted into the manifest)'
                  % labels)
 
@@ -1199,6 +1145,8 @@ def _enrich_contract(built_contract, provenance, license):
             section['source_hash'] = provenance['source_hash']
         if provenance.get('built_at'):
             section['built_at'] = provenance['built_at']
+        if provenance.get('source_pack'):
+            section['source_pack'] = provenance['source_pack']
         if section.get('source'):
             built_contract['provenance'] = section
         toolchain = provenance.get('toolchain')

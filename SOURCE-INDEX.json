@@ -1,177 +1,479 @@
 {
-  "RELEASE_READY": false,
-  "final_native_validation": "NOT_APPLICABLE_TO_DECLARED_SOURCE_ONLY_SCOPE",
+  "schema": "crosspascal-windows-source-index-v1",
+  "release_id": "early-access-008",
+  "repository": "crosspascal-convert",
   "local_metadata": [
     {
       "kind": "file_or_directory",
       "path": ".git",
-      "reason": "Git working-copy metadata; excluded from distributed payload"
+      "reason": "Git metadata"
     }
   ],
-  "manifest_self_excluded": true,
   "members": [
     {
-      "bytes": 8,
       "path": ".gitattributes",
+      "bytes": 8,
       "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da"
     },
     {
-      "bytes": 1070,
+      "path": "INSTALL.md",
+      "bytes": 28477,
+      "sha256": "0d5728309d6a13bf5fabfae3a55f77e4ca65ea5d90831c178f93e328d5c5b7a5"
+    },
+    {
       "path": "LICENSE",
+      "bytes": 1070,
       "sha256": "04b643fe3d2d95be3b9a0ad9d3882d00a9b2d9dfb74694f35fe8edfc77e67815"
     },
     {
-      "bytes": 1599,
       "path": "README.md",
-      "sha256": "e2460959a02f5bda7c07afd6c27621c332e669b02d962c949e200533175b6046"
+      "bytes": 2103,
+      "sha256": "71c694d6bc5b27d7ca8958eafed9dce666350a97627ec6712502a8b76dd6c1ff"
     },
     {
-      "bytes": 5968,
+      "path": "docs/FIRST-RUN-VALIDATION.md",
+      "bytes": 1319,
+      "sha256": "51964e9a9b9eef48f816dff31442d09f67a88847c0bec7a16c7218635b2731bd"
+    },
+    {
       "path": "docs/SOURCE-NOTES.md",
-      "sha256": "4d3d47ab0f0d65f3125681f198063aa2ecc294328e81d37285aa3c5d91a10220"
+      "bytes": 6375,
+      "sha256": "33776c7a0397d057052f51d90918278ef625f813f324e2c4b48e7e9a80384514"
     },
     {
-      "bytes": 13487,
+      "path": "pyproject.toml",
+      "bytes": 1047,
+      "sha256": "74fc6d1bb0c432920cd99584c17bd43826c86ca26ae6a1613200c11c640487f6"
+    },
+    {
       "path": "scripts/verify_source.py",
-      "sha256": "baaa76f4b0328b889d09acb390a5f5f7baed1c4c6accbb0a074db4b8c050426c"
+      "bytes": 13549,
+      "sha256": "e36b010d92dd4a3b209c0e9fffb8492f492278c9bb65827a7b0dcee8a3fbd4a0"
     },
     {
-      "bytes": 261,
+      "path": "source/import_adapters.py",
+      "bytes": 57137,
+      "sha256": "cd304f5a2f5178f0a8c68a641c5a9c2977f63ec2e30159c6424ebd0dc4b91320"
+    },
+    {
+      "path": "source/master.py",
+      "bytes": 176536,
+      "sha256": "eb1033499018f990be75d610e6420613ebe04a7cd2df959d1574cab65eea6100"
+    },
+    {
       "path": "source/pascalvision_convert/__init__.py",
-      "sha256": "8222783836cde775362a86f1d5207e8f17fa7d9a4a767016f7518f5846b85649"
+      "bytes": 263,
+      "sha256": "2effb2f0ba4c32599ec1b5ee89259cb3d5d49b1167fad6f52dd2ab8cadca53f2"
     },
     {
-      "bytes": 15951,
+      "path": "source/pascalvision_convert/app_paths.py",
+      "bytes": 2006,
+      "sha256": "3506fc170fda96e091eeeaf0822a323029842bed1df113938d84fe93a3f3950d"
+    },
+    {
+      "path": "source/pascalvision_convert/birefnet_hr800_basic_reference.py",
+      "bytes": 8172,
+      "sha256": "4fa85fdccc87dc76e741ceb35f30535229bf0432c0535b9114835debe874f11f"
+    },
+    {
+      "path": "source/pascalvision_convert/birefnet_hr800_route.py",
+      "bytes": 34247,
+      "sha256": "227e711b134d64acab22f04ec794fce43fa773e5c532cc57f23a13db7ee87564"
+    },
+    {
+      "path": "source/pascalvision_convert/birefnet_hr800_snapshot.py",
+      "bytes": 21244,
+      "sha256": "52689e74e94db71a8ef6e315b4c208a6bee69a9949aad84cf9322ace81996531"
+    },
+    {
       "path": "source/pascalvision_convert/build_plan.py",
-      "sha256": "54a8a26d32a467fa38eddafd12d543030c468d9208d6b56de26e00c4190b2c2f"
+      "bytes": 17274,
+      "sha256": "7b622ff4475a0a024712a49fb9f8beced20ac3aa0a393f361b9a00cbbac99892"
     },
     {
-      "bytes": 13354,
       "path": "source/pascalvision_convert/bundle_atomic.py",
-      "sha256": "66d151d9dc76fdcd8ed618f5d1841c99296171e37a5796a6018ec2ab77f5d74f"
+      "bytes": 13113,
+      "sha256": "1af3a86db53cb77c0afef73635486f9aa575d31912f7af7ae5e0b8bdfdd90c60"
     },
     {
-      "bytes": 45308,
+      "path": "source/pascalvision_convert/bundle_download.py",
+      "bytes": 48997,
+      "sha256": "b8551e874376b31a2dfdf82fd5830e9ffa9a2dd618e2a10027009ab7d5bf9888"
+    },
+    {
       "path": "source/pascalvision_convert/bundle_publication.py",
-      "sha256": "28e41a6d6a5e33463a1d0b5a22994ccd84f15007cd4d4d78214b67d707ddb4ff"
+      "bytes": 45026,
+      "sha256": "1a1ad0c3eda2ac5a478816971e04a941caf74a9a1fa3a56281876bcaee0d6a3a"
     },
     {
-      "bytes": 13057,
       "path": "source/pascalvision_convert/cli.py",
-      "sha256": "95aba17e3df025db217c2dd36896d35dca47f500bccc19d2badc03ddfe30205e"
+      "bytes": 11525,
+      "sha256": "5b78c4dfdd5ea94c9de487003f788e1317a9bc38abb55408d3a4c1c7d6d794b8"
     },
     {
-      "bytes": 23453,
+      "path": "source/pascalvision_convert/consumer_acceptance.py",
+      "bytes": 2969,
+      "sha256": "192dd5465be2a4b7191eb1950ad319b8e824c76c595a0996d2789bb30ce811e1"
+    },
+    {
       "path": "source/pascalvision_convert/contract.py",
-      "sha256": "8137ee5370f6daaa1a7499f78c61c712d15e181c8fa91a6ee00d137044f5f3bb"
+      "bytes": 23588,
+      "sha256": "019df2979e03e840bbbf2b959ac35351f7ecacbed7276726a5597ffc0fc1d02e"
     },
     {
-      "bytes": 52613,
       "path": "source/pascalvision_convert/convert.py",
-      "sha256": "9436540506bd72dd65b622a7c35fa2f18fc21ab615a821991ad8432492dc4110"
+      "bytes": 38299,
+      "sha256": "46757ca6f9927283cd6954452632ddf676163d27dd4fc29a68c8852d4f94a5aa"
     },
     {
-      "bytes": 23161,
+      "path": "source/pascalvision_convert/cuda_preflight.py",
+      "bytes": 8097,
+      "sha256": "1bd7abd8089adb3d083547adbca7bab642e04fe32367b2405302ba9a820ea71e"
+    },
+    {
+      "path": "source/pascalvision_convert/destination_native_runner.py",
+      "bytes": 10594,
+      "sha256": "11acf5e66458eec863d3e0eed1fc636cb3aa65ced9de27b810ab1cf3084c5bcf"
+    },
+    {
+      "path": "source/pascalvision_convert/destination_preflight.py",
+      "bytes": 19630,
+      "sha256": "88e9975e2339df31ce13fa8f7b824853314b983d491f83615909941aba0832d9"
+    },
+    {
       "path": "source/pascalvision_convert/detect.py",
-      "sha256": "018f1614d2914737a536a91c9a809b3030ec411d543e14a26f6c0a6f048c3e24"
+      "bytes": 22772,
+      "sha256": "2e0013cb2049f29211a4b874f1aabc69c1ea0631ab635c5f67d9844ae5521f85"
     },
     {
-      "bytes": 26455,
       "path": "source/pascalvision_convert/environment.py",
-      "sha256": "7227c6625d2860fc6dc1f8fb7a551cae06cc2e56900ed3ba9a8230c043e0ddb5"
+      "bytes": 18415,
+      "sha256": "17fb563ede223a56f02f5aa59f21ba5d2b8a7a0033d45de49684e892f518cf4b"
     },
     {
-      "bytes": 14799,
       "path": "source/pascalvision_convert/exported_onnx_hold.py",
-      "sha256": "9e26c16827c79c88d024966f40e32df4ca986f833b0ff3757d8fb716094bee61"
+      "bytes": 14671,
+      "sha256": "edb0c0bc56b03b14c978c208ee766593dd3efb6baa562dc2bf088a9af3f67c26"
     },
     {
-      "bytes": 22591,
+      "path": "source/pascalvision_convert/hf_closure.py",
+      "bytes": 22779,
+      "sha256": "54b050c7e0badf9509469c711bd6d9f771e96b2e7e39c432a29d38df4269f411"
+    },
+    {
+      "path": "source/pascalvision_convert/hf_held_stage.py",
+      "bytes": 21214,
+      "sha256": "68859328749508a2760696b29a0feb0f1ed79407ce3cb1438ae644cfd32e6cce"
+    },
+    {
+      "path": "source/pascalvision_convert/hf_selected_cli.py",
+      "bytes": 1848,
+      "sha256": "f4e51cd1f240700d0058cb1a2f071818b8f395dfc24d94bf51fa531b77d8710e"
+    },
+    {
+      "path": "source/pascalvision_convert/hf_tokenizer_consumer_binding.py",
+      "bytes": 14762,
+      "sha256": "ed3418ef54ed00a7e7abf762468872ab99deea76db57c02ae7361a434dfa446e"
+    },
+    {
+      "path": "source/pascalvision_convert/llm_build_profile.py",
+      "bytes": 4557,
+      "sha256": "deae1e348c42fe41db1a9dee33d178d08d144f29d7019de110fbda3d4476ec8d"
+    },
+    {
+      "path": "source/pascalvision_convert/llm_bundle_contract.py",
+      "bytes": 18530,
+      "sha256": "3a96ab14f50785c43fd9654587221022c436b050081be00482cee0467d004621"
+    },
+    {
+      "path": "source/pascalvision_convert/llm_family_profile.py",
+      "bytes": 4404,
+      "sha256": "52e21b9843b693926835e08029016a006f4d425e9b4f6173377dfc59ec332d61"
+    },
+    {
+      "path": "source/pascalvision_convert/llm_helpers/HELPER-SHA256.json",
+      "bytes": 537,
+      "sha256": "90dcf1aa35e4a42dd16d9e506cba4ca061e2fca1684221f41b2e676446bd51e4"
+    },
+    {
+      "path": "source/pascalvision_convert/llm_helpers/__init__.py",
+      "bytes": 146,
+      "sha256": "5f281ba368b8cdd7cba4baaf36e8dde597e50ce1e995d07c495214002c37207a"
+    },
+    {
+      "path": "source/pascalvision_convert/llm_helpers/build_llm.py",
+      "bytes": 22484,
+      "sha256": "bb5140c6a0d35e63caf9247574ed5cca8a9c0f47f3ae1697e0bcdcbd7e2885de"
+    },
+    {
+      "path": "source/pascalvision_convert/llm_helpers/gemma2_model.py",
+      "bytes": 13032,
+      "sha256": "50a60adfbce71e38d611588352c2c7ea547ced458b83052acab7977c306fe25e"
+    },
+    {
+      "path": "source/pascalvision_convert/llm_helpers/qwen2_model.py",
+      "bytes": 10634,
+      "sha256": "00fdc21d51969f2d174515421f47acad806464bcfcefbc563e1ec009022f0d42"
+    },
+    {
+      "path": "source/pascalvision_convert/llm_helpers/weights.py",
+      "bytes": 24157,
+      "sha256": "ac1866416f38d4f2ffb30a6ef0504e071d24b3c46a4af276b506707fa48f8755"
+    },
+    {
       "path": "source/pascalvision_convert/manifest.py",
-      "sha256": "fea59d9d6712a700e859b76710f63c82398fafe418280047a51c426af6d40916"
+      "bytes": 21467,
+      "sha256": "69cefa3d93ed9098dbe6b2f3be2ba2053c036cb233960161d8ec15dc9f00213b"
     },
     {
-      "bytes": 6205,
+      "path": "source/pascalvision_convert/master_page.html",
+      "bytes": 102342,
+      "sha256": "d864d4fd2c2e2a27b9b01b2127ddc7fbfa12a4541a3bcf6a43fe1ed9513fbcdc"
+    },
+    {
+      "path": "source/pascalvision_convert/model_catalog.json",
+      "bytes": 2792,
+      "sha256": "2d731a2b94c6ecb438ae7a7ad9f0506c560c6624b480d08092daf8a0ee3221a1"
+    },
+    {
+      "path": "source/pascalvision_convert/model_sources.py",
+      "bytes": 6439,
+      "sha256": "aaeb399b3b9de239e48b8b3293933404062b2897579520bae4999460b1bce45d"
+    },
+    {
       "path": "source/pascalvision_convert/native_consumer_hold.py",
-      "sha256": "90d16966b0808b038dc8e55d34a7eda9f83fc60b3cb81190b8e215fed10c5edf"
+      "bytes": 6179,
+      "sha256": "1dc30c5c27cbd07d1bc11cd577c73d9facbf810b0d249b384caec4e33c7e2705"
     },
     {
-      "bytes": 23336,
+      "path": "source/pascalvision_convert/ocr_capture_bridge.py",
+      "bytes": 11278,
+      "sha256": "6c6311e19cbc42a1e47a4db2ce819972e8cbd3aeaac6c11307897a0766710b51"
+    },
+    {
+      "path": "source/pascalvision_convert/ocr_composite.py",
+      "bytes": 53648,
+      "sha256": "f87277857635583da7ad638633d5707695e31922c8590d507a70267235c8c2e2"
+    },
+    {
+      "path": "source/pascalvision_convert/ocr_composite_oracle.py",
+      "bytes": 51579,
+      "sha256": "a0ca675bda56905cddfa6a30c1c750db345aa905568a7dca672e042b298b4c28"
+    },
+    {
+      "path": "source/pascalvision_convert/ocr_det_pairwise.py",
+      "bytes": 18902,
+      "sha256": "61b3b112961796dd0afc0533d8b63074a71b6304a9b1d2ac65f5f962a148e7a5"
+    },
+    {
+      "path": "source/pascalvision_convert/ocr_native_det_capture_bridge.py",
+      "bytes": 20897,
+      "sha256": "c80fbfdb4f7818dc506870a4e4bf14c245b3380e64eb6893a59acd4ea2f3cdd1"
+    },
+    {
+      "path": "source/pascalvision_convert/ocr_ort_raw_capture.py",
+      "bytes": 52160,
+      "sha256": "749dbcd04e65d94b7ff9d75aab1ed80add1195d8dc4b53222380f9dca7bb96a7"
+    },
+    {
+      "path": "source/pascalvision_convert/ocr_png_preprocess.py",
+      "bytes": 13684,
+      "sha256": "8d129a045bc0accf46b99db511609e826fec66c1e582469c57672a73d3021dd1"
+    },
+    {
+      "path": "source/pascalvision_convert/omdet_bundle_profile.py",
+      "bytes": 22488,
+      "sha256": "4352138e73c0187ab2c7711fd5d6e221d795f242b9b9ea91670485ee32b4df05"
+    },
+    {
+      "path": "source/pascalvision_convert/omdet_compiler_hold.py",
+      "bytes": 29207,
+      "sha256": "cb269c75f620b8ebaf59f5bd5ce5f39ddfb08f6a12114f09324b1c1dc07f684b"
+    },
+    {
+      "path": "source/pascalvision_convert/omdet_compiler_route.py",
+      "bytes": 37228,
+      "sha256": "7efc1375711148c7cdc46e5718041792f03bfe8c7b58e7ec1716659e30c17009"
+    },
+    {
+      "path": "source/pascalvision_convert/omdet_public_candidate.py",
+      "bytes": 36059,
+      "sha256": "31ba305fef22440614f16d863cdd057fdf6380328fae62df0671a688f91ccd8e"
+    },
+    {
       "path": "source/pascalvision_convert/onnx_closure.py",
-      "sha256": "823610bf9b503318b9686abccaf18d6568526d8376058b02aec742d3adf0ddc2"
+      "bytes": 23079,
+      "sha256": "d08962d56294dd6fb22f101b4f3ef29276dd1fe1aaae55fe321df635f2219fa6"
     },
     {
-      "bytes": 53022,
+      "path": "source/pascalvision_convert/onnx_source_pack.py",
+      "bytes": 20317,
+      "sha256": "69fbb06a1343e67c0c52eebc945f2f6b78da38bb8b3880318019171d42df1203"
+    },
+    {
+      "path": "source/pascalvision_convert/paddle_closure.py",
+      "bytes": 34189,
+      "sha256": "54dc0ea7cf321f2d1d30134d1ce4fd6bba364c86271a8c7d448e3767469e4ce2"
+    },
+    {
+      "path": "source/pascalvision_convert/paddle_consumer_dictionary.py",
+      "bytes": 9380,
+      "sha256": "03fb51923c421d9eb9294001b2aff456279bb5c13d421f54ab305b606f954b33"
+    },
+    {
+      "path": "source/pascalvision_convert/paddle_held_stage.py",
+      "bytes": 13070,
+      "sha256": "998a23566b98972023007ceb2497185a79acf15a75422620e314a9d17059f8a6"
+    },
+    {
+      "path": "source/pascalvision_convert/paddle_selected_cli.py",
+      "bytes": 2311,
+      "sha256": "cccbc15ebbe96b7e640c7a48e7d4a036b0598d81aeeae3080703b7f78b5c0385"
+    },
+    {
+      "path": "source/pascalvision_convert/paddle_selected_det_input.py",
+      "bytes": 15954,
+      "sha256": "832730973dcab81178f13a61b9933e67f2b21320695ce12e3a337190264fe849"
+    },
+    {
+      "path": "source/pascalvision_convert/paddle_selected_det_original_ort.py",
+      "bytes": 12476,
+      "sha256": "75f34540bb691e0762222f6c43deebb55be420a75f5dbc402547e3e010b8920a"
+    },
+    {
+      "path": "source/pascalvision_convert/paddle_selected_det_pairwise.py",
+      "bytes": 16734,
+      "sha256": "4bf6b9e5052f540df02f57e60a8c7b1878398d602b581a009d4a844fa4b465ac"
+    },
+    {
+      "path": "source/pascalvision_convert/paddle_selected_native.py",
+      "bytes": 33173,
+      "sha256": "8773ee5ce5ce32b5df0bac87cfb9a1db3488eadaa553645468a853e6a3b30854"
+    },
+    {
+      "path": "source/pascalvision_convert/paddle_selected_rec_input.py",
+      "bytes": 17458,
+      "sha256": "e9dfc2491980f399290690658578785adc93082e3ddef22e3c0dd5ac01a6b981"
+    },
+    {
+      "path": "source/pascalvision_convert/paddle_selected_rec_original_ort.py",
+      "bytes": 12899,
+      "sha256": "bd0a45bc2b4c811b4fb486e495114983910b2e62ad090140beae5d4817c807bd"
+    },
+    {
+      "path": "source/pascalvision_convert/paddle_selected_rec_pairwise.py",
+      "bytes": 30901,
+      "sha256": "fca90b9da499220ef67bc6309734bcc79ab7773a40fb4dd7af66b77adc1c30cd"
+    },
+    {
       "path": "source/pascalvision_convert/pipeline.py",
-      "sha256": "29b742dee4cb46d45dd0e99508dc89ff14358bf2186dbbba56a7ce663c8baaad"
+      "bytes": 53900,
+      "sha256": "3044bd7cdac3433cf9fb2d9508aad76f12de22ad8a6532b3ad1b8f7cdf31c95d"
     },
     {
-      "bytes": 50303,
       "path": "source/pascalvision_convert/recipe.py",
-      "sha256": "298aab76385772ec3b8c2f4ffa7b378d72cbcb14eb37b25598dded167f30f84a"
+      "bytes": 50363,
+      "sha256": "9bffb7031d70363c290632223b2d85fa65a399f294b7cd2418678efeaa28918a"
     },
     {
-      "bytes": 33458,
       "path": "source/pascalvision_convert/recipe_file.py",
-      "sha256": "ebdac65080314bf756fefa33ec3202692025714fe005266b251fd2efd5dcf165"
+      "bytes": 32571,
+      "sha256": "d1bfc74131aa9ebb9b2ddfab2091b5237f073ffc59b6334095b1d1712b3e0976"
     },
     {
-      "bytes": 3455,
+      "path": "source/pascalvision_convert/remote_compute.py",
+      "bytes": 6430,
+      "sha256": "84f8399085b38e3b34a68d3bfaee7475e1adc0aabdf9b2a04baafff139a97987"
+    },
+    {
+      "path": "source/pascalvision_convert/remote_memtest.py",
+      "bytes": 12460,
+      "sha256": "6daa4b9469dd1494fe84297eff1db4354db6faa215a74ca2ec6838d760c1f05d"
+    },
+    {
       "path": "source/pascalvision_convert/report.py",
-      "sha256": "d447168bc33a7e780df642260e29de21146df932e0d61c8489d5745a52122488"
+      "bytes": 2944,
+      "sha256": "582a51977747550fce54e1985a635e009e26f1d5f6eb337d90d72fa85e4fba78"
     },
     {
-      "bytes": 18849,
+      "path": "source/pascalvision_convert/retained_ledger.py",
+      "bytes": 58083,
+      "sha256": "f536874a3e457e424b697f67601647fff67bc85ed8d019ade9257441c3ec37cc"
+    },
+    {
       "path": "source/pascalvision_convert/runtime.py",
-      "sha256": "6aee12b2c972e0e131bbe8c1d8f4a1e3082ab25756d6fe404d4883a4f7b15e97"
+      "bytes": 21772,
+      "sha256": "11467d3a66e5df12c5bf9f8db606b45ea887890fb103250aea88ca17392449ec"
     },
     {
-      "bytes": 4433,
       "path": "source/pascalvision_convert/samples.py",
-      "sha256": "3801e164d6b65dac4a12e4995e2e34fe22985746d38b4e4054404caec85940fd"
+      "bytes": 3493,
+      "sha256": "3f5664f0f186e59b44509ba7b89cececc7855131c85aca28a86bc8476ab58aed"
     },
     {
-      "bytes": 14317,
       "path": "source/pascalvision_convert/selftest_tuning.py",
-      "sha256": "d8f8262d5490ebc9d9c795f04291ed8b993fa67931090da613462628b066120f"
+      "bytes": 14240,
+      "sha256": "561e2c20af1f1196d1e6741dfd98ad17e09e512e418316a271fc5c96f62adda9"
     },
     {
-      "bytes": 24827,
       "path": "source/pascalvision_convert/source_freeze.py",
-      "sha256": "2e374fb13a82e5cac937f1ce4ff58c618beb9e255d7ab817d4ce4b58d551ecd5"
+      "bytes": 23891,
+      "sha256": "58e89c740b2f8d598974464d173d1e2c31952ef063564a458e6955c8c9a39a6f"
     },
     {
-      "bytes": 26573,
       "path": "source/pascalvision_convert/source_lock.py",
-      "sha256": "ff2fe4a9be2999a61df66b428c31b94a4a93fe494390211bcc628c81700cb796"
+      "bytes": 27531,
+      "sha256": "0996be36b311d9bdc80f701f7468e41d456f1dacd381f480e85dcbaef531ddbb"
     },
     {
-      "bytes": 5994,
       "path": "source/pascalvision_convert/stage_inspection.py",
-      "sha256": "d8e80afe084458010a1651184e4b9d6790ba0e620a923a5bf5ff241190dc5e36"
+      "bytes": 5928,
+      "sha256": "4a9fb2b23d06447639d02d315825f9bad40a0be157781117ba82687adc52b87b"
     },
     {
-      "bytes": 45341,
       "path": "source/pascalvision_convert/support_inventory.py",
-      "sha256": "a6342c5be50947136bd90cc788acc7cc05c53a4577c4835a34abbdbddd6ca54a"
+      "bytes": 3363,
+      "sha256": "3f191a9e6eaadd67a8915b62fac8a429593e47739a835d3ba5bc33b8a2daad9e"
     },
     {
-      "bytes": 21667,
       "path": "source/pascalvision_convert/targets.py",
-      "sha256": "6a38bb7ce751b70b341732c1c3ed542e737eda3e1e8330d498d1565ea8aabf21"
+      "bytes": 19803,
+      "sha256": "a1ad54622864de6db31f0e3fab90e77f83878a7ec0545d2fddcda04298632ab8"
     },
     {
-      "bytes": 52579,
+      "path": "source/pascalvision_convert/tuning.py",
+      "bytes": 8449,
+      "sha256": "9e7536d41f4a6e75f6456afcdd9bbce5637daa66fcf0132434503375393a4303"
+    },
+    {
       "path": "source/pascalvision_convert/verify.py",
-      "sha256": "722f169a1edf125e6362cd4495c180355d73204c8a0bf90751a29d73b1b40e36"
+      "bytes": 46171,
+      "sha256": "d5c03b969182aa1f24bcde964962a9953de096be3dc32ab1676a54bab09a34b4"
+    },
+    {
+      "path": "source/pascalvision_convert/wizard_entry.py",
+      "bytes": 2246,
+      "sha256": "f2edbe609ab8fcffcf3b912554e93e3f8374929d0fe0d693d3b456cd7fda6f97"
+    },
+    {
+      "path": "source/pascalvision_convert/wizard_session.py",
+      "bytes": 3709,
+      "sha256": "b55576ae830193c5e3751c1f7f31c6645fb9ba8eb2c12ed2131384fdad34cee9"
+    },
+    {
+      "path": "tests/test_ea_wizard_contract.py",
+      "bytes": 19321,
+      "sha256": "d7ea84fbc11c71fafd287de688e023af659e4d74c5200a8c5ffe761cc354d827"
+    },
+    {
+      "path": "tests/test_server_failure_diagnostics.py",
+      "bytes": 13239,
+      "sha256": "9991f82eed4ee6c4fac9bd32aeac9ac39463185337312a19717e93d3a147cfc2"
+    },
+    {
+      "path": "tests/test_server_lock_responses.py",
+      "bytes": 9054,
+      "sha256": "95d0fa6591668a87a22d0e760bf9c57bc7a6fa1b77146ed034429a7f8feceba0"
     }
-  ],
-  "preparation_complete": true,
-  "preparation_scope": "Declared source preview only",
-  "private_testing_draft": true,
-  "public_opening_authorized": false,
-  "publication_copy_date": "2026-11-04",
-  "repository": "crosspascal-convert",
-  "schema": "crosspascal-private-source-preview-index-v1",
-  "source_preview_ready_for_private_testing": true
+  ]
 }

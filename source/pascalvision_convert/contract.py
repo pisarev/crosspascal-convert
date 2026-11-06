@@ -36,7 +36,6 @@ Only the standard library is used; the contract is plain dict / list / str / int
 """
 
 
-
 VISION_ARTIFACT_FORMAT = "so"
 VISION_ARTIFACT_ENTRY = "main"
 
@@ -51,14 +50,11 @@ _CLASSIFICATION = "classification"
 _POSE = "pose"
 
 
-
-
-
 VISION_TASK_KINDS = frozenset((
     _OBJECT_DETECTION,
     _CLASSIFICATION,
-    
-    
+
+
     "text_detection",
     "text_recognition",
     "instance_segmentation",
@@ -72,9 +68,6 @@ _PADDLE_OCR_ROLES = {
     'text_detection': 'paddleocr_det',
     'text_recognition': 'paddleocr_rec',
 }
-
-
-
 
 
 _PASCAL_FACADE_ADAPTERS = {
@@ -248,10 +241,8 @@ def validate_adapter_outputs(task_kind, adapter, outputs, *, input_batch=None):
                                  % (expected, name, dimension))
 
     if len(outputs) == 1:
-        
-        
-        
-        
+
+
         shape = outputs[0]["shape"]
         if type(shape[0]) is not int or shape[0] != 1:
             raise ValueError("%s; fused batch must be statically 1, got %r"
@@ -292,7 +283,11 @@ def validate_adapter_outputs(task_kind, adapter, outputs, *, input_batch=None):
         raise ValueError(
             "%s; logits/boxes batch dimensions differ or cannot be proved equal: "
             "%r vs %r" % (expected, logits[0], boxes[0]))
-    if logits[0] != 1 and input_batch != 1:
+    if input_batch is not None and input_batch != 1:
+        raise ValueError("%s; selected input batch must be 1, got %r"
+                         % (expected, input_batch))
+    batch = logits[0]
+    if batch != 1 and not (isinstance(batch, str) and input_batch == 1):
         raise ValueError(
             "%s; output batch %r is not proven to be 1. Supply an explicit "
             "single-image input shape for a symbolic batch."
@@ -381,29 +376,12 @@ def _task_section(task_kind, score_threshold, nms_threshold, mean, std,
     return {}
 
 
-
-
-
-
-
-
-
 TEXT_ARTIFACT_FORMAT = "dll"
 
 _TEXT_GENERATION = "text_generation"
 
 
-
-
-
 TEXT_TOKENIZER_STYLES = frozenset(("byte_bpe", "sentencepiece"))
-
-
-
-
-
-
-
 
 
 TEXT_ADAPTERS = frozenset(("qwen2", "gemma2"))
@@ -467,9 +445,8 @@ def build_text_contract(adapter, artifact_file, context_window, bos, eos,
         "file": artifact_file,
         "format": TEXT_ARTIFACT_FORMAT,
     }
-    
-    
-    
+
+
     if device_arch:
         artifact["device_arch"] = device_arch
 
@@ -486,18 +463,6 @@ def build_text_contract(adapter, artifact_file, context_window, bos, eos,
         },
         "tokenizer": {"style": tokenizer_style},
     }
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def parse_float_csv(text):

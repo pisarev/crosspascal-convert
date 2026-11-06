@@ -1,8 +1,8 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 """Bounded Windows NTFS complete-directory publication primitive.
 
-This is a bounded I-03 primitive used by the opt-in protected RAW wizard route,
-not a universal publisher for CLI, family builders or other formats. It proves
+This primitive is used by converter routes that require a complete bundle.
+It proves
 a same-parent, no-overwrite namespace rename after an exact SHA inventory.
 It does NOT assert a durable power-loss transaction, a lock against
 previously-open writers, a compiler verdict, or release-grade immutable bytes.
@@ -29,8 +29,6 @@ STATUS = 'ATOMIC_NAMESPACE_COMMITTED_NOT_IMMUTABLE_OR_DURABLE'
 STAGE_NAME = re.compile(r'\.crosspascal-stage-[0-9a-f]{32}\Z')
 MAX_MEMBERS = 512
 MAX_BYTES = 512 * 1024 * 1024
-
-
 
 MAX_NATIVE_FAMILY_BYTES = 64 * 1024 * 1024 * 1024
 REPARSE = getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400)
@@ -98,7 +96,7 @@ def _local_absolute(path) -> str:
     drive, suffix = ntpath.splitdrive(raw)
     if not re.fullmatch(r'[A-Za-z]:', drive) or not suffix.startswith(('\\', '/')):
         raise UnsafeAtomicBundle('only a local Windows drive is supported')
-    
+
     for part in [p for p in suffix.replace('/', '\\').split('\\') if p]:
         validate_member_name(part)
     canonical = os.path.abspath(raw)
@@ -149,11 +147,7 @@ def _require_ntfs(parent):
 
 
 def _stamp(info):
-    
-    
-    
-    
-    
+
     return (info.st_dev, info.st_ino, info.st_size,
             info.st_mtime_ns, info.st_nlink)
 
@@ -203,10 +197,7 @@ def scan_bundle_tree(root, *, max_members=MAX_MEMBERS, max_bytes=MAX_BYTES):
         _guard_stat(directory, directory=True)
         try:
             with os.scandir(directory) as stream:
-                
-                
-                
-                
+
                 listing = []
                 for item in stream:
                     if len(members) + len(listing) + 1 > max_members:
@@ -291,8 +282,8 @@ def commit_staged_bundle(stage, destination, approved: Inventory, *,
     if before != approved:
         raise UnsafeAtomicBundle('staged bundle changed after approval')
     inode = _guard_stat(stage, directory=True)
-    
-    
+
+
     try:
         os.rename(stage, destination)
     except OSError as exc:
@@ -304,13 +295,7 @@ def commit_staged_bundle(stage, destination, approved: Inventory, *,
                                     max_bytes=max_bytes) != approved):
             raise UnsafeAtomicBundle('committed bytes or directory identity changed')
     except Exception as exc:
-        
-        
-        
-        
-        
-        
-        
+
         raise UnsafeAtomicBundle(
             'post-commit audit failed; no READY; exposed destination preserved '
             '(no rollback of potentially user-modified contents)') from exc

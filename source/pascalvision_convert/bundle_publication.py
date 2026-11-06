@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Fail-closed I-03 wizard publication of a bounded, complete NTFS RAW kit.
+"""Publish a bounded, complete RAW kit on NTFS after validation.
 
 The worker compiles into a private sibling directory and calls this module only
 AFTER compiler/independent Verify and every selected-source Win32 post-lock audit.
@@ -27,11 +27,6 @@ from .recipe_file import read_recipe
 class UnsafePublication(ValueError):
     """The caller must not expose a ZIP or report download_ready after refusal."""
 
-
-
-
-
-
 MAX_RETAINED_ATOMIC_STAGES_PER_PARENT = 16
 MAX_ATOMIC_PARENT_SCAN_ENTRIES = 16384
 MIN_ATOMIC_SOURCE_RESERVE = bundle_atomic.MAX_BYTES + 256 * 1024 * 1024
@@ -56,10 +51,7 @@ def _cross_process_atomic_admission(parent):
     info = bundle_atomic._guard_stat(parent, directory=True)
     key = '%s|%d|%d' % (
         os.path.normcase(os.path.realpath(parent)), info.st_dev, info.st_ino)
-    
-    
-    
-    
+
     name = ('Global\\CrossPascal-I03-AtomicStage-' +
             hashlib.sha256(key.encode('utf-8')).hexdigest())
     api = ctypes.WinDLL('kernel32', use_last_error=True)
@@ -78,7 +70,7 @@ def _cross_process_atomic_admission(parent):
     acquired = False
     try:
         outcome = api.WaitForSingleObject(handle, 10000)
-        if outcome not in (0, 0x80):  
+        if outcome not in (0, 0x80):
             raise UnsafePublication(
                 'Win32 atomic stage admission mutex busy/unavailable; no stage created')
         acquired = True
@@ -89,8 +81,8 @@ def _cross_process_atomic_admission(parent):
                 raise UnsafePublication(
                     'Win32 atomic stage admission mutex release failed')
         finally:
-            
-            
+
+
             api.CloseHandle(handle)
 
 
@@ -116,8 +108,8 @@ def _admit_private_atomic_stage(parent, *, capacity_profile='raw'):
                     occupied_slots += 2
                 elif _RETAINED_SOURCE_SNAPSHOT.fullmatch(entry.name):
                     occupied_slots += 1
-                
-                
+
+
     except OSError as exc:
         raise UnsafePublication('cannot inventory retained private atomic stages') from exc
     if occupied_slots + 2 > MAX_RETAINED_ATOMIC_STAGES_PER_PARENT:
@@ -126,11 +118,6 @@ def _admit_private_atomic_stage(parent, *, capacity_profile='raw'):
             'for output and source snapshot; owner inspection needed; '
             'no automatic cleanup or deletion authorized')
 
-    
-    
-    
-    
-    
     if capacity_profile == 'native_family':
         from . import hf_closure
         bundle_ceiling = bundle_atomic.MAX_NATIVE_FAMILY_BYTES
@@ -238,8 +225,8 @@ def _strict_recipe(path):
                         parse_float=_finite_json_float,
                         parse_constant=lambda _: (_ for _ in ()).throw(
                             UnsafePublication('nonfinite JSON constant in recipe')))
-    
-    
+
+
     validated = read_recipe(path)
     if not isinstance(parsed, dict) or parsed != validated:
         raise UnsafePublication('staged recipe changed while being checked')
@@ -315,8 +302,8 @@ def expected_native_inputs(model_path, model_format, shape=None):
         raise UnsafePublication('source graph has invalid native IO metadata') from exc
     if not 0 < len(payload) <= 65536:
         raise UnsafePublication('source graph native IO metadata exceeds bound')
-    
-    
+
+
     for line in document.splitlines():
         columns = line.split('\t')
         if (len(columns) != 3 or not columns[1] or
@@ -405,8 +392,8 @@ def stage_approved_sources(output_stage, locked_source_stage, source_entries):
         else:
             source_freeze._copy_stream(
                 source, copied, entry['sha256'], entry['bytes'], 1024 * 1024)
-    
-    
+
+
     inventory = bundle_atomic.scan_bundle_tree(str(target))
     files = {member.path: member for member in inventory.members
              if member.kind == 'file'}
@@ -442,17 +429,10 @@ def create_private_stage(destination, *, on_created=None, on_intent=None,
                                         capacity_profile=capacity_profile)
             stage = os.path.join(
                 parent, '.crosspascal-stage-' + secrets.token_hex(16))
-            
-            
-            
-            
+
             if on_intent is not None:
                 on_intent(stage)
-            
-            
-            
-            
-            
+
             try:
                 bundle_atomic._guard_existing_ancestors(parent)
                 current_parent = bundle_atomic._guard_stat(parent, directory=True)
@@ -468,9 +448,7 @@ def create_private_stage(destination, *, on_created=None, on_intent=None,
             except OSError as exc:
                 raise UnsafePublication(
                     'private stage could not be exclusively created') from exc
-            
-            
-            
+
             created = bundle_atomic._guard_stat(stage, directory=True)
             if on_created is not None:
                 on_created(stage, (created.st_dev, created.st_ino))
@@ -504,15 +482,9 @@ def _validate_kit(stage, report, target, approved_source, expected_model_sha256,
     if module_name != 'model.' + target + '.dll':
         raise UnsafePublication('unexpected Windows RAW native module name/target')
 
-    
-    
-    
     approved = bundle_atomic.scan_bundle_tree(stage)
     actual = {m.path: m for m in approved.members if m.kind == 'file'}
 
-    
-    
-    
     try:
         entries = bundle_download.collect_bundle_files(
             stage, expected_source_closure_sha256=closure_sha,
@@ -551,10 +523,7 @@ def _validate_kit(stage, report, target, approved_source, expected_model_sha256,
 
     required = {module_name, module_name + '.inputs', 'recipe.json', 'report.txt'}
     if has_contract:
-        
-        
-        
-        
+
         if verification != 'VERIFIED_LOCAL':
             raise UnsafePublication('Pascal manifest needs independently '
                                     'VERIFIED_LOCAL native model acceptance')
@@ -582,9 +551,7 @@ def _validate_kit(stage, report, target, approved_source, expected_model_sha256,
                 artifact.get('hash') != actual[module_name].sha256):
             raise UnsafePublication('Pascal manifest task/adapter/ABI differs '
                                     'from approved recipe and BuildPlan')
-        
-        
-        
+
         try:
             from .contract import build_vision_contract
             expected_pascal = build_vision_contract(
@@ -606,11 +573,7 @@ def _validate_kit(stage, report, target, approved_source, expected_model_sha256,
                 artifact.get('format') != expected_pascal['artifact']['format']):
             raise UnsafePublication('Pascal manifest task defaults or native '
                                     'ABI differs from approved recipe')
-        
-        
-        
-        
-        
+
         provenance = passport.get('provenance')
         if (not isinstance(provenance, dict) or
                 provenance.get('source') != recipe['source'] or
@@ -620,9 +583,7 @@ def _validate_kit(stage, report, target, approved_source, expected_model_sha256,
                 passport.get('license') != recipe.get('license')):
             raise UnsafePublication('Pascal manifest provenance/toolchain/'
                                     'licence differs from approved recipe')
-        
-        
-        
+
         try:
             native_io = _validate_native_inputs(
                 os.path.join(stage, module_name + '.inputs')).decode('utf-8')
@@ -678,9 +639,7 @@ def _validate_kit(stage, report, target, approved_source, expected_model_sha256,
             actual_input_manifest != expected_input_manifest):
         raise UnsafePublication('native .inputs disagrees with Preview-approved '
                                 'compiler source graph IO contract')
-    
-    
-    
+
     source_hash = recipe.get('source_hash')
     if (not isinstance(source_hash, str) or
             not re.fullmatch(r'[0-9a-f]{64}', source_hash) or
@@ -721,8 +680,6 @@ def _validate_kit(stage, report, target, approved_source, expected_model_sha256,
                 member.sha256 != entry['sha256']):
             raise UnsafePublication('source/sidecar bytes differ from held compiler input')
 
-    
-    
     directories = {member.path for member in approved.members
                    if member.kind == 'directory'}
     expected_dirs = {'source'} | {'source/' + entry['path']
@@ -750,9 +707,7 @@ def commit_verified_stage(stage, destination, report, target, approved_source,
         expected_input_manifest, expected_source_entries,
         closure_sha, closure)
     if on_validated_precommit is not None:
-        
-        
-        
+
         on_validated_precommit(stage, destination, inventory)
     receipt = bundle_atomic.commit_staged_bundle(
         stage, destination, inventory, required_files=required)
@@ -782,9 +737,13 @@ def inspect_selected_native_consumer_kit(directory, *, model_key, device,
     if device == 'cuda':
         expected.add('tvm_runtime_cuda.dll')
     licenses = {name for name in files if name.startswith('LICENSE-tvm-')}
+    notices = {name for name in files if name.startswith('NOTICE-tvm-')}
+    model_files = ({'LICENSE-Qwen2.5-0.5B-Instruct.txt', 'MODEL-SOURCE.json'}
+                   if model_key == 'qwen2.5-0.5b' else set())
+    selected_model_files = set(files) & model_files
     if (directories or not licenses or
             any(not name.startswith('LICENSE-tvm-') for name in licenses) or
-            set(files) != expected | licenses or
+            set(files) != expected | licenses | notices | selected_model_files or
             any(member.size <= 0 for member in files.values())):
         raise UnsafePublication('unapproved or incomplete selected native consumer kit')
     if (expected_tree_sha256 is not None and
@@ -809,11 +768,11 @@ def stage_selected_native_consumer_kit(source_directory, private_stage,
     real_origin = os.path.normcase(os.path.realpath(origin))
     real_target = os.path.normcase(os.path.realpath(target))
     try:
-        if (os.path.commonpath((real_origin, real_target)) in
-                (real_origin, real_target)):
-            raise UnsafePublication('consumer kit source and stage overlap')
+        common_root = os.path.commonpath((real_origin, real_target))
     except ValueError:
-        pass  
+        common_root = None
+    if common_root in (real_origin, real_target):
+        raise UnsafePublication('consumer kit source and stage overlap')
     before = inspect_selected_native_consumer_kit(
         origin, model_key=model_key, device=device,
         expected_tree_sha256=approved_inventory.tree_sha256)
@@ -827,9 +786,7 @@ def stage_selected_native_consumer_kit(source_directory, private_stage,
     for member in approved_inventory.members:
         if member.kind != 'file':
             raise UnsafePublication('nested consumer kit member is not approved')
-        
-        
-        
+
         bundle_atomic._guard_existing_ancestors(target)
         current = bundle_atomic._guard_stat(target, directory=True)
         if (current.st_dev, current.st_ino) != (initial.st_dev, initial.st_ino):
@@ -871,17 +828,13 @@ def commit_native_family_stage(stage, destination, plan, *, model_key,
         from .llm_bundle_contract import _FAMILIES
         device = plan['target_profile']['deployment']['device']
         library = '%s-%s.dll' % (_FAMILIES[model_key][0], device)
-        
-        
-        
+
         native_outputs = {library, 'model.json', 'params.bin', 'params.json',
                           'params.index', 'manifest.json', 'manifest.txt'}
         receipts = {'recipe.json', 'build-plan.json',
                     'import-provenance.json', 'report.txt'}
         required_files = set(approved_files) | native_outputs | receipts
-        
-        
-        
+
         optional_import_lib = '%s-%s.lib' % (_FAMILIES[model_key][0], device)
         allowed_files = required_files | {optional_import_lib}
         if (len(approved_files) != len(approved_consumer_inventory.members) or
@@ -901,8 +854,8 @@ def commit_native_family_stage(stage, destination, plan, *, model_key,
         stage, destination, inventory, required_files=required,
         max_bytes=bundle_atomic.MAX_NATIVE_FAMILY_BYTES)
     if approved_consumer_inventory is not None:
-        
-        
+
+
         final_inventory = bundle_atomic.scan_bundle_tree(
             destination, max_bytes=bundle_atomic.MAX_NATIVE_FAMILY_BYTES)
         final_files = {member.path: member for member in final_inventory.members

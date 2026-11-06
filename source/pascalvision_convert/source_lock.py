@@ -2,8 +2,8 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 """Native Win32 read/share-only locks for frozen RAW and selected ONNX files.
 
-The original single-file API is used by the wizard; the selected ONNX file-set
-API is an independent candidate for its future dependency-aware integration.
+The wizard uses the single-file API for RAW snapshots and the file-set API
+for selected ONNX models with sidecars.
 Neither is a release-grade immutable snapshot. Each staged file is opened
 CreateFileW(GENERIC_READ, FILE_SHARE_READ), denying new write/delete opens
 while letting other readers in. The exact private ready marker, approved tree
@@ -99,6 +99,29 @@ class _HandleIdentity(NamedTuple):
 
 def _is_windows():
     return os.name == 'nt' and sys.platform.startswith('win')
+
+
+def _trusted_tasklist_path():
+    """Resolve the OS-owned tasklist executable without PATH/CWD search.
+
+    An unqualified executable passed to Windows CreateProcess can resolve
+    through a caller-controlled working directory before System32.
+    """
+    if not _is_windows():
+        raise SourceLockUnavailable("Win32 required for trusted process inventory")
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    get_system_dir = kernel.GetSystemDirectoryW
+    get_system_dir.argtypes = [ctypes.c_wchar_p, ctypes.c_uint]
+    get_system_dir.restype = ctypes.c_uint
+    buffer = ctypes.create_unicode_buffer(32768)
+    count = get_system_dir(buffer, len(buffer))
+    if not 0 < count < len(buffer):
+        raise SourceLockUnavailable("cannot resolve trusted Win32 system directory")
+    candidate = Path(buffer.value) / "tasklist.exe"
+    source_freeze._safe_ancestors(candidate)
+    if not stat.S_ISREG(source_freeze._lstat(candidate).st_mode):
+        raise SourceLockUnavailable("trusted Windows tasklist executable missing")
+    return candidate
 
 
 def _approved_sha(value):
@@ -258,7 +281,7 @@ class _Kernel32:
                 'UNC/network/nonlocal staged paths are outside native Win32 '
                 'share-read candidate scope')
         volume_root = drive + '\\'
-        
+
         if self.kernel.GetDriveTypeW(volume_root) != 3:
             raise SourceLockUnavailable(
                 'source-lock staging requires a local fixed NTFS volume')
@@ -275,7 +298,7 @@ class _Kernel32:
                 % filesystem.value)
 
     def open(self, path):
-        
+
         handle = self.kernel.CreateFileW(
             str(path), GENERIC_READ, FILE_SHARE_READ, None, OPEN_EXISTING,
             FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_SEQUENTIAL_SCAN, None)
@@ -531,8 +554,8 @@ def hold_staged_file_set(snapshot_directory, *, expected_tree_sha256,
         opened = []
         for relative, path, expected_size, expected_sha in files:
             api.assert_local_ntfs(path)
-            
-            
+
+
             handle = api.open(path)
             handles.callback(api.close, handle)
             identity = api.identity(handle)
@@ -545,9 +568,7 @@ def hold_staged_file_set(snapshot_directory, *, expected_tree_sha256,
                     'from ready marker: ' + relative)
             opened.append((path, handle, identity, expected_sha, expected_size))
 
-        
-        
-        
+
         acquired, entries, acquired_marker = _selected_snapshot(root, approved)
         if (acquired != before or entries != files or
                 acquired_marker != marker_sha):

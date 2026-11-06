@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Bounded selective ONNX external-data inventory and private source copy.
+"""Inventory and copy one ONNX model and its referenced external data files.
 
-The source is ONE local .onnx file and the regular files explicitly named by
-its external TensorProto records. The rest of the user's model directory is
-never scanned, copied, locked or deleted. This is important: the wizard may
-create an output directory alongside the original model during Build.
-
-The snapshot is a checked COPY, not an immutable handle or a model oracle.
-Only a future caller can hold all staged file handles through compile/verify.
-Nothing in this module sets VERIFIED or makes a bundle downloadable.
+The inventory covers the graph and the regular files named by its tensors.
+The snapshot copies those files into a separate directory and checks them
+against the approved digest. The caller must hold or recheck the staged files
+when it needs a stable input for compilation.
 """
 
 from __future__ import annotations
@@ -37,8 +33,6 @@ STATUS = 'COPIED_RECHECKED_NOT_IMMUTABLE'
 _SHA = re.compile(r'[0-9a-fA-F]{64}\Z')
 _DECIMAL = re.compile(r'[0-9]+\Z')
 _URL_ESCAPE = re.compile(r'%[0-9a-fA-F]{2}')
-
-
 
 
 _DTYPE_BYTES = {
@@ -493,8 +487,8 @@ def freeze_selected_closure(model_path, destination, *,
     if (staged['entries'] != first['entries'] or
             staged['references'] != first['references']):
         raise OnnxClosureChanged('staged model or dependencies differ from source')
-    
-    
+
+
     all_stage = source_freeze._scan_source(
         target, max_entries=MAX_FILES * MAX_RELATIVE_DEPTH + MAX_FILES,
         max_bytes=max_total_bytes, block_bytes=BLOCK_BYTES)

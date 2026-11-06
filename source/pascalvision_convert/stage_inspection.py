@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Offline, read-only I-03 retained stage discovery after a server restart.
+"""Offline, read-only inspection of retained stages after a server restart.
 
 This deliberately does NOT claim stage ownership, restore READY, authorize
 deletion, recurse into child data, or execute/verify a native model. It only
@@ -66,9 +66,7 @@ def inspect_retained_candidates(parent, *, expected_output=None,
                 if (snapshot is not None and selected_output is not None and
                         snapshot.group(1) != os.path.basename(selected_output)):
                     continue
-                
-                
-                
+
                 try:
                     identity = entry.stat(follow_symlinks=False)
                 except OSError as exc:
@@ -93,8 +91,8 @@ def inspect_retained_candidates(parent, *, expected_output=None,
                 if len(candidates) > MAX_CANDIDATES:
                     raise UnsafeInspection(
                         'retained stage candidate count exceeds bounded report limit')
-        
-        
+
+
         after = bundle_atomic._guard_stat(selected_parent, directory=True)
         if (folder.st_dev, folder.st_ino) != (after.st_dev, after.st_ino):
             raise UnsafeInspection('stage parent identity changed during scan')

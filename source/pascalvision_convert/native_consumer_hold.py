@@ -25,9 +25,7 @@ def _snapshot(root, inventory, model_key, device, *, allow_native_outputs=False)
             str(root), max_bytes=bundle_atomic.MAX_NATIVE_FAMILY_BYTES)
         from .llm_bundle_contract import _FAMILIES
         library = '%s-%s.dll' % (_FAMILIES[model_key][0], device)
-        
-        
-        
+
         outputs = {library, '%s-%s.lib' % (_FAMILIES[model_key][0], device),
                    'model.json', 'params.bin', 'params.json',
                    'params.index', 'manifest.json', 'manifest.txt',

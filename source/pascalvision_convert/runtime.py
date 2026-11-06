@@ -1,37 +1,9 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Put a matching runtime next to the compiled module.
-
-WHY. Whoever pressed the button installed nothing - that is the whole point. So
-they have nothing to run the module with either: TVM's runtime is not on their
-machine. Handing over the module alone is handing over half the job.
-
-WHY THIS RUNTIME AND NOT ANY COMPATIBLE ONE. A module built by one version and
-run under another crashes at address zero. That is not a worry, it is a
-measurement: on 31.08.2026 rtdetr did exactly that - same model, same code, the
-only difference being that the run happened outside the layout holding the right
-libraries. The one way to promise agreement is to take the libraries from the
-SAME wheel that did the building.
-
-AND THAT MATCH IS MEASURED, NOT ASSUMED. The working layout of crosspascal
-(model-zoo/run026) was compared with the apache-tvm 0.26.0 wheel by md5:
-
-    tvm_runtime        0b51491e0d1bea07ef950a1b03d72aa9   identical
-    tvm_ffi            e4984aee5fdc677f8ee22fed8d61587b   identical
-    tvm_runtime_extra  300ccbc36211c8827e8a216a139a7685   identical
-
-So the live checks run on precisely the libraries this module copies.
-
-THE COMPILER IS LEFT OUT ON PURPOSE. tvm_compiler is 169 MB and is not needed to
-run anything. Hence a LIST OF NAMES rather than a wildcard: a wildcard would drag
-it along, and every model would cost the reader an extra hundred megabytes.
-
-A MISSING LIBRARY IS A REFUSAL, NOT A WARNING. An incomplete set copied quietly
-produces an artifact that will not start, and the person who finds that out is
-the user, not us.
-"""
+"""Copy the runtime libraries and redistribution records for a compiled module."""
 
 import hashlib
+import json
 import os
 import re
 import sys
@@ -50,9 +22,6 @@ REQUIRED = ('tvm_runtime', 'tvm_runtime_extra')
 REQUIRED_FFI = ('tvm_ffi',)
 FOR_GPU = ('tvm_runtime_cuda',)
 _RUNTIME_COMPONENTS = REQUIRED + REQUIRED_FFI + FOR_GPU
-
-
-
 
 _CUDA_DEPENDENCY = re.compile(
     r'^(?:lib)?(?:cudart|cudnn|cublaslt|cublas|cufft|curand|'
@@ -98,6 +67,15 @@ def _wheel_licences(tvm_dir):
     sharing a basename with different contents cannot be represented by that
     format. Refusing avoids silently dropping a legally required notice.
     """
+    if os.environ.get(_ACCEPTED_RUNTIME_LOCK_ENV):
+        lock = _accepted_cpu_runtime_lock()
+        if not Path(tvm_dir).resolve(strict=True).samefile(
+                lock['build_lib_directory']):
+            raise ValueError('TVM runtime path differs from accepted lock')
+        return [
+            _source_record(item['path'], item['bundle_name'])
+            for item in lock['source_distribution_licenses']
+        ], []
     if not tvm_dir:
         return [], ['Apache-2.0 licence from installed TVM wheel']
     site = os.path.dirname(os.path.dirname(tvm_dir))
@@ -137,6 +115,29 @@ def _wheel_licences(tvm_dir):
     if not items:
         missing.append('Apache-2.0 licence from installed TVM wheel')
     return list(items.values()), missing
+
+
+def _ffi_wheel_licences(ffi_dir):
+    """Read the installed TVM FFI wheel's two redistribution records."""
+    if not ffi_dir:
+        return [], ['licences from the installed TVM FFI wheel']
+    site = Path(ffi_dir).parent.parent
+    distributions = list(site.glob('apache_tvm_ffi-*.dist-info'))
+    if len(distributions) != 1:
+        return [], ['expected exactly one installed TVM FFI wheel metadata directory']
+    records, missing = [], []
+    for name in ('LICENSE', 'NOTICE'):
+        path = distributions[0] / 'licenses' / name
+        try:
+            record = _source_record(path, name + '-tvm-ffi.txt')
+        except OSError:
+            missing.append('missing or unreadable TVM FFI ' + name)
+        else:
+            if record['bytes']:
+                records.append(record)
+            else:
+                missing.append('empty TVM FFI ' + name)
+    return records, missing
 
 
 def _public_record(record):
@@ -211,14 +212,67 @@ def _copy_exclusive(source, destination, expected_hash):
                           % os.path.basename(source))
         os.link(scratch, destination)
     finally:
-        
-        
+
+
         if scratch is not None:
             scratch.unlink(missing_ok=True)
 
 
 def library_extension():
     return EXTENSIONS.get(sys.platform, DEFAULT_EXTENSION)
+
+
+_ACCEPTED_RUNTIME_LOCK_ENV = 'PASCALVISION_TVM_RUNTIME_LOCK'
+
+
+def _accepted_cpu_runtime_lock():
+    """Validate the explicitly configured accepted Win64 CPU source layout.
+
+    This pinned CPU route is separate from the ordinary installed wheel
+    and the selected CUDA kit. Its external lock pins the package, DLLs, and
+    source distribution license files.
+    """
+    source = os.environ.get(_ACCEPTED_RUNTIME_LOCK_ENV)
+    if not source:
+        return None
+    path = Path(source).resolve(strict=True)
+    if not path.is_file():
+        raise ValueError('configured TVM runtime lock is not a file')
+    data = json.loads(path.read_text(encoding='utf-8-sig'))
+    if (data.get('schema') != 'stage03-accepted-tvm-cpu-runtime-lock-v1'
+            or data.get('accepted_attempt') != 'attempt-007'
+            or data.get('accepted_manifest_sha256')
+            != '15d1b561d7ea4e10a4b279d79414a12b034873b8bf4dd073f4cc5a99ad3a600d'):
+        raise ValueError('unaccepted TVM compiler/runtime lock')
+    import tvm
+    anchor = data['tvm_python_package_anchor']
+    actual_tvm = Path(tvm.__file__).resolve(strict=True)
+    if (not actual_tvm.samefile(anchor['path'])
+            or _file_info(actual_tvm) !=
+            {key: anchor[key] for key in ('bytes', 'sha256')}):
+        raise ValueError('loaded TVM package differs from pinned accepted source')
+    directory = Path(data['build_lib_directory']).resolve(strict=True)
+    if not directory.is_dir():
+        raise ValueError('pinned accepted TVM library directory missing')
+    required = ('tvm_runtime.dll', 'tvm_runtime_extra.dll', 'tvm_ffi.dll')
+    files = data['user_runtime_libraries']
+    if set(files) != set(required):
+        raise ValueError('pinned CPU user runtime names incomplete')
+    for name in required:
+        record = files[name]
+        selected = Path(record['path']).resolve(strict=True)
+        if (not selected.parent.samefile(directory)
+                or selected.name.casefold() != name.casefold()
+                or _file_info(selected) !=
+                {key: record[key] for key in ('bytes', 'sha256')}):
+            raise ValueError('pinned accepted TVM runtime bytes changed: ' + name)
+    for entry in data['source_distribution_licenses']:
+        location = Path(entry['path']).resolve(strict=True)
+        if (_file_info(location) !=
+                {key: entry[key] for key in ('bytes', 'sha256')}
+                or not entry['bundle_name'].startswith('LICENSE-tvm-')):
+            raise ValueError('pinned TVM source licence differs from lock')
+    return data
 
 
 def package_lib_dir(package_name):
@@ -228,6 +282,9 @@ def package_lib_dir(package_name):
     matters is the one that will actually be used, not a namesake sitting in a
     neighbouring environment.
     """
+    if package_name in ('tvm', 'tvm_ffi') and os.environ.get(
+            _ACCEPTED_RUNTIME_LOCK_ENV):
+        return _accepted_cpu_runtime_lock()['build_lib_directory']
     try:
         package = __import__(package_name)
     except ImportError:
@@ -251,10 +308,6 @@ def _inspect_destination(target_dir, libraries, licences, tvm_dir, ffi_dir):
         elif os.path.lexists(destination):
             reused.append(row['file'])
 
-    
-    
-    
-    
     try:
         present = sorted(os.listdir(target_dir))
     except OSError as exc:
@@ -268,7 +321,7 @@ def _inspect_destination(target_dir, libraries, licences, tvm_dir, ffi_dir):
             continue
         if filename.lower() in required:
             continue
-        if filename.startswith('LICENSE-tvm-'):
+        if filename.startswith(('LICENSE-tvm-', 'NOTICE-tvm-ffi.txt')):
             blocked.append('untracked old TVM licence in output: %s' % filename)
             continue
         logical = None
@@ -300,7 +353,7 @@ def _inspect_destination(target_dir, libraries, licences, tvm_dir, ffi_dir):
     return blocked, unmanaged, reused
 
 
-def _plan_runtime_files(target='cpu', target_dir=None):
+def _plan_runtime_files(target='cpu', target_dir=None, *, include_ffi_licences=False):
     """Return the public inventory and private source records for exact copying."""
     device = str(target).strip().lower()
     if device not in ('cpu', 'cuda'):
@@ -331,6 +384,10 @@ def _plan_runtime_files(target='cpu', target_dir=None):
             libraries.append(matches[0])
     licences, licence_errors = _wheel_licences(tvm_dir)
     missing.extend(licence_errors)
+    if include_ffi_licences:
+        ffi_licences, ffi_errors = _ffi_wheel_licences(ffi_dir)
+        licences.extend(ffi_licences)
+        missing.extend(ffi_errors)
 
     blocked, unmanaged, reused = [], [], []
     if target_dir is not None:
@@ -359,14 +416,15 @@ def _plan_runtime_files(target='cpu', target_dir=None):
     return inventory, libraries, licences
 
 
-def plan_runtime_files(target='cpu', target_dir=None):
+def plan_runtime_files(target='cpu', target_dir=None, *, include_ffi_licences=False):
     """Read-only SHA-256 inventory of the selected wheel and optional output.
 
     The target_dir check also reports *unmanaged* libraries left by older
     bundles. A ready inventory verifies source bytes and copy suitability, NOT
     that the model is correct or portable to a foreign GPU/operating system.
     """
-    inventory, _, _ = _plan_runtime_files(target, target_dir)
+    inventory, _, _ = _plan_runtime_files(
+        target, target_dir, include_ffi_licences=include_ffi_licences)
     return inventory
 
 
@@ -399,7 +457,7 @@ def copy_license(target_dir):
     return len(records)
 
 
-def place(target_dir, target='cpu'):
+def place(target_dir, target='cpu', *, include_ffi_licences=False):
     """Put an exactly inventoried TVM runtime beside a module, without clobber.
 
     The preflight checks both libraries and licences before the first copy.
@@ -411,7 +469,7 @@ def place(target_dir, target='cpu'):
         return step.refuse('no such output directory: %s' % target_dir)
     try:
         inventory, libraries, licences = _plan_runtime_files(
-            target, target_dir=target_dir)
+            target, target_dir=target_dir, include_ffi_licences=include_ffi_licences)
     except (OSError, ValueError) as exc:
         return step.refuse('cannot inspect runtime wheel: %s' % exc)
     if not inventory['ready']:
@@ -421,8 +479,8 @@ def place(target_dir, target='cpu'):
     for entry in libraries + licences:
         filename = entry['file']
         destination = os.path.join(target_dir, filename)
-        
-        
+
+
         if not os.path.lexists(destination):
             try:
                 _copy_exclusive(entry['source'], destination, entry['sha256'])

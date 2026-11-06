@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pascalvision-convert"
+version = "0.2.0a1"
+description = "ONNX -> TVM Relax model converter for crosspascal-vision (CPU / CUDA / cuDNN BYOC)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Yuriy Pisarev" }]
+dependencies = ["onnx>=1.15", "numpy>=1.24"]
+
+[project.optional-dependencies]
+tuning = ["xgboost>=1.7", "psutil>=5.9", "cloudpickle>=2.2"]
+
+[project.scripts]
+pascalvision-convert = "pascalvision_convert.cli:main"
+pascalvision-wizard = "pascalvision_convert.wizard_entry:main"
+
+[project.gui-scripts]
+crosspascal-convert = "pascalvision_convert.wizard_entry:gui_main"
+
+[tool.setuptools]
+package-dir = {"" = "source"}
+packages = ["pascalvision_convert", "pascalvision_convert.llm_helpers"]
+py-modules = ["master", "import_adapters"]
+
+[tool.setuptools.package-data]
+pascalvision_convert = ["master_page.html", "model_catalog.json"]
+"pascalvision_convert.llm_helpers" = ["HELPER-SHA256.json"]

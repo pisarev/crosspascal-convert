@@ -1,9 +1,7 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""ONNX -> TVM Relax conversion.
+"""Convert ONNX and TFLite models to compiled TVM Relax modules.
 
-Formalizes state/RECIPES.md R-001 (PaddleOCR cuDNN BYOC). TVM/onnx are imported
-lazily so the package installs without them; conversion needs a working TVM Relax
-(v0.24+) environment (see README).
+TVM and model importers are loaded when conversion starts.
 """
 from __future__ import annotations
 
@@ -21,12 +19,7 @@ from . import targets, tuning
 
 
 class TuningRequest:
-    """What a tuned build needs, decided before the build starts.
-
-    Built by :func:`plan_tuning`, never by hand: the budget has to come from the
-    model's own task count, and hand-picked round numbers are what produced the
-    95.09 ms case - a classifier that came out slower WITH tuning than without.
-    """
+    """Tuning tasks and their trial budget for one build."""
 
     __slots__ = ('tasks', 'per_task', 'total_trials', 'work_dir', 'reuse')
 
@@ -45,24 +38,16 @@ class TuningRequest:
 
 def plan_tuning(mod, tvm_target, work_dir: str,
                 per_task: int = tuning.DEFAULT_TRIALS_PER_TASK) -> TuningRequest:
-    """Count the model's tuning tasks, then size the budget from that count.
+    """Count tuning tasks and derive the total trial budget."""
 
-    Counting costs three to eleven seconds; the tuning it governs costs eleven
-    to fifty-one minutes. Skipping the count to save the seconds is how a budget
-    ends up below the coverage threshold.
-    """
-    
-    
-    
-    
-    
+
     tuning.refuse_on_windows()
     tuning.refuse_without_packages()
     tasks, _ = tuning.count_tasks(mod, tvm_target)
     ready = tuning.coverage(work_dir, tasks)
     if ready['complete'] and ready['workloads'] == tasks:
-        
-        
+
+
         return TuningRequest(tasks=tasks, per_task=per_task, total_trials=0,
                              work_dir=work_dir, reuse=True)
     return TuningRequest(
@@ -74,9 +59,9 @@ def plan_tuning(mod, tvm_target, work_dir: str,
 
 
 class Target(str, Enum):
-    CPU = "cpu"            
-    CUDA = "cuda"          
-    CUDNN = "cudnn"        
+    CPU = "cpu"
+    CUDA = "cuda"
+    CUDNN = "cudnn"
 
 
 def _normalize_selected_rec_identity_nodes(onnx_model) -> int:
@@ -107,7 +92,7 @@ def _normalize_selected_rec_identity_nodes(onnx_model) -> int:
             upstream = aliases[upstream]
         aliases[node.output[0]] = upstream
         removed.append(node)
-    
+
     if len(removed) != 142:
         raise ValueError('selected Rec original Identity topology unexpectedly changed')
     for node in nodes:
@@ -123,13 +108,9 @@ def _normalize_selected_rec_identity_nodes(onnx_model) -> int:
 
 @contextlib.contextmanager
 def _selected_rec_safe_cuda_compiler(enabled: bool):
-    """Scope proven no-fast-math NVCC to the exact selected trained Rec build.
+    """Use NVCC without fast math for the selected recognition model.
 
-    On CUDA 12.8, default NVRTC --use_fast_math compiled the real Rec model
-    but ALL 735400 output values were NaN. The unmodified TVM 0.26 NVCC
-    callback with TVM_CUDA_NVCC_NO_FAST_MATH=1 returned finite probabilities
-    agreeing with original ORT (max abs 1.3412e-5, all argmax equal).
-    Do not change the compiler mode of any generic or legacy model.
+    Restore the caller environment when the build finishes or raises.
     """
     if not enabled:
         yield
@@ -160,15 +141,12 @@ def convert_onnx(
     cpu_codegen_target=None,
     cpu_codegen_receipt=None,
 ) -> str:
-    """Convert an ONNX model to a compiled TVM Relax module (.so) and return its path.
+    """Compile an ONNX model and return the exported library path.
 
-    Pass ``tune_work_dir`` to build with code tuning. It applies to CPU targets
-    only, and it changes the target as well as the pipeline: a tuned build gets
-    ``num-cores`` and ``mcpu``, an untuned one must not - ``mcpu`` on its own
-    measured 0.54 to 0.58 of the untuned speed.
+    Input shape overrides use ONNX graph input names.
     """
-    
-    
+
+
     req_sm = targets.validate_target_sm(target, req_sm)
     if cpu_codegen_target is not None:
         if (target != Target.CPU or not tune_work_dir or
@@ -180,13 +158,11 @@ def convert_onnx(
             cpu_codegen_target.get('mcpu') if cpu_codegen_target.get('mode') == 'explicit' else None)
         if selected != cpu_codegen_target:
             raise ValueError('CPU codegen target changed since BuildPlan admission')
-        
-        
-        
+
+
         targets.require_local_cpu_tuning_target(selected)
-        
-        
-        
+
+
         tuning.refuse_on_windows()
 
     import onnx  # noqa: WPS433 (lazy)
@@ -199,20 +175,11 @@ def convert_onnx(
     onnx_model = onnx.load(model_path)
     _refuse_unknown_input_names(onnx_model, input_shapes)
     _refuse_free_dimensions(onnx_model, input_shapes)
-    
-    
-    
-    
-    
-    
-    
+
+
     _rewrite_cuda_float32_pow2(onnx_model, target)
-    
-    
-    
-    
-    
-    
+
+
     selected_rec_cuda = False
     if (isinstance(input_shapes, dict) and set(input_shapes) == {'x'} and
             tuple(input_shapes['x']) == (1, 3, 48, 320)):
@@ -241,9 +208,8 @@ def convert_onnx(
             actual_mcpu = str(tvm_target.attrs.get('mcpu') or '')
             if (actual_kind != 'llvm' or actual_mcpu != (mcpu or '')):
                 raise ValueError('TVM effective CPU target differs from BuildPlan')
-            
-            
-            
+
+
         request = plan_tuning(mod, tvm_target, tune_work_dir, trials_per_task)
     else:
         tvm_target = tvm.target.Target("llvm")
@@ -277,9 +243,8 @@ def _mcpu_for_this_machine() -> Optional[str]:
         import tvm
         from tvm.target import codegen
         detected = str(codegen.llvm_get_system_cpu() or '').strip()
-        
-        
-        
+
+
         if detected and not codegen.llvm_is_valid_cpu(
                 detected, codegen.llvm_get_system_triple()):
             return None
@@ -289,18 +254,7 @@ def _mcpu_for_this_machine() -> Optional[str]:
 
 
 def _refuse_incomplete_tuning(request: "TuningRequest", module_path: str) -> None:
-    """Undertuned is not a lesser success, it is a failure.
-
-    The check reads the database the tuning left behind rather than the budget
-    we asked for. Asking is not receiving: the classifier was asked for 500
-    trials across 53 tasks and twenty-nine of them received none, which is how
-    a tuned build came out thirty percent slower than an untuned one.
-
-    THE MODULE IS DELETED, not merely reported. A file that is slower than an
-    untuned build while looking exactly like a good one is worse than no file:
-    whoever picks it up next has no way to tell, and our own rule is that a
-    leftover artifact turns a failed build into a false success.
-    """
+    """Reject incomplete task coverage and attempt to remove the artifacts."""
     report = tuning.coverage(request.work_dir, request.tasks)
     if report['complete']:
         return
@@ -313,23 +267,13 @@ def _refuse_incomplete_tuning(request: "TuningRequest", module_path: str) -> Non
         except OSError:
             pass
     raise RuntimeError(
-        'tuning did not cover every task (%s); the module was %s because an '
-        'undertuned build under an mcpu target is slower than an untuned one'
+        'tuning did not cover every task (%s); %s'
         % (report['reason'],
-           'deleted' if removed else 'not written'))
+           'the module was deleted' if removed else 'module removal was not confirmed'))
 
 
 def _refuse_unknown_input_names(onnx_model, input_shapes) -> None:
-    """A shape given for an input the model does not have is a mistake, and it
-    must be named as one here.
-
-    Measured 01.09.2026 on rtdetr_r18vd: the input is called ``pixel_values``,
-    a shape was supplied for ``image``, and the conversion died deep inside
-    with ``TypeError: object of type 'NoneType' has no len()``. Nothing in that
-    message points at the real error, and the caller is left guessing.
-
-    The check costs one set comparison and turns a puzzle into a sentence.
-    """
+    """Reject shape overrides for unknown graph inputs."""
     if not input_shapes:
         return
     weights = {w.name for w in onnx_model.graph.initializer}
@@ -343,31 +287,9 @@ def _refuse_unknown_input_names(onnx_model, input_shapes) -> None:
 
 
 def _refuse_free_dimensions(onnx_model, input_shapes) -> None:
-    """An input the model left free, and the caller did not name, is refused here.
+    """Require positive sizes for unresolved ONNX dimensions."""
 
-    TVM Relax converts dynamic shapes perfectly well. Tuning does not: of the
-    three pipelines it ships, the only one that tunes is called
-    ``static_shape_tuning``, and there is no dynamic counterpart. So a shape has
-    to be named, and the person who knows which one is the caller, not us.
 
-    Guessing was tried and it was wrong. On 31.08.2026 rtdetr_r18vd left all
-    four dimensions free, ones were substituted, the channel count became 1
-    instead of 3, and onnxruntime refused with a message about a convolution.
-
-    Not guessing was also tried, and the silence was worse: on 01.09.2026 the
-    same model without a shape died inside the frontend with ``TypeError:
-    object of type 'NoneType' has no len()`` while converting a Resize operator.
-    Nothing in that sentence points at the missing shape.
-
-    The same refusal already existed in verify.py, but it guarded the
-    COMPARISON path, not the BUILD path - so the build never reached it. A check
-    that does not stand where the fault occurs is not a check.
-    """
-    
-    
-    
-    
-    
     for name, shape in (input_shapes or {}).items():
         bad = [index for index, dim in enumerate(shape) if int(dim) < 1]
         if bad:
@@ -420,8 +342,8 @@ def _rewrite_cuda_float32_pow2(onnx_model, target):
     """
     if target not in (Target.CUDA, Target.CUDNN):
         return []
-    
-    
+
+
     if not getattr(getattr(onnx_model, 'graph', None), 'node', None):
         return []
 
@@ -431,8 +353,8 @@ def _rewrite_cuda_float32_pow2(onnx_model, target):
         inferred = onnx.shape_inference.infer_shapes(onnx_model,
                                                     strict_mode=False)
     except Exception:
-        
-        
+
+
         return []
     types = {v.name: v.type.tensor_type.elem_type for v in inferred.graph.value_info}
     types.update({v.name: v.type.tensor_type.elem_type for v in inferred.graph.input})
@@ -488,22 +410,7 @@ def _onnx_input_names(onnx_model, input_shapes):
 
 
 def _write_input_manifest(module_path: str, rows) -> str:
-    """Write the input names beside the artifact, one per line.
-
-    WHY THIS FILE EXISTS. The compiled module does not carry the names of its
-    inputs: measured 31.08.2026 on rtdetr_r18vd.cpu.dll, where
-    get_function_metadata, get_function_doc and the global function registry all
-    return nothing for them. Without this file a caller that names the wrong input
-    is answered silently, because the binding resolves every name to index 0 -- a
-    wrong name was measured to pass unnoticed on 30.08.2026.
-
-    The format is deliberately not JSON: it is read by both Delphi and Free
-    Pascal, and a tab-separated line needs no parser in either.
-
-        index <TAB> name <TAB> d0,d1,d2,d3
-
-    A dimension of -1 means the model left it free.
-    """
+    """Write the ordered input names and dimensions beside the module."""
     manifest = module_path + ".inputs"
     tab = chr(9)
     with open(manifest, "w", encoding="utf-8", newline=chr(10)) as handle:
@@ -521,18 +428,9 @@ def convert_tflite(
     input_shapes: Optional[Dict[str, Tuple[int, ...]]] = None,
     req_sm: Optional[str] = None,
 ) -> str:
-    """Convert a TFLite model to a compiled TVM Relax module and return its path.
+    """Compile a TFLite model and return the exported library path.
 
-    WHY A SEPARATE ENTRY POINT - measured 30.08.2026, not assumed.
-
-    A .tflite file is a flatbuffer, not ONNX, and no conversion to ONNX happens
-    here. Relax carries its own TFLite frontend
-    (``tvm.relax.frontend.tflite.from_tflite``), so the model is read directly.
-    Going through tf2onnx would drag in TensorFlow - hundreds of megabytes and a
-    second source of truth about the same graph.
-
-    TFLite keeps images as NHWC, and the adapters named after that framework
-    expect exactly that layout. Nothing is transposed on the way in.
+    Input shape overrides use TFLite subgraph input names.
     """
     req_sm = targets.validate_target_sm(target, req_sm)
 
@@ -583,18 +481,7 @@ def _tflite_dimensions(tensor):
 
 
 def _tflite_input_names(model, input_shapes):
-    """Name and shape of every subgraph input, in declaration order.
-
-    WHY THIS IS NEEDED HERE TOO - measured 31.08.2026, not assumed. The manifest
-    was written for ONNX only, so a module built from a .tflite file shipped
-    without one. The binding reads a missing manifest as "there is nothing to
-    check against" and resolves any name to index 0, which means the caller's
-    input name was accepted whatever it was - silently. That is the exact
-    failure the manifest exists to remove, and it survived for TFLite alone.
-
-    Names come from the model itself rather than from the frontend, because the
-    frontend is free to rename; the caller names the input as the FILE calls it.
-    """
+    """Read subgraph input names and shapes in declaration order."""
     subgraph = model.Subgraphs(0)
     rows = []
     for index in range(subgraph.InputsLength()):
@@ -609,26 +496,7 @@ def _tflite_input_names(model, input_shapes):
 
 
 def _refuse_quantized_tflite(model, model_path: str) -> None:
-    """Refuse an integer-quantized TFLite model instead of building a wrong one.
-
-    WHY REFUSE RATHER THAN WARN - measured 30.08.2026 against a real interpreter.
-
-    Two stock TensorFlow models were converted and compared with what the TFLite
-    interpreter itself produces on the same image:
-
-        mobilenet_v2_1.0_224   float32          class 655 at 0.596 - exact match
-        coco_ssd_mobilenet_v1  uint8 quantized  scores around 0.02, where the
-                               (scale 1/128,    interpreter gives 0.824 and 0.730
-
-    The quantized model converts, loads and runs. It simply computes the wrong
-    numbers, and nothing downstream can tell: the shapes are right, the four
-    outputs are there, the scores are plain floats. That is the worst kind of
-    failure, and it is why this refuses rather than warns.
-
-    The check looks at the input tensors' quantization parameters, because that
-    is where the integer encoding is declared. A float model leaves the scale at
-    zero.
-    """
+    """Reject integer TFLite inputs carrying a quantization scale."""
     subgraph = model.Subgraphs(0)
     for index in range(subgraph.InputsLength()):
         tensor = subgraph.Tensors(subgraph.Inputs(index))
@@ -641,39 +509,14 @@ def _refuse_quantized_tflite(model, model_path: str) -> None:
             raise RuntimeError(
                 "refusing to convert an integer-quantized TFLite model: input "
                 f"'{name.decode() if name else index}' of {model_path} carries "
-                f"quantization (scale {scale}). Measured 30.08.2026 on the stock "
-                "COCO SSD MobileNet v1: such a model converts and runs, but its "
-                "scores come out around 0.02 where the TFLite interpreter gives "
-                "0.73-0.82 - wrong numbers with no sign of trouble. Float TFLite "
-                "models convert correctly; export the model without quantization, "
-                "or use its float variant."
+                f"quantization (scale {scale}). This converter does not support "
+                "that input. Export a floating-point model or use its float variant."
             )
 
 
 @contextlib.contextmanager
 def _tflite_optional_attribute_defaults():
-    """Supply TFLite defaults for attributes the frontend insists on.
-
-    WHY THIS EXISTS - measured 30.08.2026 on a real model, not assumed.
-
-    The stock COCO SSD MobileNet v1 detector
-    (``coco_ssd_mobilenet_v1_1.0_quant``, the one TensorFlow itself publishes)
-    is refused by the Relax TFLite frontend:
-
-        DETECTION_POSTPROCESS custom options miss required attributes:
-        detections_per_class
-
-    Its ``TFLite_Detection_PostProcess`` node carries ten fields, and that one is
-    genuinely absent - checked by decoding the flexbuffer. But the TFLite schema
-    marks it OPTIONAL with a default of 100, so the model is well formed and the
-    frontend is stricter than the format. Without this, every SSD detector of
-    that vintage is unconvertible, and those are exactly the models the TFLite
-    adapter's four-output contract was written for.
-
-    The patch is narrow and temporary: only the decoder used to read custom
-    options, only while the frontend runs, restored afterwards. Other operators
-    read their options by name, so an unused extra key cannot disturb them.
-    """
+    """Supply missing optional attributes expected by the TVM TFLite frontend."""
     from tvm.relax.frontend.tflite import tflite_frontend
 
     original = tflite_frontend.FlexBufferDecoder
@@ -698,27 +541,15 @@ def _target_for(target: Target, req_sm: Optional[str] = None):
 
     sm = targets.validate_target_sm(target, req_sm)
     if sm:
-        
-        
-        
-        
+
+
         return tvm.target.Target({'kind': 'cuda', 'arch': sm})
     return tvm.target.Target(targets.tvm_target_spec(target))
 
 
 def _build_and_export(mod, tvm_target, opt_level: int, output_path: str,
                       tune: Optional["TuningRequest"] = None) -> str:
-    """Legalize, lower and write the module. Shared by every input format.
-
-    Without ``tune`` this is the pipeline we have always used: ``zero``, no
-    scheduler, no vectorised or parallel loops. It is correct and it is slow -
-    57 to 139 times slower than ONNX Runtime on the models measured 01.09.2026.
-
-    With ``tune`` the same module goes through MetaSchedule instead, and the
-    caller has already decided the budget from the model's own task count. That
-    order is not decoration: a budget smaller than ``tasks * per_task`` leaves
-    tasks untuned under an mcpu target and comes out SLOWER than no tuning.
-    """
+    """Lower and export a Relax module for either input format."""
     import tvm
     from tvm import relax
 
@@ -735,17 +566,13 @@ def _build_and_export(mod, tvm_target, opt_level: int, output_path: str,
                 work_dir=tune.work_dir,
                 per_task=tune.per_task,
             )(mod)
-        with tvm.transform.PassContext(opt_level=opt_level):
+        with tvm.transform.PassContext(opt_level=opt_level), tvm_target:
             executable = relax.build(mod, target=tvm_target)
     except Exception as primary:
         if tune is not None or not _cuda_default_schedule_failed(primary, tvm_target):
             raise
-        
-        
-        
-        
-        
-        
+
+
         import warnings
         warnings.warn(
             'The default CUDA TIR schedule rejected a reduction. Retrying '
@@ -820,38 +647,15 @@ def cccl_include_directory() -> Optional[str]:
         return nested
     flat = os.path.join(root, "include")
     if os.path.isfile(os.path.join(flat, "cuda", "std", "cstdint")):
-        return None  
+        return None
     return None
 
 
 def _teach_nvrtc_where_cccl_lives() -> None:
-    """Add the CCCL include directory to NVRTC's search path when it is needed.
+    """Make the nested CCCL include layout visible to the TVM CUDA compiler.
 
-    WHY THIS EXISTS - measured 30.08.2026 on CUDA 13.2, not guessed.
-
-    Building for the CUDA target failed while compiling the generated kernels:
-
-        #include <cuda/std/cstdint>
-                                   ^
-        1 catastrophic error detected in the compilation of "tvm_kernels.cu".
-
-    The header is present, just not where NVRTC looks. CUDA 13 relocated CCCL:
-
-        CUDA 12 and earlier   <CUDA>/include/cuda/std/cstdint
-        CUDA 13.2 (measured)  <CUDA>/include/cccl/cuda/std/cstdint
-
-    TVM passes no include directories to NVRTC, so the nested layout is invisible
-    to it. Two other routes were tried and rejected by measurement:
-
-      * installing cuda-bindings - needed, but not enough: it supplies the
-        bindings, not the headers, and the same error came back;
-      * TVM_CUDA_COMPILE_MODE=nvcc, which TVM documents - nvcc does know its own
-        layout, but it refused with "Cannot find compiler 'cl.exe' in PATH".
-        That would drag Visual Studio into a toolchain that otherwise needs only
-        clang, so it is the worse trade.
-
-    Adding one include directory keeps NVRTC, needs no extra toolchain, and is a
-    no-op on toolkits that place CCCL where NVRTC already looks.
+    Kernels that include <cuda/std/...> need the CCCL include directory
+    on toolkits that install those headers below include/cccl.
     """
     include_dir = cccl_include_directory()
     if include_dir is None:
@@ -862,12 +666,8 @@ def _teach_nvrtc_where_cccl_lives() -> None:
 
     @tvm_ffi.register_global_func("tvm_callback_cuda_compile", override=True)
     def _compile_with_cccl(code, target=None):  # noqa: WPS430 (TVM calls it)
-        
-        
-        
-        
-        
-        
+
+
         compiler = os.environ.get("TVM_CUDA_COMPILE_MODE", "nvrtc").lower()
         if compiler == "nvrtc":
             return tvm_nvcc.compile_cuda(
@@ -886,34 +686,7 @@ MIN_CONVERTER_TVM = (0, 26, 0)
 
 
 def _refuse_known_bad_tvm(version: str) -> None:
-    """Refuse to convert with a TVM whose ONNX frontend is known to be wrong.
-
-    MEASURED 28.08.2026 on yolo11n, a real photograph, against onnxruntime:
-
-        onnxruntime (reference)   best class score 0.911
-        TVM 0.26                  0.911, max divergence 1.28e-03
-        TVM 0.24                  0.125, max divergence 5.33e+02
-
-    The 0.24 build loads, runs and returns tensors of the right shape - and
-    detects nothing. That is why this refuses instead of warning: a silently
-    wrong model is worse than no model, because everything downstream looks
-    healthy.
-
-    Where it goes wrong was narrowed by bisecting the graph: the first diverging
-    node is an ordinary 3x3 convolution (group=1) deep in the backbone, with its
-    input still matching to 3.6e-06. Optimisation level, build pipeline, explicit
-    input shape and graph simplification all made no difference - the divergence
-    was identical to the last digit, which is what says "systematic", not
-    "numerical".
-
-    WHAT WE DO NOT KNOW, and do not pretend to: 0.25 was never tested. It is
-    refused because it is below the version we measured as good, not because it
-    was found bad.
-
-    The runtime side is unaffected: a module built by 0.26 was loaded by our
-    0.24 runtime and produced 0.911 with 1.28e-03 divergence. Compilation and
-    execution are different sides, and only this one needs the newer TVM.
-    """
+    """Enforce the minimum supported converter version."""
     parts = []
     for piece in version.split(".")[:3]:
         digits = "".join(c for c in piece if c.isdigit())
@@ -923,11 +696,8 @@ def _refuse_known_bad_tvm(version: str) -> None:
     if tuple(parts) >= MIN_CONVERTER_TVM:
         return
     raise RuntimeError(
-        "This TVM (%s) miscompiles ONNX models: measured on yolo11n it returns "
-        "tensors of the right shape that detect nothing (best score 0.125 "
-        "against 0.911 from onnxruntime). Conversion needs TVM %s or newer. "
-        "The runtime side is unaffected - a module built by a newer TVM runs "
-        "correctly under the older runtime, which is measured, not assumed."
+        "TVM %s is below the supported converter version. Conversion requires "
+        "TVM %s or newer. Use the TVM and TVM FFI versions listed for this package."
         % (version, ".".join(str(p) for p in MIN_CONVERTER_TVM))
     )
 
@@ -937,32 +707,10 @@ def default_library_suffix() -> str:
 
 
 def _shared_library_builder():
-    """Return an fcompile for export_library, or None to keep TVM's default.
+    """Use an explicit Windows x64 linker for TVM module export.
 
-    WHY THIS EXISTS - measured 28.08.2026, not guessed.
-
-    On Windows TVM's built-in packer calls
-
-        clang -O2 --target=x86_64 -shared -o out.dll lib0.o devc.o
-
-    and that fails with "linker (via gcc) command failed". Two things are wrong
-    with it: the target triple is incomplete (x86_64 with no vendor or OS, so
-    clang falls back to a Unix-style driver) and the link step is then handed to
-    gcc, which is not what builds a DLL on this platform.
-
-    Measured on the same machine with the same clang 21.1.1: the plain command
-
-        clang -O2 --target=x86_64-pc-windows-msvc -shared -o t.dll t.c
-
-    produces a working DLL when clang can find lld-link. Some Windows clang
-    distributions (including Embarcadero's) ship clang.exe WITHOUT lld-link:
-    the same command then fails with 'program not executable'. In that case we
-    locate an installed MSVC C++ toolset, initialize its environment using
-    vcvars64.bat, and explicitly use its link.exe. This does NOT change the
-    target of Relax/LLVM/CUDA code generation or choose a CPU fallback.
-
-    On anything other than Windows we return None and let TVM do what it already
-    does correctly there.
+    Try the lld-link bundled with clang, then initialize the MSVC tools.
+    On other platforms, use the default TVM export linker.
     """
     if platform.system() != "Windows":
         return None
@@ -974,28 +722,16 @@ def _shared_library_builder():
         objects = [str(obj) for obj in objects]
         extra = ([options] if isinstance(options, str) else list(options or []))
         libraries = _tvm_import_libraries()
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+
+
         def clang_command(linker, link_dir=None):
             command: List[str] = [
                 clang, "-O2", "--target=x86_64-pc-windows-msvc",
                 "-shared", "-fuse-ld=" + linker, "-Wl,/Brepro",
                 "-o", output,
             ]
-            
-            
+
+
             if link_dir:
                 command.insert(4, "-B" + link_dir)
             return command + objects + libraries + extra
@@ -1005,16 +741,15 @@ def _shared_library_builder():
             bundled_lld = os.path.join(
                 os.path.dirname(os.path.abspath(clang)), "lld-link.exe")
             if os.path.isfile(bundled_lld):
-                
-                
+
+
                 command = clang_command("lld")
                 failure = _run_windows_link(command)
                 if failure is None:
                     return
                 attempts.append("bundled lld-link: " + failure)
 
-        
-        
+
         try:
             msvc_env, msvc_link = _initialized_msvc_linker()
         except RuntimeError as exc:
@@ -1029,9 +764,8 @@ def _shared_library_builder():
         if clang:
             command = clang_command("link", os.path.dirname(msvc_link))
         else:
-            
-            
-            
+
+
             native_options = []
             for flag in extra:
                 if flag.startswith("/"):
@@ -1176,11 +910,8 @@ def _initialized_msvc_linker():
     problems = []
     for vcvars in _vcvars64_candidates():
         executable = os.environ.get("ComSpec") or shutil.which("cmd.exe") or "cmd.exe"
-        
-        
-        
-        
-        
+
+
         command = ('"' + executable + '" /d /s /c "chcp 65001 >nul && call "'
                    + vcvars + '" >nul && set"')
         try:
@@ -1197,8 +928,8 @@ def _initialized_msvc_linker():
         for line in result.stdout.splitlines():
             key, delimiter, value = line.partition("=")
             if delimiter and key and " " not in key:
-                
-                
+
+
                 duplicate = next(
                     (old for old in environment
                      if old.casefold() == key.casefold()), None)
@@ -1223,18 +954,9 @@ def _initialized_msvc_linker():
 
 
 def _find_clang_executable() -> Optional[str]:
-    """clang.exe, on PATH or where LLVM normally installs itself.
+    """Find clang via PATH or standard LLVM install locations."""
 
-    PATH alone was not enough and cost half an hour once: a tuned build spent
-    that long tuning and then refused to link, on a machine where clang sat in
-    its default directory the whole time. Looking in the standard place first
-    is not a workaround - refusing to look is the defect.
-    """
-    
-    
-    
-    
-    
+
     from . import environment  # noqa: WPS433 (lazy: keeps the import graph flat)
 
     found, _on_path = environment.find_clang()
@@ -1242,24 +964,9 @@ def _find_clang_executable() -> Optional[str]:
 
 
 def _tvm_import_libraries() -> List[str]:
-    """Import libraries a compiled model must be linked against on Windows.
+    """Find the TVM FFI import library used by Windows model modules.
 
-    WHY - measured 28.08.2026 on a real model, not assumed.
-
-    A model built by Relax calls back into the TVM FFI layer. Linking the
-    generated objects on their own fails with exactly one unresolved symbol:
-
-        LNK2019: TVMFFIErrorSetRaisedFromCStrParts, referenced in
-                 __tvm_ffi_transpose1
-
-    Adding tvm_ffi.lib resolves it and the DLL links. That single name is the
-    whole reason this function exists; if a future TVM needs more, the linker
-    will name them just as plainly.
-
-    WHERE WE LOOK, and why there: the same directories where the TVM DLL itself
-    was found, that is the entries of PATH. Using one rule for both keeps the
-    library and its import library from being taken out of different builds -
-    a mismatch that would link cleanly and fail at load time.
+    Generated Relax objects can reference TVM FFI error-reporting symbols.
     """
     wanted = "tvm_ffi.lib"
     for directory in _ffi_library_directories():
@@ -1270,19 +977,7 @@ def _tvm_import_libraries() -> List[str]:
 
 
 def _ffi_library_directories() -> List[str]:
-    """Directories that may hold the TVM FFI import library, best first.
-
-    TWO LAYOUTS EXIST and both are in use here, which is why this looks in two
-    places rather than one:
-
-        wheel from PyPI    site-packages/tvm_ffi/lib/tvm_ffi.lib
-        build from source  the build output directory, reachable through PATH
-                           because that is also how the DLL itself is found
-
-    The package is asked first. It is the more precise answer: it names the very
-    installation Python has imported, so the import library cannot come from a
-    different build than the DLL that will load the model.
-    """
+    """Prefer the imported TVM FFI package, then search PATH for source builds."""
     directories: List[str] = []
     try:
         import tvm_ffi  # noqa: WPS433 (lazy, optional)
@@ -1298,17 +993,14 @@ def _ffi_library_directories() -> List[str]:
     return directories
 
 def _partition_for_cudnn_groups1(mod):
-    """cuDNN BYOC partition restricted to groups==1 convolutions (R-001).
+    """Attempt experimental cuDNN offload using the stock TVM partitioner.
 
-    The stock ``partition_for_cudnn`` offloads grouped/depthwise conv too (its
-    ``_check_conv2d`` ignores ``groups``), which miscomputes the result. The recipe's
-    fix is a custom pattern that only matches ``groups == 1``. The exact pattern is
-    TVM-version specific - see state/RECIPES.md R-001. This hook falls back to the
-    stock partition if a custom one is not wired yet.
+    This helper does not enforce a groups==1 convolution constraint.
+    The supported Early Access routes use plain CUDA or CPU.
     """
     try:
         from tvm.relax.backend.contrib.cudnn import partition_for_cudnn
     except Exception:
         return mod
-    
+
     return partition_for_cudnn(mod)

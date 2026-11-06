@@ -1,28 +1,10 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Tell what a model file actually is, by its bytes.
+"""Recognise a model file by its bytes.
 
-WHY THIS IS ITS OWN MODULE - measured 31.08.2026, twice.
-
-The first version asked one question: "are the first four bytes TFL3?" Anything
-else was assumed to be ONNX. Both halves of that were wrong.
-
-    The TFLite marker sits at offset 4, not 0: a flatbuffer starts with the
-    offset of its root table (18 00 00 00 for mobilenet_v2), and the identifier
-    comes after it. A real TFLite model was taken for ONNX.
-
-    "Not TFLite" is not the same as "ONNX". A user pointed the wizard at
-    passport.pt - 177 MB of YOLOv5 weights - and got
-    "Error parsing message with type 'onnx.ModelProto': Wire format was corrupt".
-    The file was never ONNX to begin with, and the complaint sent the reader
-    looking for a damaged download instead of the real answer: these are
-    PyTorch weights, and they have to be exported first.
-
-    a guess dressed as a diagnosis costs more than an honest "unknown"
-
-So every kind is recognised POSITIVELY, by a marker that belongs to it, and a
-file matching none of them is reported as unrecognised - with its first bytes
-printed, so the next reader can see what we saw.
+The TFLite identifier sits at offset four, after the FlatBuffer root-table
+offset. PyTorch weights need an ONNX export before they can be compiled.
+Unrecognised files are reported with their leading bytes for diagnosis.
 """
 
 import os
@@ -47,8 +29,6 @@ TFLITE_MARKER_OFFSET = 4
 ZIP_MARKER = b'PK' + bytes([3, 4])
 
 
-
-
 PADDLE_WEIGHTS = 'inference.pdiparams'
 PADDLE_GRAPHS = ('inference.json', 'inference.pdmodel')
 PADDLE_PIR_MARKER = b'"magic":"pir"'
@@ -56,7 +36,6 @@ PADDLE_PIR_MARKER = b'"magic":"pir"'
 
 PICKLE_FIRST = 0x80
 PICKLE_PROTOCOLS = (2, 3, 4, 5)
-
 
 
 PYTORCH_FAMILIES = (
@@ -69,19 +48,9 @@ PYTORCH_FAMILIES = (
 )
 
 
-
-
-
-
 MAX_PT_ARCHIVE_MEMBERS = 8192
 MAX_PT_PICKLE_METADATA_BYTES = 128 * 1024 * 1024
 MAX_PT_CENTRAL_DIRECTORY_BYTES = 64 * 1024 * 1024
-
-
-
-
-
-
 
 
 MAX_ONNX_PREPARSE_BYTES = 8 * 1024 ** 3
@@ -142,7 +111,7 @@ def _linux_onnx_available_bytes(*, read_text=None, rlimit_as=None,
 
     if mode is not None:
         def mount_path(value):
-            
+
             value = re.sub(r'\\([0-7]{3})',
                            lambda m: chr(int(m.group(1), 8)), value)
             if (not value.startswith('/') or '\x00' in value or
@@ -173,8 +142,8 @@ def _linux_onnx_available_bytes(*, read_text=None, rlimit_as=None,
                 continue
             if selected is None or len(root) > len(selected[0]):
                 selected = (root, mounted)
-        
-        
+
+
         if selected is None:
             return None
         root, mounted = selected
@@ -195,7 +164,7 @@ def _linux_onnx_available_bytes(*, read_text=None, rlimit_as=None,
                 limit = None
             elif re.fullmatch(r'[0-9]+', raw_limit):
                 limit = int(raw_limit)
-                
+
                 if mode == 'v1' and limit >= (1 << 60):
                     limit = None
             else:
@@ -211,7 +180,7 @@ def _linux_onnx_available_bytes(*, read_text=None, rlimit_as=None,
                 break
             group = posixpath.dirname(group)
         else:
-            return None  
+            return None
 
     if rlimit_as is None:
         try:
@@ -224,7 +193,7 @@ def _linux_onnx_available_bytes(*, read_text=None, rlimit_as=None,
     soft = rlimit_as[0]
     if type(soft) is not int:
         return None
-    
+
     if 0 <= soft < (1 << 60):
         if page_bytes is None:
             try:
@@ -275,7 +244,7 @@ def _available_physical_memory_bytes():
     if sys.platform.startswith('linux'):
         return _linux_onnx_available_bytes()
 
-    
+
     try:
         import psutil
         available = int(psutil.virtual_memory().available)
@@ -293,54 +262,62 @@ def _available_physical_memory_bytes():
     return None
 
 
+class OnnxAdmissionError(ValueError):
+    """Inspection was deferred by a capacity guard; no graph was parsed."""
+
+
 def _admit_onnx_preparse(path):
     """Refuse unsupported size/RAM BEFORE any full ONNX protobuf allocation.
 
-    This is a capacity admission, not immutable compiler-window custody. The
-    subsequent decoder still reopens the file, so source identity/security is
-    covered separately by selected-source closure work (I-02 remains open).
+    This check estimates capacity before parsing. The converter validates the
+    selected source and any external data separately.
     """
     source = os.stat(path)
     if not stat.S_ISREG(source.st_mode) or source.st_size <= 0:
         raise ValueError('ONNX pre-parse needs a nonempty regular source file')
     size = source.st_size
     if size > MAX_ONNX_PREPARSE_BYTES:
-        raise ValueError('ONNX pre-parse source size exceeds bounded %d-byte '
-                         'protobuf admission quota' % MAX_ONNX_PREPARSE_BYTES)
+        raise OnnxAdmissionError(
+            'ONNX pre-parse source size exceeds bounded %d-byte '
+            'protobuf admission quota' % MAX_ONNX_PREPARSE_BYTES)
     if size > SMALL_ONNX_PREPARSE_BYTES:
         available = _available_physical_memory_bytes()
         needed = max(MIN_LARGE_ONNX_FREE_RAM_BYTES,
                      ONNX_PREPARSE_RAM_MULTIPLIER * size +
                      ONNX_PREPARSE_RAM_HEADROOM_BYTES)
         if available is None or available < needed:
-            raise ValueError('ONNX pre-parse cannot establish sufficient free '
-                             'physical RAM before materializing %d bytes: '
-                             'need at least %d, observed %s' %
-                             (size, needed, available))
+            raise OnnxAdmissionError(
+                'ONNX pre-parse cannot establish sufficient free '
+                'physical RAM before materializing %d bytes: '
+                'need at least %d, observed %s' % (size, needed, available))
     return size
 
 
 class Recognised(object):
     """What the file is, and - when we cannot use it - what to do about it."""
 
-    def __init__(self, kind, detail='', advice=(), family=''):
+    def __init__(self, kind, detail='', advice=(), family='', status=''):
         self.kind = kind
         self.detail = detail
         self.advice = list(advice)
         self.family = family
+        self.status = status
 
     @property
     def convertible(self):
         return self.kind in (ONNX, TFLITE)
 
     def as_dict(self):
-        return {
+        answer = {
             'kind': self.kind,
             'detail': self.detail,
             'advice': list(self.advice),
             'family': self.family,
             'convertible': self.convertible,
         }
+        if self.status:
+            answer['status'] = self.status
+        return answer
 
 
 def _paddle_answer(where):
@@ -351,13 +328,9 @@ def _paddle_answer(where):
         '    paddle2onnx --model_dir DIR --model_filename inference.json'
         ' --params_filename inference.pdiparams --save_file model.onnx'
         ' --opset_version 11',
-        'Under Windows this step has to run inside WSL: measured 31.08.2026, the'
-        ' paddle2onnx wheel does not load there (paddle 3.3.1 answers "DLL load'
-        ' failed", paddle 3.0.0 answers "version too old"). The same pair works'
-        ' under Ubuntu 24.04.',
-        'For PP-OCR RECOGNITION models two conditions are needed TOGETHER, and'
-        ' neither alone is enough: an opset of 11 or above AND the internal'
-        ' Identity nodes stripped. Eight attempts along one axis all failed.',
+        'On Windows, run the Paddle export in WSL with Ubuntu 24.04.',
+        'PP-OCR recognition models require ONNX opset 11 or later and removal'
+        ' of internal Identity nodes.',
     ]
     return Recognised(PADDLE, 'PaddlePaddle inference model in %s' % where, advice)
 
@@ -413,8 +386,7 @@ def _admit_pytorch_zip_directory(stream):
             end[zipfile._ECD_DISK_START] != 0):
         raise zipfile.BadZipFile('multi-disk ZIP is not an approved source')
 
-    
-    
+
     overhead = (zipfile.sizeEndCentDir64 + zipfile.sizeEndCentDir64Locator
                 if end[zipfile._ECD_SIGNATURE] == zipfile.stringEndArchive64
                 else 0)
@@ -431,7 +403,7 @@ def _admit_pytorch_zip_directory(stream):
         if (len(header) != zipfile.sizeCentralDir or
                 header[:4] != zipfile.stringCentralDir):
             raise zipfile.BadZipFile('invalid ZIP central-directory signature')
-        
+
         name_bytes, extra_bytes, comment_bytes = struct.unpack_from(
             '<HHH', header, 28)
         span = (zipfile.sizeCentralDir + name_bytes + extra_bytes +
@@ -507,13 +479,29 @@ def _pytorch_answer(family, command):
 def _onnx_answer(path):
     """ONNX is confirmed by parsing, not by elimination."""
     try:
+        _admit_onnx_preparse(path)
+    except OnnxAdmissionError as why:
+        return Recognised(
+            UNKNOWN, 'ONNX inspection deferred by the capacity guard',
+            [str(why), 'No ONNX parsing was attempted; file validity is not established.',
+             'Retry only after the reported capacity requirement is met.'],
+            status='DEFERRED')
+    except (OSError, ValueError) as why:
+        return Recognised(
+            UNKNOWN, 'ONNX inspection could not read the selected source',
+            [str(why), 'No ONNX parsing was attempted.'])
+    try:
         import onnx
     except ImportError:
         return Recognised(UNKNOWN, 'the onnx package is missing, so nothing can confirm this file',
                           ['Install onnx, then try again.'])
     try:
-        _admit_onnx_preparse(path)
         onnx.load(path, load_external_data=False)
+    except MemoryError:
+        return Recognised(
+            UNKNOWN, 'ONNX inspection ran out of memory',
+            ['The parser could not complete; file validity is not established.',
+             'Free memory before trying Recognise again.'], status='DEFERRED')
     except Exception as why:
         return Recognised(
             UNKNOWN,
@@ -538,10 +526,7 @@ def recognise(path):
                           ['Point us at a model FILE, or at a Paddle inference'
                            ' directory holding %s.' % PADDLE_WEIGHTS])
 
-    
-    
-    
-    
+
     candidate = os.stat(path)
     if not stat.S_ISREG(candidate.st_mode):
         raise ValueError('selected model path must be a regular file, not a '

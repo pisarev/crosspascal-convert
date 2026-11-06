@@ -1,56 +1,21 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Is the requested build target reachable on THIS machine, and if not, why.
+"""Describe build and verification support for a selected deployment target.
 
-WHY THIS EXISTS. The converter builds for a target - an OS, a CPU architecture, a
-device (CPU, or a CUDA card of a particular sm). Most conceivable targets are not
-the machine the build runs on, and the toolchain does not say so kindly: a CUDA
-build with no card, or a foreign-OS build, dies somewhere deep with a message
-about a missing driver or an unknown triple, halfway through. This module answers
-the honest question BEFORE the build starts: reachable here, compilable-but-not-
-verifiable here, or not local at all - and names the reason in one sentence.
-
-THE MATRIX IS NOT INVENTED HERE. Its five verdicts are the honest matrix the owner
-accepted in state/MASTER-DESIGN.md (section "ТАБЛИЦА ЦЕЛЕЙ + МАТРИЦА ДОСТИЖИМОГО"):
-same OS+arch generic CPU is local; a foreign CPU of the same arch is usually
-reachable through an -mcpu target with a final check on that CPU; a foreign
-architecture needs a cross-toolchain and a sysroot and is not the MVP; a CUDA sm
-without the card COMPILES here but can only be tuned, benchmarked and verified on
-that card; a foreign OS needs a native, VM or CI runner, which v1 does not
-orchestrate.
-
-V1 IS LOCAL AND HONEST. It orchestrates no remote runners. classify_target is a
-PURE function - the same target and host always yield the same verdict, with no
-look at the running machine - so it can be tested exhaustively and can answer for
-ANY target, not only the one being built now. host() gathers the machine's own
-facts and is the only impure part. The recipe feeds classify_target the host's own
-OS and arch today, because there is no flag yet to request a foreign one, so in
-practice a local build is classified LOCAL or - for a cardless CUDA target -
-COMPILE_ONLY. The other verdicts are reached the moment a foreign target is asked
-for, which is exactly what a target table will do next.
-
-Only the standard library is used. The CUDA-arch detection in host() is
-best-effort: it asks TVM when TVM is importable and answers None otherwise rather
-than failing - a missing card and a missing TVM both read simply as "no local
-card".
+The classifier uses the supplied host and target facts. A CUDA build can
+target another architecture, but local execution checks require a matching
+device. A different operating system requires a separate build runner.
+The host probe reports the first CUDA device that the TVM runtime can use.
 """
 
 import platform
 import re
-
-
-
 
 LOCAL = 'LOCAL'
 COMPILE_ONLY = 'COMPILE_ONLY'
 CROSS_CPU = 'CROSS_CPU'
 RUNNER_NEEDED = 'RUNNER_NEEDED'
 UNSUPPORTED_V1 = 'UNSUPPORTED_V1'
-
-
-
-
-
 
 _ARCH_ALIASES = {
     'amd64': 'x86_64',
@@ -168,9 +133,6 @@ def recommend_target(host_facts, req_device=None, req_sm=None):
         'cuda_toolchain_check_required': device in ('cuda', 'cudnn'),
     }
 
-
-
-
 TARGET_PROFILE_VERSION = 1
 
 
@@ -183,9 +145,9 @@ def _cpu_codegen_module():
 def admit_cpu_codegen(mode='host', mcpu=None, *, host_arch=None, llvm_codegen=None):
     """Admit an x86_64 LLVM CPU codegen target, without claiming destination UAT.
 
-    This is an independent preflight foundation; existing BuildPlan callers do
-    not yet select or consume it.  In particular, a valid LLVM CPU name is NOT
-    proof that a destination processor implements its instructions.
+    BuildPlan uses this check before admitting an explicit tuned CPU target.
+    A valid LLVM CPU name identifies a compiler target. Runtime compatibility
+    requires a separate check on the machine that will execute the module.
 
     `host` retains the historically optimized tuned target, `generic` uses the
     x86-64 baseline, and `explicit` requires a caller-selected LLVM CPU name.
@@ -390,36 +352,22 @@ def classify_target(req_os, req_arch, req_device, req_sm,
     device = str(device).strip().lower()
     req_sm = validate_target_sm(device, req_sm)
 
-    
-    
-    
-    
-    
     if not arch_match:
         return (UNSUPPORTED_V1,
                 "target architecture %s is not this host's %s; a foreign CPU "
                 "architecture needs a cross-toolchain and a matching sysroot, "
                 "which is not part of the local v1" % (req_arch, host_arch))
 
-    
-    
     if not os_match:
         return (RUNNER_NEEDED,
                 "target OS %s is not this host's %s; building for another OS "
                 "needs a native, VM or CI runner of it, which the local v1 does "
                 "not orchestrate" % (req_os, host_os))
 
-    
+
     if device in ('cuda', 'cudnn'):
         return _classify_cuda(req_sm, host_cuda_arch)
 
-    
-    
-    
-    
-    
-    
-    
     return (LOCAL,
             "a CPU target on this host's own OS and architecture; it builds, "
             "tunes and verifies here")
@@ -447,7 +395,7 @@ def _classify_cuda(req_sm, host_cuda_arch):
         return (LOCAL, reason)
 
     if not have:
-        gap = "this host has no CUDA card"
+        gap = "the current runtime could not use a local CUDA device"
     else:
         gap = ("this host's CUDA card is %s, not the requested %s"
                % (host_cuda_arch, req_sm))

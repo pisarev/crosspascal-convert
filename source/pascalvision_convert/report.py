@@ -1,17 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""What was done, how it ended, and the numbers that prove it.
-
-WHY A TYPE RATHER THAN PRINTING AS WE GO. The same work is shown by two faces:
-the build recipe writes to a log, the wizard draws steps on a page. If the core
-printed, each face would receive somebody else's format and bolt a parser onto
-it - a second account of one job.
-
-THREE STATES, NOT TWO. Between "done" and "refused" there has to be
-"NOT CHECKED": a step that never ran must not be filed under success. This is
-not pedantry. A gate of ours once stayed green while checking nothing, and the
-silence read as good news for a month.
-"""
+"""Conversion reports for the CLI and wizard. Each step can be done, refused or unchecked."""
 
 DONE = 'done'
 REFUSED = 'refused'
