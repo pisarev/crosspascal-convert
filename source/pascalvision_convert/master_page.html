@@ -340,7 +340,12 @@ details .card:last-child{margin-bottom:0}
   <section class="card" id="model">
     <h2>Model</h2>
     <div class="toolbar">
-      <button type="button" class="btn" id="btn-download-qwen">Download Qwen 0.5B</button>
+        <label for="qwen-download-model">Official Qwen2.5 checkpoint</label>
+        <select id="qwen-download-model">
+          <option value="qwen2.5-0.5b">Qwen2.5-0.5B-Instruct</option>
+          <option value="qwen2.5-1.5b">Qwen2.5-1.5B-Instruct</option>
+        </select>
+        <button type="button" class="btn" id="btn-download-qwen">Download selected Qwen model</button>
       <span class="note" id="qwen-download-note">Qwen2.5-0.5B-Instruct,
         revision 7ae5576, Apache 2.0. About 1 GB; all file checksums are checked.
         You can also select an existing folder below.</span>
@@ -599,6 +604,7 @@ details .card:last-child{margin-bottom:0}
         <select id="llm-profile">
           <option value="">Family defaults</option>
           <option value="qwen2.5-0.5b-cuda-f32-64-v1">Qwen 0.5B (CUDA, FP32, 64 tokens)</option>
+          <option value="qwen2.5-1.5b-cuda-f32-64-v1">Qwen 1.5B (CUDA, FP32, 64 tokens)</option>
         </select>
       </div>
       <span class="note">The Qwen CUDA profile uses batch 1 and 64 tokens for both
@@ -1238,11 +1244,14 @@ function paintDtypeNote(){
 
 
   const note = document.getElementById('dtype-note');
-  const namedProfile = document.getElementById('llm-profile').value ===
-    'qwen2.5-0.5b-cuda-f32-64-v1';
+  const profile = document.getElementById('llm-profile').value;
+  const namedProfile = ['qwen2.5-0.5b-cuda-f32-64-v1',
+    'qwen2.5-1.5b-cuda-f32-64-v1'].includes(profile);
   note.textContent = namedProfile
     ? (chosenDtype === 'float32'
-      ? 'The Qwen CUDA profile uses FP32; parameters occupy about 1.84 GiB.'
+      ? (profile === 'qwen2.5-1.5b-cuda-f32-64-v1'
+        ? 'The Qwen 1.5B CUDA profile uses FP32; packed parameters occupy about 5.75 GiB.'
+        : 'The Qwen 0.5B CUDA profile uses FP32; packed parameters occupy about 1.84 GiB.')
       : 'This named profile requires float32. Preview rejects a different precision.')
     : 'Precision must be supported by the selected model and consumer. Review the resolved profile in Preview.';
 }
@@ -1536,16 +1545,28 @@ document.getElementById('btn-quit').onclick = async () => {
   }
 };
 
+document.getElementById('qwen-download-model').onchange = () => {
+  const name = document.getElementById('qwen-download-model').value;
+  document.getElementById('qwen-download-note').textContent =
+    name === 'qwen2.5-1.5b'
+      ? 'Qwen2.5-1.5B-Instruct, revision 989aa79, Apache 2.0. About 3.1 GB; all file SHA-256 checks are required.'
+      : 'Qwen2.5-0.5B-Instruct, revision 7ae5576, Apache 2.0. About 1 GB; all file SHA-256 checks are required.';
+};
 document.getElementById('btn-download-qwen').onclick = async () => {
   const button = document.getElementById('btn-download-qwen');
   const note = document.getElementById('qwen-download-note');
+  const model = document.getElementById('qwen-download-model').value;
   button.disabled = true;
-  const started = await ask('/api/model-download', {model_key: 'qwen2.5-0.5b'});
+  const started = await ask('/api/model-download', {model_key: model});
   if (started.trouble) { note.textContent = started.trouble; button.disabled = false; return; }
   while (true) {
     const result = await ask('/api/model-download-progress?job=' + encodeURIComponent(started.job));
     if (result.trouble) { note.textContent = result.trouble; break; }
-    if (result.finished) {
+    if (result.status === 'ERROR') {
+      note.textContent = result.trouble || 'The pinned model download failed.';
+      break;
+    }
+    if (result.finished && result.path) {
       note.textContent = 'The pinned model files are ready.';
       document.getElementById('model-path').value = result.path;
       document.getElementById('btn-recognise').click();
@@ -1710,8 +1731,12 @@ async function recogniseModel(){
     fullBuild = true;
     recognisedModelKey = data.model_key || data.detail || 'Language model';
     paintRouteStats();
-    if (data.model_key === 'qwen2.5-0.5b') {
-      document.getElementById('llm-profile').value = 'qwen2.5-0.5b-cuda-f32-64-v1';
+    if (data.model_key === 'qwen2.5-0.5b' ||
+        data.model_key === 'qwen2.5-1.5b') {
+      document.getElementById('llm-profile').value =
+        data.model_key + '-cuda-f32-64-v1';
+      document.getElementById('qwen-download-model').value = data.model_key;
+      document.getElementById('qwen-download-model').onchange();
       document.getElementById('llm-profile').onchange();
     } else {
       document.getElementById('llm-profile').value = '';
@@ -2135,7 +2160,8 @@ function renderLlmSettings(){
   const rows = document.getElementById('llm-settings-rows');
   rows.textContent = '';
   const profile = document.getElementById('llm-profile').value;
-  const namedProfile = profile === 'qwen2.5-0.5b-cuda-f32-64-v1';
+  const namedProfile = ['qwen2.5-0.5b-cuda-f32-64-v1',
+    'qwen2.5-1.5b-cuda-f32-64-v1'].includes(profile);
   rows.appendChild(row('Model', recognisedModelKey || 'Recognised language model'));
   rows.appendChild(row('Profile', profile || 'Family defaults; resolved in Preview'));
   rows.appendChild(row('Target', document.getElementById('target-os').value + ' / ' +
@@ -2143,7 +2169,8 @@ function renderLlmSettings(){
     (chosenTarget === 'cuda' ? ' / ' + document.getElementById('target-arch').value : '')));
   rows.appendChild(row('Precision', chosenDtype));
   if (namedProfile) {
-    rows.appendChild(row('Model layers', 'All 24'));
+    rows.appendChild(row('Model layers',
+      profile === 'qwen2.5-1.5b-cuda-f32-64-v1' ? 'All 28' : 'All 24'));
     rows.appendChild(row('Context / prefill chunk', '64 / 64 tokens'));
     rows.appendChild(row('Batch size', '1'));
   }

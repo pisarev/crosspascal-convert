@@ -59,6 +59,12 @@ REGISTRY = {
         config=qwen2_model.Qwen2Config, model=qwen2_model.Qwen2ForCausalLM,
         plan=None, context=2048, chunk=512,
         tokenizer='byte_bpe', adapter='qwen2'),
+    'qwen2.5-1.5b': dict(
+        name='Qwen2.5-1.5B-Instruct', dir='qwen-1.5b',
+        repo='Qwen/Qwen2.5-1.5B-Instruct',
+        config=qwen2_model.Qwen2Config, model=qwen2_model.Qwen2ForCausalLM,
+        plan=None, context=64, chunk=64,
+        tokenizer='byte_bpe', adapter='qwen2'),
     'gemma-2-2b': dict(
         name='Gemma-2-2b-it', dir='gemma-2-2b',
         repo='google/gemma-2-2b-it',
@@ -79,7 +85,7 @@ def _refuse_native_output_collisions(out_dir, model_key, target):
         if (not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode) or
                 getattr(info, 'st_file_attributes', 0) & 0x400):
             raise ValueError('native LLM output root is not a plain directory')
-    stem = 'qwen2' if model_key == 'qwen2.5-0.5b' else model_key
+    stem = 'qwen2' if model_key in ('qwen2.5-0.5b', 'qwen2.5-1.5b') else model_key
     for name in ('%s-%s.dll' % (stem, target), 'model.json',
                  'params.bin', 'params.json', 'params.index',
                  'manifest.txt', 'manifest.json'):
@@ -250,6 +256,12 @@ def main():
     elif args.held_hf_source:
         raise ValueError('held HF private source requires owner BuildPlan and '
                          'selected HF SHA-256; direct legacy CLI cannot claim lock')
+    if args.model == 'qwen2.5-1.5b' and (
+            owner_plan is None or
+            (owner_plan['options'].get('llm') or {}).get('profile_id') !=
+            llm_build_profile.QWEN_15_CUDA_PROFILE):
+        raise ValueError('Qwen2.5-1.5B requires its exact approved CUDA FP32 '
+                         '64-token BuildPlan profile')
     compiler_source = source
     if args.held_hf_source:
         compiler_source = checked_native_held_hf_source(
@@ -359,7 +371,8 @@ def main():
         executable = relax.build(mod, target=target)
 
 
-    loader_stem = 'qwen2' if args.model == 'qwen2.5-0.5b' else args.model
+    loader_stem = ('qwen2' if args.model in ('qwen2.5-0.5b', 'qwen2.5-1.5b')
+                   else args.model)
     library = os.path.join(out_dir, '%s-%s.dll' % (loader_stem, device_name))
     with tempfile.TemporaryDirectory(prefix='.link-', dir=out_dir) as link_dir:
         linked = os.path.join(link_dir, os.path.basename(library))
@@ -378,6 +391,7 @@ def main():
         'arch': build_arch,
         'dtype': args.dtype, 'built': time.strftime('%Y-%m-%d %H:%M:%S'),
         'hidden_size': config.hidden_size,
+        'intermediate_size': config.intermediate_size,
         'num_hidden_layers': config.num_hidden_layers,
         'num_attention_heads': config.num_attention_heads,
         'num_key_value_heads': config.num_key_value_heads,

@@ -5,6 +5,7 @@ import hashlib
 import importlib.abc
 import io
 import json
+import math
 import os
 from pathlib import Path
 import struct
@@ -33,6 +34,7 @@ import import_adapters
 from pascalvision_convert import app_paths, build_plan, consumer_acceptance
 from pascalvision_convert import cuda_preflight, llm_build_profile, llm_family_profile
 from pascalvision_convert import model_sources, recipe, wizard_session, bundle_publication
+from pascalvision_convert import llm_bundle_contract, hf_closure
 from pascalvision_convert.llm_helpers import weights
 
 HOST = {'os': 'windows', 'arch': 'x86_64', 'cuda_arch': 'sm_75'}
@@ -231,6 +233,158 @@ class WizardContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             model_sources.match_source(scan, 'qwen2.5-0.5b')
 
+    def test_qwen15_official_pins_and_tampered_source_are_refused(self):
+        catalog = model_sources.catalog_model('qwen2.5-1.5b')
+        self.assertEqual(catalog['repository'], 'Qwen/Qwen2.5-1.5B-Instruct')
+        self.assertEqual(catalog['revision'],
+                         '989aa7980e4cf806f80c7fef2b1adb7bc71aa306')
+        self.assertEqual(catalog['tree_sha256'],
+                         '5f0180b3ad3b8652860444471fe9e2dd2e5ce325e5e5dccd2be7190ef437cf0d')
+        entries = [{key: row[key] for key in ('path', 'bytes', 'sha256')}
+                   for row in catalog['files']]
+        canonical = dict(schema=hf_closure.SCHEMA, schema_version=1,
+                         model_key='qwen2.5-1.5b', layout='single',
+                         entries=sorted(entries, key=lambda row: row['path']))
+        tree = hashlib.sha256(json.dumps(
+            canonical, sort_keys=True, ensure_ascii=False, separators=(',', ':'),
+            allow_nan=False).encode('utf-8')).hexdigest()
+        self.assertEqual(tree, catalog['tree_sha256'])
+        scan = dict(model_key='qwen2.5-1.5b', entries=entries, tree_sha256=tree)
+        self.assertEqual(model_sources.match_source(scan, 'qwen2.5-1.5b')['revision'],
+                         catalog['revision'])
+        scan['entries'][3]['sha256'] = '0' * 64
+        with self.assertRaisesRegex(ValueError, 'pinned official revision'):
+            model_sources.match_source(scan, 'qwen2.5-1.5b')
+
+    def test_qwen25_structural_identification_and_cross_profile_rejection(self):
+        for key in ('qwen2.5-0.5b', 'qwen2.5-1.5b'):
+            with self.subTest(key=key):
+                config = copy.deepcopy(llm_family_profile._PROFILES[key])
+                self.assertEqual(llm_family_profile.identify_model_key(config), key)
+                source = self.root / key
+                source.mkdir()
+                (source / 'config.json').write_text(json.dumps(config), encoding='utf-8')
+                self.assertEqual(import_adapters.LLMImportAdapter()._key_for(str(source)),
+                                 key)
+        config = copy.deepcopy(llm_family_profile._PROFILES['qwen2.5-1.5b'])
+        config['hidden_size'] = 896
+        with self.assertRaises(ValueError):
+            llm_family_profile.identify_model_key(config)
+
+    def test_qwen15_explicit_profile_preview_buildplan_binding(self):
+        profile = llm_build_profile.QWEN_15_CUDA_PROFILE
+        self.assertEqual(llm_build_profile.select(profile)['model_key'], 'qwen2.5-1.5b')
+        with self.assertRaises(ValueError):
+            llm_build_profile.select(profile, model_key='qwen2.5-0.5b')
+        cfg = copy.deepcopy(llm_family_profile._PROFILES['qwen2.5-1.5b'])
+        folder = self.root / 'Qwen-verified-structure'
+        folder.mkdir()
+        (folder / 'config.json').write_text(json.dumps(cfg), encoding='utf-8')
+        executable = self.root / 'compiler.exe'
+        executable.write_bytes(b'fixture - do not execute')
+        args = master._llm_plan_arguments({
+            'full_build': True, 'path': str(folder), 'llm_profile': profile,
+            'llm_python': str(executable)})
+        plan = build_plan.resolve(
+            HOST, target='cuda', req_sm='sm_89', route='family_full_build',
+            source=str(folder), dtype='float32', **args)
+        self.assertEqual(build_plan.validate_recorded(plan), plan)
+        self.assertEqual(plan['options']['llm']['profile_id'], profile)
+        self.assertEqual(plan['target_profile']['deployment']['sm'], 'sm_89')
+        build_plan.validate_native_family_execution(
+            plan, source=str(folder), target='cuda', req_sm='sm_89',
+            dtype='float32', host_os='Windows', host_arch='AMD64',
+            model_key='qwen2.5-1.5b', context=64, chunk=64)
+        with self.assertRaises(ValueError):
+            build_plan.resolve(HOST, target='cuda', req_sm='sm_89',
+                               route='family_full_build', source=str(folder),
+                               dtype='float16', **args)
+
+    def test_qwen15_native_packed_layout_and_legacy_05_metadata(self):
+        profile = llm_family_profile._PROFILES['qwen2.5-1.5b']
+        model = {field: profile[field] for field in
+                 ('hidden_size', 'intermediate_size', 'num_hidden_layers',
+                  'num_attention_heads', 'num_key_value_heads', 'vocab_size',
+                  'rope_theta', 'tie_word_embeddings', 'bos_token_id',
+                  'eos_token_id')}
+        model['head_dim'] = 128
+        llm_bundle_contract._validate_qwen_metadata(model, 'qwen2.5-1.5b')
+        layout = llm_bundle_contract._qwen_parameter_layout('qwen2.5-1.5b')
+        self.assertEqual(len(layout), 28 * 7 + 2)
+        self.assertEqual(layout[0], ('model.embed_tokens.weight', [151936, 1536]))
+        self.assertEqual(layout[1], ('model.layers.0.self_attn.c_attn.weight',
+                                     [2048, 1536]))
+        self.assertEqual(layout[-1], ('model.norm.weight', [1536]))
+        del model['intermediate_size']
+        with self.assertRaisesRegex(ValueError, 'intermediate_size'):
+            llm_bundle_contract._validate_qwen_metadata(model, 'qwen2.5-1.5b')
+        legacy = copy.deepcopy(llm_family_profile._PROFILES['qwen2.5-0.5b'])
+        legacy['head_dim'] = 64
+        del legacy['intermediate_size']
+        llm_bundle_contract._validate_qwen_metadata(legacy, 'qwen2.5-0.5b')
+        self.assertEqual(len(llm_bundle_contract._qwen_parameter_layout(
+            'qwen2.5-0.5b')), 24 * 7 + 2)
+
+    def test_qwen15_native_output_index_sha_and_tensor_shape_custody(self):
+        """Validate a realistic 198-tensor index without allocating model bytes."""
+        shapes = llm_bundle_contract._qwen_parameter_layout('qwen2.5-1.5b')
+        tensors = []
+        lines = ['# count dtype target, then: name offset nbytes ndim dims...',
+                 '%d float32 cuda' % len(shapes)]
+        offset = 0
+        for name, shape in shapes:
+            size = 4 * math.prod(shape)
+            tensors.append({'name': name, 'dtype': 'float32', 'shape': list(shape),
+                            'offset': offset, 'nbytes': size})
+            lines.append('%s %d %d %d %s' %
+                         (name, offset, size, len(shape),
+                          ' '.join(str(dim) for dim in shape)))
+            offset += size
+        self.assertEqual(len(tensors), 198)
+        self.assertGreater(offset, 5 * (1024 ** 3))
+        source_sha = 'a' * 64
+        model = {'model_key': 'qwen2.5-1.5b',
+                 'llm_profile_id': llm_build_profile.QWEN_15_CUDA_PROFILE,
+                 'param_order': [name for name, _ in shapes],
+                 'params_bytes': offset, 'params_sha256': source_sha}
+        params = {'dtype': 'float32', 'total_bytes': offset,
+                  'sha256': source_sha, 'tensors': tensors}
+        with (mock.patch.object(llm_bundle_contract, '_json', return_value=params),
+              mock.patch.object(llm_bundle_contract, '_regular',
+                                return_value=(self.root / 'params.bin', offset)),
+              mock.patch.object(llm_bundle_contract, '_read_bounded',
+                                return_value=('\n'.join(lines) + '\n').encode('utf-8')),
+              mock.patch.object(llm_bundle_contract, '_hash_file',
+                                return_value=source_sha) as hash_file):
+            llm_bundle_contract._check_parameters(
+                self.root, model, 'float32', 'cuda', model_key='qwen2.5-1.5b')
+            hash_file.assert_called_once_with(
+                self.root, 'params.bin', approved_size=offset,
+                approved_sha256=source_sha)
+            tensors[1]['shape'][0] += 1
+            with self.assertRaisesRegex(ValueError, 'tensor shape'):
+                llm_bundle_contract._check_parameters(
+                    self.root, model, 'float32', 'cuda', model_key='qwen2.5-1.5b')
+            tensors[1]['shape'][0] -= 1
+            params['total_bytes'] -= 4
+            with self.assertRaisesRegex(ValueError, 'packed byte count'):
+                llm_bundle_contract._check_parameters(
+                    self.root, model, 'float32', 'cuda', model_key='qwen2.5-1.5b')
+
+    def test_download_does_not_reuse_different_qwen_profile_job(self):
+        responder = object.__new__(master.Responder)
+        responder.path = '/api/model-download'
+        responder._read_body = lambda: {'model_key': 'qwen2.5-1.5b'}
+        output = []
+        responder._send = lambda value: output.append(json.loads(value))
+        with (mock.patch.dict(master.MODEL_DOWNLOADS, {
+                'held': {'finished': False, 'status': 'DOWNLOADING',
+                         'model_key': 'qwen2.5-0.5b'}}, clear=True),
+              mock.patch.object(master.threading, 'Thread') as thread):
+            responder._handle_post()
+            self.assertIn('different official Qwen', output[-1]['trouble'])
+            thread.assert_not_called()
+
     def tiny_catalog(self):
         revision = 'a' * 40
         payloads = {'config.json': b'{"fixture":true}', 'LICENSE': b'test license'}
@@ -284,6 +438,106 @@ class WizardContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bundle_publication.inspect_selected_native_consumer_kit(
                 str(kit), model_key='qwen2.5-0.5b', device='cuda')
+
+    def test_qwen15_consumer_kit_requires_own_exact_source_marker(self):
+        kit = self.root / 'kit-15'
+        kit.mkdir()
+        names = {'tvm_runtime.dll', 'tvm_runtime_extra.dll', 'tvm_ffi.dll',
+                 'tvm_runtime_cuda.dll', 'tokenizer-tokens.bin',
+                 'tokenizer-tokens.index', 'tokenizer-merges.bin',
+                 'tokenizer-specials.txt', 'tokenizer.index',
+                 'LICENSE-tvm-test.txt', 'NOTICE-tvm-test.txt'}
+        for name in names:
+            (kit / name).write_bytes(b'fixture consumer bytes, not runtime')
+        license_bytes = b'fixture source license, no model downloaded'
+        legal_name = 'LICENSE-Qwen2.5-1.5B-Instruct.txt'
+        (kit / legal_name).write_bytes(license_bytes)
+        catalog = copy.deepcopy(model_sources.catalog_model('qwen2.5-1.5b'))
+        catalog['license_file']['bytes'] = len(license_bytes)
+        catalog['license_file']['sha256'] = hashlib.sha256(license_bytes).hexdigest()
+        marker = {
+            'schema': 'crosspascal-qwen-model-source-v1',
+            'repository': catalog['repository'],
+            'revision': catalog['revision'],
+            'source_tree_sha256': catalog['tree_sha256'],
+            'files': [{'name': row['path'], 'bytes': row['bytes'],
+                       'sha256': row['sha256'], 'url': row['url']}
+                      for row in catalog['files']],
+            'license': {'file': legal_name, **{
+                key: catalog['license_file'][key]
+                for key in ('bytes', 'sha256', 'url')}},
+        }
+        marker_path = kit / 'MODEL-SOURCE.json'
+        marker_path.write_text(json.dumps(marker), encoding='utf-8')
+        with mock.patch.object(model_sources, 'catalog_model', return_value=catalog):
+            bundle_publication.inspect_selected_native_consumer_kit(
+                str(kit), model_key='qwen2.5-1.5b', device='cuda')
+            
+            
+            llm_bundle_contract._validate_qwen15_source_marker(kit)
+            marker['repository'] = 'Qwen/Qwen2.5-0.5B-Instruct'
+            marker_path.write_text(json.dumps(marker), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'MODEL-SOURCE'):
+                bundle_publication.inspect_selected_native_consumer_kit(
+                    str(kit), model_key='qwen2.5-1.5b', device='cuda')
+            with self.assertRaisesRegex(ValueError, 'MODEL-SOURCE'):
+                llm_bundle_contract._validate_qwen15_source_marker(kit)
+            marker['repository'] = catalog['repository']
+            marker['files'][0]['sha256'] = '0' * 64
+            marker_path.write_text(json.dumps(marker), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'MODEL-SOURCE'):
+                llm_bundle_contract._validate_qwen15_source_marker(kit)
+            marker['files'][0]['sha256'] = catalog['files'][0]['sha256']
+            marker_path.write_text(json.dumps(marker), encoding='utf-8')
+            (kit / legal_name).write_bytes(b'tampered license with same length!!!'[:len(license_bytes)])
+            with self.assertRaises(ValueError):
+                llm_bundle_contract._validate_qwen15_source_marker(kit)
+
+    def test_qwen15_uses_default_installed_kit_without_modifying_it(self):
+        kit = self.root / 'installed'
+        cache = self.root / 'models'
+        source = self.root / 'source'
+        for directory in (kit, cache, source):
+            directory.mkdir()
+        key = 'qwen2.5-1.5b'
+        (source / 'config.json').write_text(
+            json.dumps(llm_family_profile._PROFILES[key]), encoding='utf-8')
+        shared = {'tvm_runtime.dll', 'tvm_runtime_extra.dll', 'tvm_ffi.dll',
+                  'tvm_runtime_cuda.dll', 'tokenizer-tokens.bin',
+                  'tokenizer-tokens.index', 'tokenizer-merges.bin',
+                  'tokenizer-specials.txt', 'tokenizer.index',
+                  'LICENSE-tvm-test.txt', 'NOTICE-tvm-test.txt'}
+        for name in shared:
+            (kit / name).write_bytes(b'fixture')
+        original_marker = b'{"repository":"Qwen/Qwen2.5-0.5B-Instruct"}'
+        (kit / 'MODEL-SOURCE.json').write_bytes(original_marker)
+        old_license = kit / 'LICENSE-Qwen2.5-0.5B-Instruct.txt'
+        old_license.write_bytes(b'fixture license')
+        official = copy.deepcopy(model_sources.catalog_model(key))
+        original_lookup = model_sources.catalog_model
+        official['license_file'].update(
+            bytes=old_license.stat().st_size,
+            sha256=hashlib.sha256(old_license.read_bytes()).hexdigest())
+        data = {'full_build': True, 'native_family_atomic': True,
+                'path': str(source), 'native_consumer_kit_source': str(kit),
+                'llm_profile': 'qwen2.5-1.5b-cuda-f32-64-v1'}
+        report = {'target': {'device': 'cuda'}}
+        with (mock.patch.object(master.app_paths, 'consumer_kit', return_value=kit),
+              mock.patch.object(master.app_paths, 'data_path', return_value=cache),
+              mock.patch.object(bundle_publication.bundle_atomic, '_require_ntfs'),
+              mock.patch.object(model_sources, 'catalog_model',
+                                side_effect=lambda k: official if k == key else original_lookup(k))):
+            result = master._selected_family_consumer(data, report)
+            self.assertEqual(master._selected_family_consumer(data, report), result)
+            self.assertEqual(result['key'], key)
+            derived = Path(result['source'])
+            self.assertEqual(derived.parent, cache)
+            llm_bundle_contract._validate_qwen15_source_marker(derived)
+            self.assertEqual((kit / 'MODEL-SOURCE.json').read_bytes(), original_marker)
+            self.assertTrue(old_license.is_file())
+            (derived / 'tvm_ffi.dll').write_bytes(b'tamper!')
+            with self.assertRaisesRegex(ValueError, 'differs from the installed runtime'):
+                master._selected_family_consumer(data, report)
 
     def test_weight_serialization_hash_matches_written_order(self):
         raw = struct.pack('<fff', 1.5, -3.0, 7.0)

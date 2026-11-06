@@ -555,7 +555,8 @@ def main(argv=None):
 
         if args.hf_selected_tree_sha256:
             try:
-                if adapter.name != 'llm' or key not in ('qwen2.5-0.5b', 'gemma-2-2b'):
+                if adapter.name != 'llm' or key not in (
+                        'qwen2.5-0.5b', 'qwen2.5-1.5b', 'gemma-2-2b'):
                     raise ValueError('selected HF SHA is only supported for Qwen/Gemma')
                 from . import hf_closure
                 chosen_hf = hf_closure.audit_selected_hf_source(

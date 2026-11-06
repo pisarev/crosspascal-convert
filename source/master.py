@@ -1025,7 +1025,7 @@ def _selected_hf_preview(data):
         return None
     path = str(data.get('path') or '').strip()
     key = import_adapters.LLMImportAdapter()._key_for(path)
-    if key not in ('qwen2.5-0.5b', 'gemma-2-2b'):
+    if key not in ('qwen2.5-0.5b', 'qwen2.5-1.5b', 'gemma-2-2b'):
         raise ValueError('Full native HF Preview requires a supported exact '
                          'Qwen2.5/Gemma2 model profile')
     from pascalvision_convert import hf_closure, hf_held_stage
@@ -1085,19 +1085,32 @@ def _selected_family_consumer(data, report):
     key = import_adapters.LLMImportAdapter()._key_for(path)
     if key is None:
         raise ValueError('native family atomic requires a recognised native LLM')
-    inventory = bundle_publication.inspect_selected_native_consumer_kit(
-        source, model_key=key, device=report['target']['device'])
+    device = report['target']['device']
+    if (key == 'qwen2.5-1.5b' and device == 'cuda' and
+            os.path.normcase(os.path.abspath(source)) ==
+            os.path.normcase(os.path.abspath(app_paths.consumer_kit()))):
+        source, inventory = bundle_publication.select_installed_qwen15_kit(
+            source, app_paths.data_path('models'))
+    else:
+        inventory = bundle_publication.inspect_selected_native_consumer_kit(
+            source, model_key=key, device=device)
     if data.get('llm_profile'):
         members = {item.path: item for item in inventory.members}
         license_file = model_sources.catalog_model(key)['license_file']
-        legal = members.get('LICENSE-Qwen2.5-0.5B-Instruct.txt')
+        legal_name = {
+            'qwen2.5-0.5b': 'LICENSE-Qwen2.5-0.5B-Instruct.txt',
+            'qwen2.5-1.5b': 'LICENSE-Qwen2.5-1.5B-Instruct.txt',
+        }.get(key)
+        if legal_name is None:
+            raise ValueError('Selected model has no approved license closure')
+        legal = members.get(legal_name)
         if (legal is None or legal.size != license_file['bytes'] or
                 legal.sha256 != license_file['sha256'] or
                 'MODEL-SOURCE.json' not in members or
                 not any(name.startswith('NOTICE-tvm-') for name in members)):
             raise ValueError('The supplied Qwen kit must include its pinned model license, source record, and TVM FFI notice')
     return {'source': os.path.abspath(source), 'key': key,
-            'device': report['target']['device'], 'inventory': inventory}
+            'device': device, 'inventory': inventory}
 
 
 def _issue_preview(data):
@@ -3261,15 +3274,27 @@ class Responder(BaseHTTPRequestHandler):
                 self.send_error(exc.status, str(exc))
                 return
         if route.path == '/api/model-download':
-            if type(body) is not dict or body.get('model_key') != 'qwen2.5-0.5b':
+            if type(body) is not dict or body.get('model_key') not in (
+                    'qwen2.5-0.5b', 'qwen2.5-1.5b'):
                 self._send(json.dumps({'trouble': 'Choose a model from the pinned catalog'}))
                 return
+            selected_model_key = body['model_key']
             with LOCK:
                 existing = next((key for key, value in MODEL_DOWNLOADS.items()
                                  if not value.get('finished')), None)
                 if existing is None:
                     number = secrets.token_hex(12)
-                    MODEL_DOWNLOADS[number] = {'finished': False, 'status': 'DOWNLOADING'}
+                    MODEL_DOWNLOADS[number] = {
+                        'finished': False, 'status': 'DOWNLOADING',
+                        'model_key': selected_model_key}
+                conflict = (existing is not None and
+                            MODEL_DOWNLOADS[existing].get('model_key') !=
+                            selected_model_key)
+            if conflict:
+                self._send(json.dumps({'trouble':
+                    'A different official Qwen model is already downloading. '
+                    'Choose that model or finish its transfer first.'}))
+                return
             if existing is not None:
                 self._send(json.dumps({'job': existing}))
                 return
@@ -3278,7 +3303,7 @@ class Responder(BaseHTTPRequestHandler):
                     with LOCK:
                         MODEL_DOWNLOADS[number].update(value)
                 try:
-                    result = model_sources.download('qwen2.5-0.5b', progress=progress)
+                    result = model_sources.download(selected_model_key, progress=progress)
                 except Exception as exc:
                     result = {'status': 'ERROR', 'trouble': str(exc)}
                 with LOCK:

@@ -405,7 +405,7 @@ def scan_selected_hf_source(directory, *, expected_model_key=None,
         model_key = llm_family_profile.identify_model_key(config)
     except ValueError as exc:
         raise HfClosureError('unsupported HF model config: %s' % exc) from exc
-    if model_key not in ('qwen2.5-0.5b', 'gemma-2-2b'):
+    if model_key not in ('qwen2.5-0.5b', 'qwen2.5-1.5b', 'gemma-2-2b'):
         _deny('unsupported HF model structural profile')
     if expected_model_key is not None and expected_model_key != model_key:
         _deny('HF source model profile differs from selected model')

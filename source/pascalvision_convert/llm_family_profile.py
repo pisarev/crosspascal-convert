@@ -22,6 +22,20 @@ _PROFILES = {
         'eos_token_id': 151645,
         'tie_word_embeddings': True,
     },
+    'qwen2.5-1.5b': {
+        'architectures': ['Qwen2ForCausalLM'],
+        'model_type': 'qwen2',
+        'hidden_size': 1536,
+        'intermediate_size': 8960,
+        'num_hidden_layers': 28,
+        'num_attention_heads': 12,
+        'num_key_value_heads': 2,
+        'vocab_size': 151936,
+        'rope_theta': 1000000,
+        'bos_token_id': 151643,
+        'eos_token_id': 151645,
+        'tie_word_embeddings': True,
+    },
     'gemma-2-2b': {
         'architectures': ['Gemma2ForCausalLM'],
         'model_type': 'gemma2',
@@ -76,9 +90,19 @@ def identify_model_key(config):
     declared = config.get('architectures') or []
     if not isinstance(declared, list):
         raise ValueError('HF architectures field must be a list')
-    for key, expected in _PROFILES.items():
-        if expected['architectures'][0] in declared:
+    candidates = [
+        key for key, expected in _PROFILES.items()
+        if expected['architectures'][0] in declared
+    ]
+    errors = []
+    for key in candidates:
+        try:
             return validate_exact_model(config, key)
+        except ValueError as exc:
+            errors.append(str(exc))
+    if errors:
+        raise ValueError('No approved native LLM structural profile matches: ' +
+                         '; '.join(errors))
     return None
 
 

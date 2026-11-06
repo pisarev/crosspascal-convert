@@ -738,14 +738,54 @@ def inspect_selected_native_consumer_kit(directory, *, model_key, device,
         expected.add('tvm_runtime_cuda.dll')
     licenses = {name for name in files if name.startswith('LICENSE-tvm-')}
     notices = {name for name in files if name.startswith('NOTICE-tvm-')}
-    model_files = ({'LICENSE-Qwen2.5-0.5B-Instruct.txt', 'MODEL-SOURCE.json'}
-                   if model_key == 'qwen2.5-0.5b' else set())
+    qwen_licenses = {
+        'qwen2.5-0.5b': 'LICENSE-Qwen2.5-0.5B-Instruct.txt',
+        'qwen2.5-1.5b': 'LICENSE-Qwen2.5-1.5B-Instruct.txt',
+    }
+    model_files = ({qwen_licenses[model_key], 'MODEL-SOURCE.json'}
+                   if model_key in qwen_licenses else set())
     selected_model_files = set(files) & model_files
     if (directories or not licenses or
             any(not name.startswith('LICENSE-tvm-') for name in licenses) or
             set(files) != expected | licenses | notices | selected_model_files or
             any(member.size <= 0 for member in files.values())):
         raise UnsafePublication('unapproved or incomplete selected native consumer kit')
+    if model_key == 'qwen2.5-1.5b':
+        
+        
+        
+        from .model_sources import catalog_model
+        from pathlib import Path
+        official = catalog_model(model_key)
+        name = qwen_licenses[model_key]
+        legal = files.get(name)
+        license_pin = official['license_file']
+        if (legal is None or legal.size != license_pin['bytes'] or
+                legal.sha256 != license_pin['sha256'] or
+                'MODEL-SOURCE.json' not in files):
+            raise UnsafePublication('Qwen 1.5B consumer kit lacks pinned license/source marker')
+        marker = llm_bundle_contract._json(
+            Path(directory), 'MODEL-SOURCE.json',
+            approved_sha256=files['MODEL-SOURCE.json'].sha256)
+        if (not isinstance(marker, dict) or
+                marker.get('schema') != 'crosspascal-qwen-model-source-v1' or
+                marker.get('repository') != official['repository'] or
+                marker.get('revision') != official['revision'] or
+                marker.get('source_tree_sha256') != official['tree_sha256'] or
+                not isinstance(marker.get('license'), dict) or
+                marker['license'].get('file') != name or
+                any(marker['license'].get(k) != license_pin[k]
+                    for k in ('bytes', 'sha256', 'url')) or
+                not isinstance(marker.get('files'), list) or
+                not all(isinstance(row, dict) and type(row.get('name')) is str
+                        for row in marker['files']) or
+                {row.get('name'): (row.get('bytes'), row.get('sha256'),
+                                   row.get('url'))
+                 for row in marker['files']} !=
+                {row['path']: (row['bytes'], row['sha256'], row['url'])
+                 for row in official['files']} or
+                len(marker['files']) != len(official['files'])):
+            raise UnsafePublication('Qwen 1.5B kit MODEL-SOURCE differs from the pinned official revision')
     if (expected_tree_sha256 is not None and
             inventory.tree_sha256 != expected_tree_sha256):
         raise UnsafePublication('selected native consumer kit SHA changed')
@@ -806,6 +846,82 @@ def stage_selected_native_consumer_kit(source_directory, private_stage,
                 target, model_key=model_key, device=device) != approved_inventory):
         raise UnsafePublication('selected consumer copy differs from approved SHA')
     return approved_inventory
+
+
+_QWEN_KIT_LOCK = threading.Lock()
+
+
+def select_installed_qwen15_kit(source, cache_directory):
+    """Use the installed runtime and shared Qwen tokenizer with 1.5B provenance."""
+    try:
+        inventory = inspect_selected_native_consumer_kit(
+            source, model_key='qwen2.5-1.5b', device='cuda')
+        return source, inventory
+    except UnsafePublication:
+        base = inspect_selected_native_consumer_kit(
+            source, model_key='qwen2.5-0.5b', device='cuda')
+
+    from .model_sources import catalog_model
+    official = catalog_model('qwen2.5-1.5b')
+    smaller = catalog_model('qwen2.5-0.5b')
+    by_name = {member.path: member for member in base.members}
+    old_name = 'LICENSE-Qwen2.5-0.5B-Instruct.txt'
+    legal_name = 'LICENSE-Qwen2.5-1.5B-Instruct.txt'
+    license_pin = official['license_file']
+    license_file = by_name.get(old_name)
+    tokenizer_inputs = {'tokenizer.json', 'tokenizer_config.json', 'vocab.json', 'merges.txt'}
+
+    def tokenizer_identity(model):
+        return {row['path']: (row['bytes'], row['sha256']) for row in model['files']
+                if row['path'] in tokenizer_inputs}
+
+    if (len(tokenizer_identity(official)) != len(tokenizer_inputs) or
+            tokenizer_identity(official) != tokenizer_identity(smaller) or
+            license_file is None or license_file.size != license_pin['bytes'] or
+            license_file.sha256 != license_pin['sha256'] or
+            'MODEL-SOURCE.json' not in by_name):
+        raise UnsafePublication('Installed Qwen kit cannot supply the pinned 1.5B source files')
+
+    parent = Path(cache_directory)
+    bundle_atomic._guard_existing_ancestors(parent)
+    target = parent / f'qwen15-kit-{base.tree_sha256}-{official["tree_sha256"][:12]}'
+    with _QWEN_KIT_LOCK:
+        if not os.path.lexists(target):
+            stage = parent / ('.crosspascal-stage-' + os.urandom(16).hex())
+            stage.mkdir(mode=0o700)
+            stage_selected_native_consumer_kit(
+                source, str(stage), base, model_key='qwen2.5-0.5b', device='cuda')
+            (stage / old_name).rename(stage / legal_name)
+            marker = {
+                'schema': 'crosspascal-qwen-model-source-v1',
+                'repository': official['repository'],
+                'revision': official['revision'],
+                'source_tree_sha256': official['tree_sha256'],
+                'files': [{'name': row['path'], 'bytes': row['bytes'],
+                           'sha256': row['sha256'], 'url': row['url']}
+                          for row in official['files']],
+                'license': {'file': legal_name, **{
+                    key: license_pin[key] for key in ('bytes', 'sha256', 'url')}},
+                'tokenizer_exports': {
+                    'format': 'CrossPascal byte BPE',
+                    'provenance': 'Shared pinned tokenizer inputs. Build validates the exports.',
+                    'model_weights_included': False,
+                },
+            }
+            (stage / 'MODEL-SOURCE.json').write_text(
+                json.dumps(marker, indent=2) + '\n', encoding='utf-8')
+            staged = inspect_selected_native_consumer_kit(
+                str(stage), model_key='qwen2.5-1.5b', device='cuda')
+            bundle_atomic.commit_staged_bundle(
+                stage, target, staged, required_files=(legal_name, 'MODEL-SOURCE.json'))
+        selected = inspect_selected_native_consumer_kit(
+            str(target), model_key='qwen2.5-1.5b', device='cuda')
+        common = {member.path: member for member in selected.members
+                  if member.path not in (legal_name, 'MODEL-SOURCE.json')}
+        if common != {name: member for name, member in by_name.items()
+                      if name not in (old_name, 'MODEL-SOURCE.json')}:
+            raise UnsafePublication('Prepared Qwen 1.5B kit differs from the installed runtime')
+    return str(target), selected
 
 
 def commit_native_family_stage(stage, destination, plan, *, model_key,

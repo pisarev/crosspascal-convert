@@ -11,6 +11,7 @@ Neither mode can issue VERIFIED from metadata.
 
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import stat
@@ -27,6 +28,10 @@ _FAMILIES = {
                       ('tokenizer-tokens.bin', 'tokenizer-tokens.index',
                        'tokenizer-merges.bin', 'tokenizer-specials.txt',
                        'tokenizer.index')),
+    'qwen2.5-1.5b': ('qwen2', 'qwen2', 'byte_bpe',
+                      ('tokenizer-tokens.bin', 'tokenizer-tokens.index',
+                       'tokenizer-merges.bin', 'tokenizer-specials.txt',
+                       'tokenizer.index')),
     'gemma-2-2b': ('gemma-2-2b', 'gemma2', 'sentencepiece',
                     ('tokenizer-tokens.bin', 'tokenizer-tokens.index',
                      'tokenizer-merges.bin', 'tokenizer-chars.bin',
@@ -34,6 +39,7 @@ _FAMILIES = {
                      'tokenizer.index')),
 }
 _RUNTIME = ('tvm_runtime.dll', 'tvm_runtime_extra.dll', 'tvm_ffi.dll')
+_QWEN_KEYS = frozenset(('qwen2.5-0.5b', 'qwen2.5-1.5b'))
 
 
 def _normal_root(directory):
@@ -172,7 +178,94 @@ def _match(actual, expected, what):
                          % (what, actual, expected))
 
 
-def _check_parameters(root, model, dtype, device, *,
+def _qwen_parameter_layout(model_key):
+    """Approved Qwen2 packed FP32 shapes, in the Pascal loader's exact order."""
+    from .llm_family_profile import _PROFILES
+    approved = _PROFILES[model_key]
+    hidden = approved['hidden_size']
+    intermediate = approved['intermediate_size']
+    layers = approved['num_hidden_layers']
+    head_dim = hidden // approved['num_attention_heads']
+    fused = (approved['num_attention_heads'] +
+             2 * approved['num_key_value_heads']) * head_dim
+    result = [('model.embed_tokens.weight', [approved['vocab_size'], hidden])]
+    for layer in range(layers):
+        prefix = 'model.layers.%d.' % layer
+        result.extend((
+            (prefix + 'self_attn.c_attn.weight', [fused, hidden]),
+            (prefix + 'self_attn.c_attn.bias', [fused]),
+            (prefix + 'self_attn.o_proj.weight', [hidden, hidden]),
+            (prefix + 'mlp.gate_up_proj.weight', [2 * intermediate, hidden]),
+            (prefix + 'mlp.down_proj.weight', [hidden, intermediate]),
+            (prefix + 'input_layernorm.weight', [hidden]),
+            (prefix + 'post_attention_layernorm.weight', [hidden]),
+        ))
+    result.append(('model.norm.weight', [hidden]))
+    return result
+
+
+def _validate_qwen_metadata(model, model_key):
+    """Compare a native Qwen description against its approved structural profile."""
+    if model_key not in ('qwen2.5-0.5b', 'qwen2.5-1.5b'):
+        return
+    from .llm_family_profile import _PROFILES
+    profile = _PROFILES[model_key]
+    for key in ('hidden_size', 'num_hidden_layers', 'num_attention_heads',
+                'num_key_value_heads', 'vocab_size',
+                'tie_word_embeddings', 'bos_token_id', 'eos_token_id'):
+        _match(model.get(key), profile[key], 'approved Qwen ' + key)
+    theta = model.get('rope_theta')
+    if type(theta) not in (int, float) or theta != profile['rope_theta']:
+        raise ValueError('native LLM approved Qwen rope_theta differs')
+    head_dim = profile['hidden_size'] // profile['num_attention_heads']
+    _match(model.get('head_dim'), head_dim, 'approved Qwen head_dim')
+    
+    
+    if model_key == 'qwen2.5-1.5b' or 'intermediate_size' in model:
+        _match(model.get('intermediate_size'), profile['intermediate_size'],
+               'approved Qwen intermediate_size')
+
+
+def _validate_qwen15_source_marker(root, *, approved_sha256s=None):
+    """Recheck the official 1.5B provenance at receipt and ZIP validation.
+
+    Admission of a consumer kit is not a substitute for checking its source
+    marker again in the final staged/published bundle.
+    """
+    from .model_sources import catalog_model
+    official = catalog_model('qwen2.5-1.5b')
+    license_name = 'LICENSE-' + official['repository'].split('/')[-1] + '.txt'
+    license_pin = official['license_file']
+    _hash_file(root, license_name, approved_size=license_pin['bytes'],
+               approved_sha256=license_pin['sha256'])
+    if approved_sha256s is not None:
+        _match(_approved_sha(approved_sha256s, license_name),
+               license_pin['sha256'], 'Qwen 1.5B license ZIP identity')
+    marker = _json(root, 'MODEL-SOURCE.json',
+                   approved_sha256=_approved_sha(approved_sha256s,
+                                                  'MODEL-SOURCE.json'))
+    rows = marker.get('files') if isinstance(marker, dict) else None
+    expected_files = {row['path']: (row['bytes'], row['sha256'], row['url'])
+                      for row in official['files']}
+    if (not isinstance(marker, dict) or
+            marker.get('schema') != 'crosspascal-qwen-model-source-v1' or
+            marker.get('repository') != official['repository'] or
+            marker.get('revision') != official['revision'] or
+            marker.get('source_tree_sha256') != official['tree_sha256'] or
+            not isinstance(marker.get('license'), dict) or
+            marker['license'].get('file') != license_name or
+            any(type(marker['license'].get(k)) is not type(license_pin[k]) or
+                marker['license'].get(k) != license_pin[k]
+                for k in ('bytes', 'sha256', 'url')) or
+            not isinstance(rows, list) or len(rows) != len(expected_files) or
+            not all(isinstance(row, dict) and type(row.get('name')) is str
+                    for row in rows) or
+            {row['name']: (row.get('bytes'), row.get('sha256'), row.get('url'))
+             for row in rows} != expected_files):
+        raise ValueError('native LLM Qwen 1.5B MODEL-SOURCE differs from official pin')
+
+
+def _check_parameters(root, model, dtype, device, *, model_key=None,
                       approved_params_size=None, approved_sha256s=None):
     params = _json(root, 'params.json',
                    approved_sha256=_approved_sha(approved_sha256s, 'params.json'))
@@ -184,6 +277,15 @@ def _check_parameters(root, model, dtype, device, *,
     if (not isinstance(tensors, list) or not tensors or len(tensors) > 100000 or
             not isinstance(order, list) or len(order) != len(tensors)):
         raise ValueError('native LLM param_order differs from params.json tensors')
+    qwen_shapes = None
+    if model_key in _QWEN_KEYS:
+        qwen_shapes = _qwen_parameter_layout(model_key)
+        if order != [name for name, _ in qwen_shapes]:
+            raise ValueError('native Qwen parameter names/order differ from approved packed ABI')
+        packed_bytes = {'float32': 4, 'float16': 2}[dtype] * sum(
+            math.prod(shape) for _name, shape in qwen_shapes)
+        if type(params.get('total_bytes')) is not int or params['total_bytes'] != packed_bytes:
+            raise ValueError('native Qwen packed byte count differs from approved profile')
     bin_path, disk_bytes = _regular(root, 'params.bin')
     if approved_params_size is not None:
 
@@ -205,6 +307,8 @@ def _check_parameters(root, model, dtype, device, *,
         if approved_sha256s is not None:
             _match(_approved_sha(approved_sha256s, 'params.bin'), expected_sha,
                    'inventory weight digest')
+        _hash_file(root, 'params.bin', approved_size=total_bytes,
+                   approved_sha256=expected_sha)
     raw_index = _read_bounded(
         root, 'params.index', _MAX_INDEX,
         approved_sha256=_approved_sha(approved_sha256s, 'params.index'))
@@ -228,6 +332,9 @@ def _check_parameters(root, model, dtype, device, *,
                 not isinstance(shape, list) or not shape or
                 any(type(dim) is not int or dim <= 0 for dim in shape)):
             raise ValueError('native LLM param_order/shape/dtype mismatch')
+        if qwen_shapes is not None and (name, shape) != qwen_shapes[pos]:
+            raise ValueError('native Qwen tensor shape differs from approved packed ABI: '
+                             + name)
         seen.add(name)
         expected_bytes = bytes_per_scalar
         for dim in shape:
@@ -276,6 +383,7 @@ def validate_llm_output(directory, plan, model_key, *, require_consumer=False,
         approved_sha256=_approved_sha(approved_member_sha256s, 'model.json'))
     if not isinstance(model, dict):
         raise ValueError('native LLM model.json must contain an object')
+    _validate_qwen_metadata(model, model_key)
     for key, expected in (
         ('model_key', model_key),
         ('library', library),
@@ -289,6 +397,15 @@ def validate_llm_output(directory, plan, model_key, *, require_consumer=False,
         _match(model.get(key), expected, ('BuildPlan ' if key == 'build_plan_sha256'
                                          else '') + key)
     selected_llm = plan['options'].get('llm')
+    if model_key == 'qwen2.5-1.5b':
+        if (selected_llm is None or
+                selected_llm.get('profile_id') !=
+                'qwen2.5-1.5b-cuda-f32-64-v1'):
+            raise ValueError('Qwen2.5-1.5B requires its approved BuildPlan profile')
+        if (dtype, device) != ('float32', 'cuda'):
+            raise ValueError('Qwen2.5-1.5B requires CUDA float32')
+        if deploy['arch'] != 'x86_64':
+            raise ValueError('Qwen2.5-1.5B CUDA bundle requires Windows x64 ABI')
     if selected_llm is not None:
         from . import model_sources
         official = model_sources.catalog_model(model_key)
@@ -354,7 +471,7 @@ def validate_llm_output(directory, plan, model_key, *, require_consumer=False,
         raise ValueError('native LLM manifest text/JSON invalid: %s' % exc) from exc
     if actual_text not in permitted:
         raise ValueError('native LLM manifest JSON/text disagreement')
-    _check_parameters(root, model, dtype, device,
+    _check_parameters(root, model, dtype, device, model_key=model_key,
                       approved_params_size=approved_params_size,
                       approved_sha256s=approved_member_sha256s)
     if require_consumer:
@@ -373,10 +490,15 @@ def validate_llm_output(directory, plan, model_key, *, require_consumer=False,
             raise ValueError('native LLM licence closure incomplete: no TVM licence')
         for license_file in licenses:
             _regular(root, license_file.name)
-        if plan['options'].get('llm') is not None:
+        if model_key == 'qwen2.5-1.5b':
+            _validate_qwen15_source_marker(
+                root, approved_sha256s=approved_member_sha256s)
+        elif plan['options'].get('llm') is not None:
             from .model_sources import catalog_model
             expected_license = catalog_model(model_key)['license_file']
-            legal_name = 'LICENSE-Qwen2.5-0.5B-Instruct.txt'
+            legal_name = ('LICENSE-' +
+                          catalog_model(model_key)['repository'].split('/')[-1] +
+                          '.txt')
             _hash_file(root, legal_name, approved_size=expected_license['bytes'],
                        approved_sha256=expected_license['sha256'])
             _regular(root, 'MODEL-SOURCE.json', max_bytes=_MAX_JSON)

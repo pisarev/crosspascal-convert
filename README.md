@@ -16,7 +16,7 @@ Choose **Quit converter** when you finish. Closing the browser tab leaves the lo
 
 ## Scope
 
-The Qwen2.5-0.5B-Instruct profile uses FP32, all 24 layers, batch size one, and a 64-token context and prefill chunk. The output bundle records the CUDA architecture used during conversion. QwenChat checks the runtime device before inference.
+The named Qwen2.5-Instruct CUDA profiles support 0.5B (24 layers) and 1.5B (28 layers). Both use FP32, batch size one, and a 64-token context and prefill chunk. The wizard checks the selected official source revision, complete source-tree SHA-256 and profile-specific shape before Build. The same installed TVM runtime serves both profiles. The CUDA architecture is selected separately. Run QwenChat after conversion to check inference on the destination GPU. See [source notes](docs/SOURCE-NOTES.md).
 
 The documented CPU routes cover SqueezeNet 1.1, ResNet50, YOLO11n classification, YOLO11n detection, and RT-DETR R18vd. Other families and compilation paths in the source tree are outside the verified early access scope.
 

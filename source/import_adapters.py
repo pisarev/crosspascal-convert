@@ -560,10 +560,8 @@ class LLMImportAdapter(ImportAdapter):
     kind = 'full_build'
 
 
-    ARCH_TO_KEY = {
-        'Qwen2ForCausalLM': 'qwen2.5-0.5b',
-        'Gemma2ForCausalLM': 'gemma-2-2b',
-    }
+    
+    
     BUILDER = os.path.join(LLM_HELPERS, 'build_llm.py')
 
 
@@ -785,7 +783,7 @@ class LLMImportAdapter(ImportAdapter):
             if (not os.path.isdir(output_root) or os.path.islink(output_root) or
                     getattr(info, 'st_file_attributes', 0) & 0x400):
                 raise RuntimeError('native LLM output root is not a plain directory')
-        loader_stem = 'qwen2' if key == 'qwen2.5-0.5b' else key
+        loader_stem = 'qwen2' if key in ('qwen2.5-0.5b', 'qwen2.5-1.5b') else key
         child_outputs = (
             '%s-%s.dll' % (loader_stem, target), 'model.json',
             'params.bin', 'params.json', 'params.index',

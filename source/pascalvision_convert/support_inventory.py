@@ -40,6 +40,15 @@ def build_inventory() -> dict:
         "profile": "qwen2.5-0.5b-cuda-f32-64-v1",
         "architecture": "Detected on the build host or selected for the destination",
     })
+    families.append({
+        "id": "qwen2.5-1.5b",
+        "name": "Qwen2.5-1.5B-Instruct",
+        "task": "text_generation",
+        "source_format": "Pinned Hugging Face safetensors",
+        "target": "cuda",
+        "profile": "qwen2.5-1.5b-cuda-f32-64-v1",
+        "architecture": "Detected on the build host or selected for the destination",
+    })
     return {
         "schema": SCHEMA,
         "inventory_kind": "DOCUMENTED_EARLY_ACCESS_SCOPE",

@@ -23,7 +23,7 @@ The converter detects the local CUDA architecture. Keep it for a local build or 
 
 The examples in this guide use `C:\CrossPascal`. You may use another writable local folder; substitute that folder in all paths below. Keep the five repository folders together. Use a local NTFS disk for the conversion source and output.
 
-Leave room for the archive, its extracted contents, the source model download of about 1 GB, the generated parameters of about 1.84 GiB, and temporary build files. The model also needs GPU working memory beyond its parameters. Close your own unneeded GPU applications before the first run; the example checks free GPU memory before loading.
+Leave room for the archive, its extracted contents, the source model download (about 1 GB for 0.5B or 3.1 GB for 1.5B), the generated parameters (1.84 GiB or 5.75 GiB respectively), and temporary build files. The model also needs GPU working memory beyond its parameters. Close your own unneeded GPU applications before the first run; the example checks free GPU memory before loading.
 
 ## 2. Download and extract the complete CrossPascal bundle
 
@@ -97,8 +97,8 @@ If you chose different installation directories, enter those actual directories.
 
 1. In File Explorer, open `C:\CrossPascal\CrossPascalConvert.exe`.
 2. The converter opens a local page in your normal browser. Keep that page open during the conversion.
-3. On **Step 1: Select a model**, choose **Download Qwen 0.5B**. The selected source is `Qwen/Qwen2.5-0.5B-Instruct`, revision `7ae557604adf67be50417f59c2c2f167def9a775`, under Apache 2.0. The converter downloads about 1 GB and checks expected sizes and SHA-256 hashes, including the license and tokenizer files.
-4. Wait for the download to finish. The model-path field is filled automatically. Check that the recognized model is Qwen2.5-0.5B-Instruct.
+3. On **Step 1: Select a model**, choose **Qwen2.5-0.5B-Instruct** (the tested first-run profile) or **Qwen2.5-1.5B-Instruct**, then choose **Download selected Qwen model**. The official sources are `Qwen/Qwen2.5-0.5B-Instruct` at revision `7ae557604adf67be50417f59c2c2f167def9a775` (about 1 GB), and `Qwen/Qwen2.5-1.5B-Instruct` at `989aa7980e4cf806f80c7fef2b1adb7bc71aa306` (about 3.1 GB), under Apache 2.0. The converter checks the pinned sizes and SHA-256 hashes, including the license and tokenizer files, rather than trusting folder names.
+4. When the download finishes, the model-path field is filled automatically. Check that Recognise reports the **same model size** you selected. For a pre-existing local HF directory, use Recognise and Preview; the named route will reject a different source-tree SHA-256 even if its directory is similarly named.
 5. If you already downloaded this exact model through the converter, paste that existing model-folder path into the field and choose **Recognise**. You can reuse it for another conversion; a new download is unnecessary.
 6. Choose **Next** to open **Step 2: Detect this computer**. Review the detected GPU, compiler and CUDA tools. For this route the language-model compiler and CUDA must be available. The optional sample-build section is a separate diagnostic and is not part of this first run.
 7. If an environment check failed, correct the reported prerequisite and choose **Refresh**. Continue once the required tools are detected.
@@ -112,7 +112,7 @@ The source folder contains the original Hugging Face files. The output folder wi
 
 | Control or setting | Value |
 | --- | --- |
-| Language model profile | `Qwen 0.5B · CUDA · FP32 · 64 tokens` |
+| Language model profile | `Qwen 0.5B · CUDA · FP32 · 64 tokens` or `Qwen 1.5B · CUDA · FP32 · 64 tokens`, matching the recognized source |
 | Device button | **GPU** |
 | CUDA architecture | Detected architecture for this computer, or the manually entered destination architecture |
 | Target OS | **Windows** |
@@ -121,8 +121,8 @@ The source folder contains the original Hugging Face files. The output folder wi
 | New output directory | `C:\CrossPascal\Models\qwen-cuda` |
 
 3. Choose a new folder outside the downloaded model directory. Leave the suggested sibling `qwen-cuda` absent until the build. The converter creates it during the build and refuses to overwrite an existing output. A failed or interrupted build may leave a partial child directory; preserve it for diagnosis and choose a different new child name for a later build, such as `qwen-cuda-2`.
-4. Expand **Runtime and compiler paths** only to inspect the defaults. **Tokenizer and runtime folder** should point to `C:\CrossPascal\crosspascal-tvm\runtime\windows-x64-cuda`; **LLM toolchain Python** should point to `C:\CrossPascal\runtime\python\python.exe`. The complete bundle fills these in. Keep **Include tokenizer and runtime** selected.
-5. Choose **Next**. **Step 4: Model settings** shows the complete model name, named profile, target, precision, all 24 layers, context and prefill chunk of 64 tokens, and batch size 1. Review them, then choose **Next**.
+4. Expand **Runtime and compiler paths** only to inspect the defaults. **Tokenizer and runtime folder** should point to `C:\CrossPascal\crosspascal-tvm\runtime\windows-x64-cuda`. **LLM toolchain Python** should point to `C:\CrossPascal\runtime\python\python.exe`. Keep **Include tokenizer and runtime** selected. For 1.5B, Preview prepares the model's source record and license from the pinned catalog and installed files. The same TVM setup serves both profiles.
+5. Choose **Next**. **Step 4: Model settings** shows the complete model name, named profile, target, precision, all layers (24 for 0.5B or 28 for 1.5B), context and prefill chunk of 64 tokens, and batch size 1. Review them, then choose **Next**.
 
 The 64-token capacity includes the chat template, prompt and generated reply. It is intended for a small first run. Choosing another dtype or context changes the model contract and requires a separately supported profile.
 
@@ -241,7 +241,7 @@ The consumer checks the original model identity, profile and actual generated DL
 | Delphi is building Win32 | Activate **Windows 64-bit** and **Release** in Project Manager, then build again. |
 | The example rejects the GPU or model profile | Compare the architecture in the bundle with the device shown by the application. Return to the converter and build for that device. |
 | The prompt exceeds the context | Shorten the prompt or reduce the requested new tokens. The chat template also consumes part of the 64-token context. |
-| GPU memory is insufficient | Close your own unneeded GPU applications and retry after they release memory. The model needs working space in addition to its approximately 1.84 GiB of parameters. |
+| GPU memory is insufficient | Close your own unneeded GPU applications and retry after they release memory. The model needs working space in addition to its 1.84 GiB (0.5B) or 5.75 GiB (1.5B) of parameters. |
 | Build succeeds but application verification says `NOT_RUN` | Complete sections 9 and 10. Compilation and file checks do not themselves execute the Delphi consumer. |
 | A runtime-version or integrity check fails | Keep the converter, model bundle, Pascal sources and runtime from the same matched release. The example deliberately refuses incompatible combinations. Report the exact error and versions if the supplied combination fails. |
 

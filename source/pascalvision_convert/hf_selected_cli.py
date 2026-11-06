@@ -20,7 +20,7 @@ def preview_main(argv=None):
                     'no compiler, native model oracle, READY or release')
     parser.add_argument('--source-dir', required=True, metavar='ABS_HF_DIRECTORY')
     parser.add_argument('--model-key', required=True,
-                        choices=('qwen2.5-0.5b', 'gemma-2-2b'))
+                        choices=('qwen2.5-0.5b', 'qwen2.5-1.5b', 'gemma-2-2b'))
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:
