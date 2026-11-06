@@ -21,6 +21,8 @@ The first-run profile is deliberately specific:
 
 The converter detects the local CUDA architecture. Keep it for a local build or enter the destination architecture to prepare a bundle for another computer. QwenChat checks the bundle target against the actual device.
 
+For a *compatible but unpinned local Qwen2 dense-text Safetensors folder*, paste the absolute folder path into Model and select **Compatible local Qwen2 (CUDA FP32, 2,048 tokens)**. This route is separate from the two official 0.5B/1.5B downloads; it does not download weights or claim the local model belongs to either official checkpoint. Preview checks the actual configuration, complete source identity, tokenizer and tensor layout and shows conservative disk, RAM and GPU VRAM requirements. Use the supplied Qwen CUDA consumer kit for its native tokenizer and runtime files only. Native QwenChat performs its own bundle/VRAM checks before loading; it is the operator's responsibility to complete the CUDA/Delphi acceptance, which is not supplied by a converter unit test. Unsupported architectures, unrecognized tokenizers, quantization, MoE, vision/audio and model-provided custom code are refused.
+
 The examples in this guide use `C:\CrossPascal`. You may use another writable local folder; substitute that folder in all paths below. Keep the five repository folders together. Use a local NTFS disk for the conversion source and output.
 
 Leave room for the archive, its extracted contents, the source model download (about 1 GB for 0.5B or 3.1 GB for 1.5B), the generated parameters (1.84 GiB or 5.75 GiB respectively), and temporary build files. The model also needs GPU working memory beyond its parameters. Close your own unneeded GPU applications before the first run; the example checks free GPU memory before loading.
@@ -163,7 +165,7 @@ If you inspect **Project > Options > Building > Delphi Compiler**, the search pa
 1. In QwenChat, set **Converted model bundle** to `C:\CrossPascal\Models\qwen-cuda`. You can paste the path directly into the field or use **Browse**. Select the directory containing `model.json`.
 2. **Pinned CUDA runtime directory** should already point to `C:\CrossPascal\crosspascal-tvm\runtime\windows-x64-cuda`. Correct the path if you extracted the bundle elsewhere.
 3. Enter `Say hello in English.` in the prompt field.
-4. Leave **Max new tokens** at `6`.
+4. Leave **Max new tokens** at `0` for Auto.
 5. Choose **Run on GPU**. The status line reports file validation, parameter loading and generation. Wait for that operation to finish.
 6. Read the reported device and response. Confirm that the reported architecture matches the target shown in Preview.
 7. To keep your own result, choose **Save result** and select a new JSON filename in the ordinary Save dialog. Existing reports are not overwritten.
@@ -240,7 +242,7 @@ The consumer checks the original model identity, profile and actual generated DL
 | Delphi cannot find a TVM or OpenCV unit | Open the supplied `QwenChat.dproj` and restore the sibling `crosspascal`, `crosspascal-tvm` and `crosspascal-opencv` folders. Check the relative search paths in section 9. |
 | Delphi is building Win32 | Activate **Windows 64-bit** and **Release** in Project Manager, then build again. |
 | The example rejects the GPU or model profile | Compare the architecture in the bundle with the device shown by the application. Return to the converter and build for that device. |
-| The prompt exceeds the context | Shorten the prompt or reduce the requested new tokens. The chat template also consumes part of the 64-token context. |
+| The prompt exceeds the context | Shorten the prompt or reduce the requested new tokens. The chat template shares the context with the prompt and response. |
 | GPU memory is insufficient | Close your own unneeded GPU applications and retry after they release memory. The model needs working space in addition to its 1.84 GiB (0.5B) or 5.75 GiB (1.5B) of parameters. |
 | Build succeeds but application verification says `NOT_RUN` | Complete sections 9 and 10. Compilation and file checks do not themselves execute the Delphi consumer. |
 | A runtime-version or integrity check fails | Keep the converter, model bundle, Pascal sources and runtime from the same matched release. The example deliberately refuses incompatible combinations. Report the exact error and versions if the supplied combination fails. |

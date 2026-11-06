@@ -8,8 +8,11 @@ import re
 import stat
 import sys
 
+from . import qwen_universal
+
 QWEN_CUDA_PROFILE = "qwen2.5-0.5b-cuda-f32-64-v1"
 QWEN_15_CUDA_PROFILE = "qwen2.5-1.5b-cuda-f32-64-v1"
+QWEN_GENERIC_CUDA_PROFILE = qwen_universal.PROFILE
 _PROFILES = {
     QWEN_CUDA_PROFILE: {
         "profile_id": QWEN_CUDA_PROFILE,
@@ -27,6 +30,15 @@ _PROFILES = {
         "dtype": "float32",
         "context_window_size": 64,
         "prefill_chunk_size": 64,
+        "max_batch_size": 1,
+    },
+    QWEN_GENERIC_CUDA_PROFILE: {
+        "profile_id": QWEN_GENERIC_CUDA_PROFILE,
+        "model_key": qwen_universal.KEY,
+        "target": "cuda",
+        "dtype": "float32",
+        "context_window_size": qwen_universal.CONTEXT,
+        "prefill_chunk_size": qwen_universal.CONTEXT,
         "max_batch_size": 1,
     },
 }

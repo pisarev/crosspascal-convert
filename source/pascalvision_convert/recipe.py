@@ -547,7 +547,9 @@ def main(argv=None):
             print('FAILED: saved LLM family builder was not found for this source',
                   file=sys.stderr)
             return 1
-        key = adapter._key_for(path)
+        key = adapter._key_for(
+            path, generic=(family_recipe is not None and
+                           family_recipe.get('model_key') == 'qwen2-compatible-local'))
         if family_recipe and family_recipe['model_key'] != key:
             print('FAILED: saved model-family key disagrees with source: %r vs %r'
                   % (family_recipe['model_key'], key), file=sys.stderr)
@@ -556,7 +558,8 @@ def main(argv=None):
         if args.hf_selected_tree_sha256:
             try:
                 if adapter.name != 'llm' or key not in (
-                        'qwen2.5-0.5b', 'qwen2.5-1.5b', 'gemma-2-2b'):
+                        'qwen2.5-0.5b', 'qwen2.5-1.5b',
+                        'qwen2-compatible-local', 'gemma-2-2b'):
                     raise ValueError('selected HF SHA is only supported for Qwen/Gemma')
                 from . import hf_closure
                 chosen_hf = hf_closure.audit_selected_hf_source(

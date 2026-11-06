@@ -605,9 +605,10 @@ details .card:last-child{margin-bottom:0}
           <option value="">Family defaults</option>
           <option value="qwen2.5-0.5b-cuda-f32-64-v1">Qwen 0.5B (CUDA, FP32, 64 tokens)</option>
           <option value="qwen2.5-1.5b-cuda-f32-64-v1">Qwen 1.5B (CUDA, FP32, 64 tokens)</option>
+          <option value="qwen2-compatible-cuda-f32-2048-v1">Compatible local Qwen2 dense text (CUDA FP32, 2,048 tokens; unpinned)</option>
         </select>
       </div>
-      <span class="note">The Qwen CUDA profile uses batch 1 and 64 tokens for both
+      <span class="note">Qwen CUDA profiles use batch 1 and the selected token budget for both
         the context and each prefill chunk. The context includes the prompt and
         generated response. Building does not verify generated text.</span>
     </div>
@@ -1246,7 +1247,8 @@ function paintDtypeNote(){
   const note = document.getElementById('dtype-note');
   const profile = document.getElementById('llm-profile').value;
   const namedProfile = ['qwen2.5-0.5b-cuda-f32-64-v1',
-    'qwen2.5-1.5b-cuda-f32-64-v1'].includes(profile);
+    'qwen2.5-1.5b-cuda-f32-64-v1',
+    'qwen2-compatible-cuda-f32-2048-v1'].includes(profile);
   note.textContent = namedProfile
     ? (chosenDtype === 'float32'
       ? (profile === 'qwen2.5-1.5b-cuda-f32-64-v1'
@@ -1738,6 +1740,20 @@ async function recogniseModel(){
       document.getElementById('qwen-download-model').value = data.model_key;
       document.getElementById('qwen-download-model').onchange();
       document.getElementById('llm-profile').onchange();
+      advice.textContent = 'The detected Qwen structural dimensions match a '
+        + 'named profile, but that alone DOES NOT identify an official '
+        + 'checkpoint. The named profile requires exact pinned source hashes. '
+        + 'For different local weights (including another release with the '
+        + 'same dimensions), explicitly select Compatible local Qwen2 in '
+        + 'the LLM profile dropdown before Preview.';
+    } else if (data.model_key === 'qwen2-compatible-local') {
+      document.getElementById('llm-profile').value =
+        'qwen2-compatible-cuda-f32-2048-v1';
+      document.getElementById('llm-profile').onchange();
+      advice.textContent = 'Compatible local Qwen2 text source; not a pinned '
+        + 'official Qwen2.5 release. Preview will inspect exact Safetensors '
+        + 'layout, tokenizer identity and minimum memory/disk requirements. '
+        + 'QwenChat will independently check the final bundle and CUDA GPU.';
     } else {
       document.getElementById('llm-profile').value = '';
     }
@@ -2161,7 +2177,8 @@ function renderLlmSettings(){
   rows.textContent = '';
   const profile = document.getElementById('llm-profile').value;
   const namedProfile = ['qwen2.5-0.5b-cuda-f32-64-v1',
-    'qwen2.5-1.5b-cuda-f32-64-v1'].includes(profile);
+    'qwen2.5-1.5b-cuda-f32-64-v1',
+    'qwen2-compatible-cuda-f32-2048-v1'].includes(profile);
   rows.appendChild(row('Model', recognisedModelKey || 'Recognised language model'));
   rows.appendChild(row('Profile', profile || 'Family defaults; resolved in Preview'));
   rows.appendChild(row('Target', document.getElementById('target-os').value + ' / ' +
@@ -2169,9 +2186,16 @@ function renderLlmSettings(){
     (chosenTarget === 'cuda' ? ' / ' + document.getElementById('target-arch').value : '')));
   rows.appendChild(row('Precision', chosenDtype));
   if (namedProfile) {
-    rows.appendChild(row('Model layers',
-      profile === 'qwen2.5-1.5b-cuda-f32-64-v1' ? 'All 28' : 'All 24'));
-    rows.appendChild(row('Context / prefill chunk', '64 / 64 tokens'));
+    if (profile === 'qwen2-compatible-cuda-f32-2048-v1') {
+      rows.appendChild(row('Model layers', 'Derived from safe local configuration at Preview'));
+      rows.appendChild(row('Source identity', 'Selected local files, complete SHA-256 closure; not an upstream revision claim'));
+      rows.appendChild(row('Memory admission', 'Disk and RAM at Preview; free GPU VRAM verified by QwenChat'));
+    } else {
+      rows.appendChild(row('Model layers',
+        profile === 'qwen2.5-1.5b-cuda-f32-64-v1' ? 'All 28' : 'All 24'));
+    }
+    rows.appendChild(row('Context / prefill chunk',
+      profile === 'qwen2-compatible-cuda-f32-2048-v1' ? '2,048 / 2,048 tokens' : '64 / 64 tokens'));
     rows.appendChild(row('Batch size', '1'));
   }
   document.getElementById('llm-context-note').hidden = !namedProfile;
@@ -2285,6 +2309,24 @@ async function refreshPreview(){
     technicalRows.appendChild(row('HF source guarantee',
                          'SCANNED_NOT_LOCKED at Preview; selected Win32 private '
                          + 'source custody required at Build; NOT_CHECKED'));
+  }
+  if (report.qwen_compatibility){
+    const compat = report.qwen_compatibility;
+    const dims = compat.dimensions, need = compat.requirements;
+    const gib = bytes => (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GiB';
+    rows.appendChild(row('Local Qwen architecture',
+      dims.num_hidden_layers + ' layers / hidden ' + dims.hidden_size +
+      ' / MLP ' + dims.intermediate_size + ' / heads ' +
+      dims.num_attention_heads + ':' + dims.num_key_value_heads));
+    rows.appendChild(row('FP32 packed parameters', gib(need.packed_parameter_bytes)));
+    rows.appendChild(row('Minimum output disk free', gib(need.min_free_output_disk_bytes)));
+    rows.appendChild(row('Minimum host RAM free', gib(need.min_free_host_ram_bytes)));
+    rows.appendChild(row('Minimum GPU VRAM free', gib(need.min_free_gpu_bytes)));
+    technicalRows.appendChild(row('Qwen local source classification',
+      'Unpinned checkpoint; selected original files SHA-256 measured. '
+      + 'No asserted upstream repository or revision.'));
+    technicalRows.appendChild(row('GPU VRAM admission', compat.gpu_admission));
+    technicalRows.appendChild(row('Memory estimate scope', need.note));
   }
   if (options.atomic_complete_bundle){
     rows.appendChild(row('Atomic RAW kit (EXPERIMENTAL)',

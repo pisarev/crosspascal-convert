@@ -32,6 +32,10 @@ _FAMILIES = {
                       ('tokenizer-tokens.bin', 'tokenizer-tokens.index',
                        'tokenizer-merges.bin', 'tokenizer-specials.txt',
                        'tokenizer.index')),
+    'qwen2-compatible-local': ('qwen2', 'qwen2', 'byte_bpe',
+                      ('tokenizer-tokens.bin', 'tokenizer-tokens.index',
+                       'tokenizer-merges.bin', 'tokenizer-specials.txt',
+                       'tokenizer.index')),
     'gemma-2-2b': ('gemma-2-2b', 'gemma2', 'sentencepiece',
                     ('tokenizer-tokens.bin', 'tokenizer-tokens.index',
                      'tokenizer-merges.bin', 'tokenizer-chars.bin',
@@ -39,7 +43,8 @@ _FAMILIES = {
                      'tokenizer.index')),
 }
 _RUNTIME = ('tvm_runtime.dll', 'tvm_runtime_extra.dll', 'tvm_ffi.dll')
-_QWEN_KEYS = frozenset(('qwen2.5-0.5b', 'qwen2.5-1.5b'))
+_QWEN_KEYS = frozenset(('qwen2.5-0.5b', 'qwen2.5-1.5b',
+                       'qwen2-compatible-local'))
 
 
 def _normal_root(directory):
@@ -178,8 +183,15 @@ def _match(actual, expected, what):
                          % (what, actual, expected))
 
 
-def _qwen_parameter_layout(model_key):
+def _qwen_parameter_layout(model_key, model=None):
     """Approved Qwen2 packed FP32 shapes, in the Pascal loader's exact order."""
+    if model_key == 'qwen2-compatible-local':
+        from . import qwen_universal
+        if not isinstance(model, dict):
+            raise ValueError('generic Qwen parameter layout requires model descriptor')
+        cfg = qwen_universal.validate_descriptor(
+            model.get('qwen_compatibility'), model)
+        return qwen_universal.packed_layout(cfg)
     from .llm_family_profile import _PROFILES
     approved = _PROFILES[model_key]
     hidden = approved['hidden_size']
@@ -206,6 +218,14 @@ def _qwen_parameter_layout(model_key):
 
 def _validate_qwen_metadata(model, model_key):
     """Compare a native Qwen description against its approved structural profile."""
+    if model_key == 'qwen2-compatible-local':
+        from . import qwen_universal
+        qwen_universal.validate_descriptor(
+            model.get('qwen_compatibility'), model)
+        if (model.get('source_kind') != 'local-sha256' or
+                'source_repo' in model or 'source_revision' in model):
+            raise ValueError('generic Qwen bundle must not claim an official source')
+        return
     if model_key not in ('qwen2.5-0.5b', 'qwen2.5-1.5b'):
         return
     from .llm_family_profile import _PROFILES
@@ -279,7 +299,7 @@ def _check_parameters(root, model, dtype, device, *, model_key=None,
         raise ValueError('native LLM param_order differs from params.json tensors')
     qwen_shapes = None
     if model_key in _QWEN_KEYS:
-        qwen_shapes = _qwen_parameter_layout(model_key)
+        qwen_shapes = _qwen_parameter_layout(model_key, model=model)
         if order != [name for name, _ in qwen_shapes]:
             raise ValueError('native Qwen parameter names/order differ from approved packed ABI')
         packed_bytes = {'float32': 4, 'float16': 2}[dtype] * sum(
@@ -397,6 +417,12 @@ def validate_llm_output(directory, plan, model_key, *, require_consumer=False,
         _match(model.get(key), expected, ('BuildPlan ' if key == 'build_plan_sha256'
                                          else '') + key)
     selected_llm = plan['options'].get('llm')
+    if model_key == 'qwen2-compatible-local':
+        from . import qwen_universal
+        if (selected_llm is None or
+                selected_llm.get('profile_id') != qwen_universal.PROFILE or
+                (dtype, device, deploy['arch']) != ('float32', 'cuda', 'x86_64')):
+            raise ValueError('generic Qwen bundle requires CUDA FP32 Windows x64 profile')
     if model_key == 'qwen2.5-1.5b':
         if (selected_llm is None or
                 selected_llm.get('profile_id') !=
@@ -406,7 +432,7 @@ def validate_llm_output(directory, plan, model_key, *, require_consumer=False,
             raise ValueError('Qwen2.5-1.5B requires CUDA float32')
         if deploy['arch'] != 'x86_64':
             raise ValueError('Qwen2.5-1.5B CUDA bundle requires Windows x64 ABI')
-    if selected_llm is not None:
+    if selected_llm is not None and model_key != 'qwen2-compatible-local':
         from . import model_sources
         official = model_sources.catalog_model(model_key)
         for key, expected in (
@@ -419,6 +445,14 @@ def validate_llm_output(directory, plan, model_key, *, require_consumer=False,
                 ('source_revision', official['revision']),
                 ('source_tree_sha256', official['tree_sha256'])):
             _match(model.get(key), expected, 'selected LLM profile ' + key)
+    if selected_llm is not None and model_key == 'qwen2-compatible-local':
+        for key, expected in (
+                ('model_key', model_key),
+                ('context_window_size', selected_llm['context_window_size']),
+                ('prefill_chunk_size', selected_llm['prefill_chunk_size']),
+                ('max_batch_size', selected_llm['max_batch_size']),
+                ('llm_profile_id', selected_llm['profile_id'])):
+            _match(model.get(key), expected, 'generic Qwen BuildPlan ' + key)
     lib_sha = _hash_file(
         root, library, approved_size=approved_library_size,
         approved_sha256=_approved_sha(approved_member_sha256s, library))
@@ -493,7 +527,8 @@ def validate_llm_output(directory, plan, model_key, *, require_consumer=False,
         if model_key == 'qwen2.5-1.5b':
             _validate_qwen15_source_marker(
                 root, approved_sha256s=approved_member_sha256s)
-        elif plan['options'].get('llm') is not None:
+        elif (plan['options'].get('llm') is not None and
+              model_key != 'qwen2-compatible-local'):
             from .model_sources import catalog_model
             expected_license = catalog_model(model_key)['license_file']
             legal_name = ('LICENSE-' +

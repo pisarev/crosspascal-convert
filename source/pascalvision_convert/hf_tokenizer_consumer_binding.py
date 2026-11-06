@@ -224,7 +224,8 @@ def _gemma_bytes(spec, vocab, ordered, merges):
 
 def derive_pascal_tokenizer_bytes(model_key, spec):
     """Reproduce the legacy exported Pascal bytes with zero file writes."""
-    if model_key not in ("qwen2.5-0.5b", "qwen2.5-1.5b", "gemma-2-2b"):
+    if model_key not in ("qwen2.5-0.5b", "qwen2.5-1.5b",
+                         "qwen2-compatible-local", "gemma-2-2b"):
         _refuse("unsupported Pascal tokenizer model family")
     if not isinstance(spec, dict) or not isinstance(spec.get("model"), dict):
         _refuse("HF tokenizer.json lacks model section")
@@ -236,7 +237,8 @@ def derive_pascal_tokenizer_bytes(model_key, spec):
     merges = model.get("merges")
     try:
         result = (_qwen_bytes(spec, vocab, ordered, merges)
-                  if model_key in ("qwen2.5-0.5b", "qwen2.5-1.5b")
+                  if model_key in ("qwen2.5-0.5b", "qwen2.5-1.5b",
+                                   "qwen2-compatible-local")
                   else _gemma_bytes(spec, vocab, ordered, merges))
     except (KeyError, TypeError, ValueError, OverflowError, UnicodeError) as exc:
         if isinstance(exc, HfTokenizerConsumerMismatch):

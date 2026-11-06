@@ -32,6 +32,7 @@ from pascalvision_convert import hf_closure
 from pascalvision_convert import hf_held_stage, source_lock
 from pascalvision_convert import llm_build_profile
 from pascalvision_convert import model_sources
+from pascalvision_convert import qwen_universal
 from pascalvision_convert.llm_family_profile import load_source_config
 from pascalvision_convert.llm_bundle_contract import validate_llm_output
 
@@ -65,6 +66,12 @@ REGISTRY = {
         config=qwen2_model.Qwen2Config, model=qwen2_model.Qwen2ForCausalLM,
         plan=None, context=64, chunk=64,
         tokenizer='byte_bpe', adapter='qwen2'),
+    qwen_universal.KEY: dict(
+        name='Local Qwen2-compatible dense text', dir='qwen-compatible',
+        repo=None,
+        config=qwen2_model.Qwen2Config, model=qwen2_model.Qwen2ForCausalLM,
+        plan=None, context=qwen_universal.CONTEXT, chunk=qwen_universal.CONTEXT,
+        tokenizer='byte_bpe', adapter='qwen2'),
     'gemma-2-2b': dict(
         name='Gemma-2-2b-it', dir='gemma-2-2b',
         repo='google/gemma-2-2b-it',
@@ -85,7 +92,8 @@ def _refuse_native_output_collisions(out_dir, model_key, target):
         if (not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode) or
                 getattr(info, 'st_file_attributes', 0) & 0x400):
             raise ValueError('native LLM output root is not a plain directory')
-    stem = 'qwen2' if model_key in ('qwen2.5-0.5b', 'qwen2.5-1.5b') else model_key
+    stem = 'qwen2' if model_key in ('qwen2.5-0.5b', 'qwen2.5-1.5b',
+                                   qwen_universal.KEY) else model_key
     for name in ('%s-%s.dll' % (stem, target), 'model.json',
                  'params.bin', 'params.json', 'params.index',
                  'manifest.txt', 'manifest.json'):
@@ -262,6 +270,13 @@ def main():
             llm_build_profile.QWEN_15_CUDA_PROFILE):
         raise ValueError('Qwen2.5-1.5B requires its exact approved CUDA FP32 '
                          '64-token BuildPlan profile')
+    if args.model == qwen_universal.KEY and (
+            owner_plan is None or args.target != 'cuda' or
+            args.dtype != 'float32' or
+            (owner_plan['options'].get('llm') or {}).get('profile_id') !=
+            qwen_universal.PROFILE):
+        raise ValueError('Local Qwen2-compatible build requires its explicit '
+                         'CUDA FP32 BuildPlan')
     compiler_source = source
     if args.held_hf_source:
         compiler_source = checked_native_held_hf_source(
@@ -274,18 +289,35 @@ def main():
         source_scan = hf_closure.audit_selected_hf_source(
             compiler_source, expected_tree_sha256=args.hf_source_tree_sha256,
             expected_model_key=args.model)
-        if owner_plan is not None and owner_plan['options'].get('llm') is not None:
+        if args.model == qwen_universal.KEY:
+            source_identity = {
+                'source_tree_sha256': source_scan['tree_sha256'],
+                'source_kind': 'local-sha256'}
+        elif owner_plan is not None and owner_plan['options'].get('llm') is not None:
             source_identity = model_sources.match_source(source_scan, args.model)
     context = args.context or spec['context']
     chunk = args.chunk or spec['chunk']
     if not (0 < chunk <= context):
         raise ValueError('LLM context/chunk must be positive and chunk must not exceed context')
 
-    measured_model_key, raw = load_source_config(compiler_source)
+    measured_model_key, raw = load_source_config(
+        compiler_source, generic=(args.model == qwen_universal.KEY))
     if measured_model_key != args.model:
         raise ValueError('requested native LLM builder %s differs from exact '
                          'HF model profile %r; do not compile unrelated weights'
                          % (args.model, measured_model_key))
+    generic_config = None
+    if args.model == qwen_universal.KEY:
+        generic_config = qwen_universal.validate_config(raw)
+        qwen_universal.verify_tokenizer(compiler_source)
+        qwen_universal.inspect_local_headers(compiler_source, generic_config)
+        # Recheck host admission before graph export. GPU free memory is
+        # independently checked by the Pascal runtime, not guessed here.
+        import shutil
+        qwen_universal.admit(
+            generic_config, disk_free=shutil.disk_usage(
+                os.path.dirname(os.path.abspath(args.out))).free,
+            ram_free=qwen_universal.measured_available_ram())
     if args.layers:
         raw = dict(raw); raw['num_hidden_layers'] = args.layers
         print('REDUCED to %d layers for a diagnostic build' % args.layers)
@@ -371,7 +403,8 @@ def main():
         executable = relax.build(mod, target=target)
 
 
-    loader_stem = ('qwen2' if args.model in ('qwen2.5-0.5b', 'qwen2.5-1.5b')
+    loader_stem = ('qwen2' if args.model in ('qwen2.5-0.5b', 'qwen2.5-1.5b',
+                                           qwen_universal.KEY)
                    else args.model)
     library = os.path.join(out_dir, '%s-%s.dll' % (loader_stem, device_name))
     with tempfile.TemporaryDirectory(prefix='.link-', dir=out_dir) as link_dir:
@@ -405,6 +438,12 @@ def main():
         'bos_token_id': raw.get('bos_token_id'),
         'param_order': order,
     }
+    if generic_config is not None:
+        manifest['qwen_compatibility'] = qwen_universal.descriptor(
+            generic_config, source_identity['source_tree_sha256'])
+        manifest['source_kind'] = 'local-sha256'
+        manifest['rope_theta'] = generic_config['rope_theta']
+        manifest['rms_norm_eps'] = generic_config['rms_norm_eps']
     if owner_plan is not None:
         manifest['build_plan_sha256'] = owner_plan['plan_sha256']
         manifest['build_host_cpu_arch'] = artifact_cpu_arch
@@ -413,8 +452,9 @@ def main():
             manifest['llm_profile_id'] = selected_llm['profile_id']
             manifest['max_batch_size'] = selected_llm['max_batch_size']
     if source_identity is not None:
-        manifest['source_repo'] = source_identity['repository']
-        manifest['source_revision'] = source_identity['revision']
+        if 'repository' in source_identity:
+            manifest['source_repo'] = source_identity['repository']
+            manifest['source_revision'] = source_identity['revision']
         manifest['source_tree_sha256'] = source_identity['source_tree_sha256']
     with open(os.path.join(out_dir, 'model.json'), 'w') as f:
         json.dump(manifest, f, indent=1)

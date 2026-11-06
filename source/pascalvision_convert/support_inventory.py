@@ -49,6 +49,16 @@ def build_inventory() -> dict:
         "profile": "qwen2.5-1.5b-cuda-f32-64-v1",
         "architecture": "Detected on the build host or selected for the destination",
     })
+    families.append({
+        "id": "qwen2-compatible-local",
+        "name": "Structurally compatible local dense Qwen2 text checkpoint (not upstream-attested)",
+        "task": "text_generation",
+        "source_format": "Selected local Safetensors, complete measured SHA-256",
+        "target": "cuda",
+        "profile": "qwen2-compatible-cuda-f32-2048-v1",
+        "architecture": "Detected or manually selected, independent of model dimensions",
+        "scope": "SOURCE-NEUTRAL_CANDIDATE_RUNTIME_NOT_ATTESTED",
+    })
     return {
         "schema": SCHEMA,
         "inventory_kind": "DOCUMENTED_EARLY_ACCESS_SCOPE",

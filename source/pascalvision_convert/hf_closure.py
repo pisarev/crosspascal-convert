@@ -402,10 +402,13 @@ def scan_selected_hf_source(directory, *, expected_model_key=None,
         _register_path(aliases, name)
     config, config_hash = _json_file(base, 'config.json', MAX_CONFIG_BYTES)
     try:
-        model_key = llm_family_profile.identify_model_key(config)
+        from . import qwen_universal
+        model_key = llm_family_profile.identify_model_key(
+            config, generic=(expected_model_key == qwen_universal.KEY))
     except ValueError as exc:
         raise HfClosureError('unsupported HF model config: %s' % exc) from exc
-    if model_key not in ('qwen2.5-0.5b', 'qwen2.5-1.5b', 'gemma-2-2b'):
+    if model_key not in ('qwen2.5-0.5b', 'qwen2.5-1.5b',
+                         'gemma-2-2b', qwen_universal.KEY):
         _deny('unsupported HF model structural profile')
     if expected_model_key is not None and expected_model_key != model_key:
         _deny('HF source model profile differs from selected model')
@@ -435,6 +438,13 @@ def scan_selected_hf_source(directory, *, expected_model_key=None,
             _check_reference_metadata(doc, name, selected)
     _check_reference_metadata(config, 'config.json', selected)
     _check_reference_metadata(tokenizer, 'tokenizer.json', selected)
+    if model_key == qwen_universal.KEY:
+        # Do not infer compatibility from a model label or config alone:
+        # require the exact accepted tokenizer and the complete unfused
+        # Safetensors header layout before a potentially costly hash/Build.
+        qwen_universal.validate_config(config)
+        qwen_universal.verify_tokenizer(base)
+        qwen_universal.inspect_local_headers(base, qwen_universal.validate_config(config))
 
     index_meta, shards = {}, {}
     if has_index:

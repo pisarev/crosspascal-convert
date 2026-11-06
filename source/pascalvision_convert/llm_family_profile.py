@@ -83,13 +83,17 @@ def validate_exact_model(config, model_key):
     return model_key
 
 
-def identify_model_key(config):
+def identify_model_key(config, *, generic=False):
     """Return supported key or None; known family with wrong size is an ERROR."""
     if not isinstance(config, dict):
         raise ValueError('HF model config must be an object')
     declared = config.get('architectures') or []
     if not isinstance(declared, list):
         raise ValueError('HF architectures field must be a list')
+    if generic:
+        from .qwen_universal import KEY, validate_config
+        validate_config(config)
+        return KEY
     candidates = [
         key for key, expected in _PROFILES.items()
         if expected['architectures'][0] in declared
@@ -101,12 +105,19 @@ def identify_model_key(config):
         except ValueError as exc:
             errors.append(str(exc))
     if errors:
+        if 'Qwen2ForCausalLM' in declared:
+            from .qwen_universal import KEY, validate_config
+            try:
+                validate_config(config)
+                return KEY
+            except ValueError:
+                pass  # Preserve precise curated mismatch errors.
         raise ValueError('No approved native LLM structural profile matches: ' +
                          '; '.join(errors))
     return None
 
 
-def load_source_config(directory):
+def load_source_config(directory, *, generic=False):
     """Read a bounded local config with strict JSON and identifiable profile."""
     if not isinstance(directory, (str, os.PathLike)):
         raise ValueError('HF source must name a local model directory')
@@ -139,4 +150,4 @@ def load_source_config(directory):
                           parse_constant=no_nonfinite)
     except (UnicodeError, ValueError, TypeError) as exc:
         raise ValueError('invalid HF config.json: %s' % exc) from exc
-    return identify_model_key(data), data
+    return identify_model_key(data, generic=generic), data

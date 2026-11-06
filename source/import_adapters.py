@@ -579,14 +579,14 @@ class LLMImportAdapter(ImportAdapter):
 
     DTYPES = ('float32', 'float16')
 
-    def _key_for(self, path):
+    def _key_for(self, path, *, generic=False):
         cfg = os.path.join(path, 'config.json')
         if not os.path.isfile(cfg):
             return None
 
 
         from pascalvision_convert.llm_family_profile import load_source_config
-        key, _config = load_source_config(path)
+        key, _config = load_source_config(path, generic=generic)
         return key
 
     def matches(self, path, recognised):
@@ -698,7 +698,9 @@ class LLMImportAdapter(ImportAdapter):
               build_plan=None, *, consumer_kit_source=None,
               approved_consumer_inventory=None,
               approved_hf_source_tree_sha256=None):
-        key = self._key_for(path)
+        from pascalvision_convert import qwen_universal
+        requested = ((build_plan or {}).get('options', {}).get('llm') or {}).get('model_key')
+        key = self._key_for(path, generic=(requested == qwen_universal.KEY))
         if key is None:
             raise RuntimeError('not a recognised LLM directory: %s' % path)
         installed_builder = verify_installed_llm_helpers()
@@ -783,7 +785,8 @@ class LLMImportAdapter(ImportAdapter):
             if (not os.path.isdir(output_root) or os.path.islink(output_root) or
                     getattr(info, 'st_file_attributes', 0) & 0x400):
                 raise RuntimeError('native LLM output root is not a plain directory')
-        loader_stem = 'qwen2' if key in ('qwen2.5-0.5b', 'qwen2.5-1.5b') else key
+        loader_stem = 'qwen2' if key in ('qwen2.5-0.5b', 'qwen2.5-1.5b',
+                                       qwen_universal.KEY) else key
         child_outputs = (
             '%s-%s.dll' % (loader_stem, target), 'model.json',
             'params.bin', 'params.json', 'params.index',
@@ -804,7 +807,7 @@ class LLMImportAdapter(ImportAdapter):
             path, expected_model_key=key)
         source_tree_sha256 = source_scan['tree_sha256']
         source_identity = None
-        if (build_plan or {}).get('options', {}).get('llm') is not None:
+        if (build_plan or {}).get('options', {}).get('llm') is not None and key != qwen_universal.KEY:
             from pascalvision_convert import model_sources
             source_identity = model_sources.match_source(source_scan, key)
         if (approved_hf_source_tree_sha256 is not None and

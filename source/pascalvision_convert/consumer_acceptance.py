@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 """Aggregate declared LLM checks without turning missing evidence into success."""
 
-from .llm_build_profile import QWEN_CUDA_PROFILE, QWEN_15_CUDA_PROFILE
+from .llm_build_profile import QWEN_CUDA_PROFILE, QWEN_15_CUDA_PROFILE, QWEN_GENERIC_CUDA_PROFILE
 
 SCHEMA = "crosspascal.consumer-checks.v1"
 STATUSES = frozenset(("PASS", "FAIL", "NOT_RUN", "ERROR"))
@@ -13,7 +13,7 @@ REQUIRED = (
     "consumer_runtime",
 )
 PROFILES = frozenset(("native-llm-build-v1", QWEN_CUDA_PROFILE,
-                      QWEN_15_CUDA_PROFILE))
+                      QWEN_15_CUDA_PROFILE, QWEN_GENERIC_CUDA_PROFILE))
 
 
 def aggregate(profile_id, checks):

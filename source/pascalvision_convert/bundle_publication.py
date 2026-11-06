@@ -18,6 +18,7 @@ import shutil
 import struct
 import threading
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 
 from . import bundle_atomic, bundle_download, hf_held_stage, runtime, source_freeze
@@ -741,6 +742,9 @@ def inspect_selected_native_consumer_kit(directory, *, model_key, device,
     qwen_licenses = {
         'qwen2.5-0.5b': 'LICENSE-Qwen2.5-0.5B-Instruct.txt',
         'qwen2.5-1.5b': 'LICENSE-Qwen2.5-1.5B-Instruct.txt',
+        # A generic local checkpoint may reuse the EA009 *tokenizer/runtime*
+        # kit, not its model weights or official-model provenance claim.
+        'qwen2-compatible-local': 'LICENSE-Qwen2.5-0.5B-Instruct.txt',
     }
     model_files = ({qwen_licenses[model_key], 'MODEL-SOURCE.json'}
                    if model_key in qwen_licenses else set())
@@ -750,6 +754,20 @@ def inspect_selected_native_consumer_kit(directory, *, model_key, device,
             set(files) != expected | licenses | notices | selected_model_files or
             any(member.size <= 0 for member in files.values())):
         raise UnsafePublication('unapproved or incomplete selected native consumer kit')
+    if model_key == 'qwen2-compatible-local':
+        from .model_sources import catalog_model
+        # The EA009 0.5B kit is being used solely for its known native
+        # tokenizer/runtime exports. Its MODEL-SOURCE never attests the local
+        # selected model. The *new* model.json uses local-sha256 exclusively.
+        official_kit = catalog_model('qwen2.5-0.5b')
+        pin = official_kit['license_file']
+        name = qwen_licenses[model_key]
+        item = files.get(name)
+        if (item is None or item.size != pin['bytes'] or
+                item.sha256 != pin['sha256'] or
+                'MODEL-SOURCE.json' not in files or not notices):
+            raise UnsafePublication('generic Qwen requires an intact selected '
+                                    'Qwen tokenizer/runtime kit, not an unlicensed relabel')
     if model_key == 'qwen2.5-1.5b':
         
         
@@ -930,7 +948,17 @@ def commit_native_family_stage(stage, destination, plan, *, model_key,
     if os.path.lexists(destination):
         raise UnsafePublication('native family final output already occupied')
     from .llm_bundle_contract import validate_llm_output
+    from .qwen_universal import KEY
+
     validate_llm_output(stage, plan, model_key, require_consumer=True)
+    if model_key == KEY:
+        if not isinstance(approved_consumer_inventory, bundle_atomic.Inventory):
+            raise UnsafePublication('local Qwen bundle requires an approved tokenizer kit')
+        marker = Path(stage) / 'MODEL-SOURCE.json'
+        kit_marker = marker.with_name('TOKENIZER-KIT-SOURCE.json')
+        if os.path.lexists(kit_marker):
+            raise UnsafePublication('local Qwen tokenizer kit marker already exists')
+        marker.rename(kit_marker)
     entries = bundle_download.collect_bundle_files(stage)
     inventory = bundle_atomic.scan_bundle_tree(
         stage, max_bytes=bundle_atomic.MAX_NATIVE_FAMILY_BYTES)
@@ -939,6 +967,12 @@ def commit_native_family_stage(stage, destination, plan, *, model_key,
             raise UnsafePublication('native consumer commit requires approved Inventory')
         approved_files = {member.path: member for member in
                           approved_consumer_inventory.members if member.kind == 'file'}
+        if model_key == KEY:
+            source = approved_files.pop('MODEL-SOURCE.json', None)
+            if source is None:
+                raise UnsafePublication('local Qwen tokenizer kit lacks its source record')
+            approved_files['TOKENIZER-KIT-SOURCE.json'] = replace(
+                source, path='TOKENIZER-KIT-SOURCE.json')
         actual_files = {member.path: member for member in inventory.members
                         if member.kind == 'file'}
         from .llm_bundle_contract import _FAMILIES

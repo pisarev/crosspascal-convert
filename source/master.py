@@ -1019,19 +1019,57 @@ def _consumer_preview_display(selected):
             'verification_status': 'NOT_CHECKED'}
 
 
+def _add_hf_plan_details(plan, selected, path):
+    from pascalvision_convert import llm_family_profile, qwen_universal
+
+    plan['hf_selected_source'] = _hf_preview_display(selected)
+    plan['warnings'].append(_hf_preview_warning())
+    if selected['model_key'] != qwen_universal.KEY:
+        return
+    import shutil
+
+    _key, raw_config = llm_family_profile.load_source_config(path, generic=True)
+    cfg = qwen_universal.validate_config(raw_config)
+    required = qwen_universal.admit(
+        cfg, disk_free=shutil.disk_usage(os.path.dirname(plan['output_directory'])).free,
+        ram_free=qwen_universal.measured_available_ram())
+    plan['qwen_compatibility'] = {
+        'schema': qwen_universal.SCHEMA,
+        'profile_id': qwen_universal.PROFILE,
+        'dimensions': cfg,
+        'requirements': required,
+        'measured_gpu_free_bytes': None,
+        'gpu_admission': 'PENDING_DEVICE_RUNTIME_NOT_PASSED',
+        'source_kind': 'local-sha256',
+    }
+    plan['warnings'].append(
+        'Local Qwen2 compatibility is structural, not official Qwen2.5 attribution. '
+        'QwenChat checks free GPU memory before loading the model.')
+
+
+def _selected_llm_key(data):
+    """Preserve curated defaults; explicit local route never claims a catalog pin."""
+    from pascalvision_convert import qwen_universal
+    generic = data.get('llm_profile') == qwen_universal.PROFILE
+    return import_adapters.LLMImportAdapter()._key_for(
+        str(data.get('path') or '').strip(), generic=generic)
+
+
 def _selected_hf_preview(data):
     """Record the selected language model weights and tokenizer for build validation."""
     if not data.get('full_build'):
         return None
     path = str(data.get('path') or '').strip()
-    key = import_adapters.LLMImportAdapter()._key_for(path)
-    if key not in ('qwen2.5-0.5b', 'qwen2.5-1.5b', 'gemma-2-2b'):
+    key = _selected_llm_key(data)
+    from pascalvision_convert import qwen_universal
+    if key not in ('qwen2.5-0.5b', 'qwen2.5-1.5b',
+                   'gemma-2-2b', qwen_universal.KEY):
         raise ValueError('Full native HF Preview requires a supported exact '
                          'Qwen2.5/Gemma2 model profile')
     from pascalvision_convert import hf_closure, hf_held_stage
     selected = hf_closure.scan_selected_hf_source(path,
                                                   expected_model_key=key)
-    if data.get('llm_profile'):
+    if data.get('llm_profile') and key != qwen_universal.KEY:
         model_sources.match_source(selected, key)
     if selected['file_count'] > hf_held_stage.MAX_HF_SELECTED_FILES:
         raise ValueError('selected HF source exceeds the current 512-file '
@@ -1082,7 +1120,7 @@ def _selected_family_consumer(data, report):
             not os.path.isabs(source)):
         raise ValueError('native family atomic requires a full-build model and an absolute selected consumer root')
     path = str(data.get('path') or '').strip()
-    key = import_adapters.LLMImportAdapter()._key_for(path)
+    key = _selected_llm_key(data)
     if key is None:
         raise ValueError('native family atomic requires a recognised native LLM')
     device = report['target']['device']
@@ -1094,7 +1132,8 @@ def _selected_family_consumer(data, report):
     else:
         inventory = bundle_publication.inspect_selected_native_consumer_kit(
             source, model_key=key, device=device)
-    if data.get('llm_profile'):
+    from pascalvision_convert import qwen_universal
+    if data.get('llm_profile') and key != qwen_universal.KEY:
         members = {item.path: item for item in inventory.members}
         license_file = model_sources.catalog_model(key)['license_file']
         legal_name = {
@@ -1109,6 +1148,13 @@ def _selected_family_consumer(data, report):
                 'MODEL-SOURCE.json' not in members or
                 not any(name.startswith('NOTICE-tvm-') for name in members)):
             raise ValueError('The supplied Qwen kit must include its pinned model license, source record, and TVM FFI notice')
+    if key == qwen_universal.KEY:
+        members = {item.path: item for item in inventory.members}
+        if ('MODEL-SOURCE.json' not in members or
+                'LICENSE-Qwen2.5-0.5B-Instruct.txt' not in members or
+                not any(name.startswith('NOTICE-tvm-') for name in members)):
+            raise ValueError('Generic Qwen2 uses only a complete approved '
+                             'Qwen tokenizer and TVM runtime consumer kit')
     return {'source': os.path.abspath(source), 'key': key,
             'device': device, 'inventory': inventory}
 
@@ -1140,8 +1186,7 @@ def _issue_preview(data):
             report['native_family_consumer'] = _consumer_preview_display(family_consumer)
         hf = _selected_hf_preview(data)
         if hf is not None:
-            report['hf_selected_source'] = _hf_preview_display(hf)
-            report['warnings'].append(_hf_preview_warning())
+            _add_hf_plan_details(report, hf, path)
         paddle = _selected_paddle_preview(data)
         if paddle is not None:
             report['paddle_selected_source'] = paddle
@@ -1237,8 +1282,8 @@ def _build_from_preview(data):
             return {'trouble': 'Selected HF weights/tokenizer differ from '
                     'reviewed Preview; review again'}
         if fresh_hf is not None:
-            fresh_plan['hf_selected_source'] = _hf_preview_display(fresh_hf)
-            fresh_plan['warnings'].append(_hf_preview_warning())
+            _add_hf_plan_details(fresh_plan, fresh_hf,
+                                 str(options.get('path') or '').strip())
         fresh_paddle = _selected_paddle_preview(options)
         if fresh_paddle is not None:
             fresh_plan['paddle_selected_source'] = fresh_paddle
@@ -1398,7 +1443,7 @@ def _llm_plan_arguments(data):
         if data.get('llm_profile') or data.get('llm_python'):
             raise ValueError('LLM profile and Python selection require a native LLM')
         return {}
-    model_key = import_adapters.LLMImportAdapter()._key_for(data.get('path') or '')
+    model_key = _selected_llm_key(data)
     return {
         'llm_options': llm_build_profile.select(
             data.get('llm_profile'), model_key=model_key),
@@ -2154,7 +2199,7 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                               getattr(adapter, 'kind', 'export') == 'full_build')
             if approved_hf_closure is not None and (
                     not is_full_family or adapter.name != 'llm' or
-                    adapter._key_for(path) != approved_hf_closure['model_key']):
+                    _selected_llm_key(data) != approved_hf_closure['model_key']):
                 raise RuntimeError('Preview-approved Qwen/Gemma source changed '
                                    'family registration before native compiler')
             if atomic_complete_bundle and adapter is not None:
@@ -2194,7 +2239,7 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                     if adapter.name != 'llm':
                         raise RuntimeError('native family atomic supports LLM only')
                     selected = approved_family_consumer
-                    if selected['key'] != adapter._key_for(path) or selected['device'] != device:
+                    if selected['key'] != _selected_llm_key(data) or selected['device'] != device:
                         raise RuntimeError('native family source/profile changed')
                     bundle_publication.stage_selected_native_consumer_kit(
                         selected['source'], build_directory, selected['inventory'],
@@ -3521,7 +3566,14 @@ class Responder(BaseHTTPRequestHandler):
 
                     answer['export_kind'] = getattr(adapter, 'kind', 'export')
                     if answer['export_kind'] == 'full_build':
-                        answer['model_key'] = adapter._key_for(path)
+                        key = adapter._key_for(path)
+                        if key in ('qwen2.5-0.5b', 'qwen2.5-1.5b'):
+                            revision = model_sources.catalog_model(key)['revision']
+                            downloaded = app_paths.data_path('models') / (key + '-' + revision[:7])
+                            if os.path.normcase(os.path.abspath(path)) != os.path.normcase(
+                                    os.path.abspath(downloaded)):
+                                key = adapter._key_for(path, generic=True)
+                        answer['model_key'] = key
             return answer
         except detect.OnnxAdmissionError as trouble:
             return {'trouble': 'ONNX inspection deferred by the capacity guard: '
