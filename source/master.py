@@ -3312,6 +3312,7 @@ class Responder(BaseHTTPRequestHandler):
             '/api/ocr-draft-evidence', '/api/ocr-draft-preview',
             '/api/ocr-draft-build', '/api/recognise', '/api/preview',
             '/api/gemma-preview', '/api/gemma-build',
+            '/api/gemma-vision-preview', '/api/gemma-vision-build',
             '/api/build', '/api/samples', '/api/toolchain', '/api/model-download')
         if route.path in json_routes:
             try:
@@ -3402,6 +3403,11 @@ class Responder(BaseHTTPRequestHandler):
             return
         if route.path == '/api/recognise':
             self._send(json.dumps(self._recognise(body), ensure_ascii=False))
+            return
+        if route.path in ('/api/gemma-vision-preview', '/api/gemma-vision-build'):
+            from pascalvision_convert import gemma_vision_showcase
+            action = gemma_vision_showcase.preview if route.path.endswith('-preview') else gemma_vision_showcase.build
+            self._send(json.dumps(action(body), ensure_ascii=False))
             return
         if route.path in ('/api/gemma-preview', '/api/gemma-build'):
             from pascalvision_convert import gemma_showcase

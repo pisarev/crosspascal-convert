@@ -11,6 +11,9 @@ import time
 
 sys.path[:0] = [p for p in os.environ.get("CROSSPASCAL_GEMMA_RUNTIME_PACKAGES", "").split(os.pathsep) if p]
 import numpy as np
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from pascalvision_convert.generation import Generation
 import sentencepiece
 import tvm
 import tvm_ffi
@@ -51,6 +54,12 @@ class Session:
                                                                                    
             self.parameters.append(tvm_ffi.from_dlpack(array.__dlpack__(max_version=(1, 0))))
 
+    def close(self):
+        self.parameters.clear()
+        self.vm = None
+        self.arrays.clear()
+
+
     def member(self, name):
         path = (self.folder / name).resolve(strict=True)
         if path.parent != self.folder or not path.is_file():
@@ -73,7 +82,7 @@ class Session:
             return prefix + [start] + encode("user\n" + prompt) + [end] + encode("\n") + [start] + encode("model\n")
         return prefix + encode(prompt)
 
-    def generate(self, prompt, max_new_tokens=0, on_text=None, should_stop=None, chat=True):
+    def generate(self, prompt, max_new_tokens=0, on_text=None, should_stop=None, chat=True, options=None):
         if type(max_new_tokens) is not int or max_new_tokens < 0:
             raise ValueError("Max new tokens must be zero (automatic) or a positive integer")
         started = time.perf_counter()
@@ -82,6 +91,8 @@ class Session:
         context = self.manifest["context"]
         if prompt_count >= context:
             raise ValueError(f"Prompt needs {prompt_count} tokens; rebuild with context above {context}")
+        sampling = Generation(options, tokens)
+        limit, limit_reason = sampling.limit(max_new_tokens, context - prompt_count)
         caches = [tvm.runtime.tensor(np.zeros(self.manifest["cache_shape"], dtype="float32"))
                   for _ in range(self.manifest["cache_count"])]
         stop_ids = {self.tokenizer.eos_id(), self.special.get("<end_of_turn>")}
@@ -103,7 +114,7 @@ class Session:
                     raise RuntimeError("The native graph produced non-finite logits")
                 if first is None:
                     first = time.perf_counter() - started
-                token = int(logits.argmax())
+                token = sampling.choose(logits)
                 if token in stop_ids:
                     stop = "eos"
                     break
@@ -111,12 +122,12 @@ class Session:
                 tokens.append(token)
                 if on_text:
                     on_text(self.tokenizer.decode(output))
-                if max_new_tokens and len(output) >= max_new_tokens:
-                    stop = "manual_limit"
+                if len(output) >= limit:
+                    stop = limit_reason
                     break
         except KeyboardInterrupt:
             stop = "user_stop"
-        return {"backend": "TVM LLVM CPU FP32", "source_sha256": self.manifest["source_sha256"],
+        return {"generation_options": sampling.report(), "backend": "TVM LLVM CPU FP32", "source_sha256": self.manifest["source_sha256"],
                 "prompt_tokens": prompt_count, "generated_tokens": len(output), "token_ids": output,
                 "text": self.tokenizer.decode(output), "stop": stop, "first_token_seconds": first,
                 "total_seconds": time.perf_counter() - started}

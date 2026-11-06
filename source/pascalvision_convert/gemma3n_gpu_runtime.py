@@ -14,6 +14,7 @@ import time
 import numpy as np
 from .gemma3n_runtime import Session
 from .gemma3n_workspace import CudaWorkspace
+from .generation import Generation
 import sentencepiece
 import tvm
 from tvm import relax
@@ -98,6 +99,17 @@ class _CudaSession(Session):
         self.device.sync()
         self.memory_loaded=cuda_memory()
         self.load_seconds=time.perf_counter()-started
+        self.vision=None
+        if self.manifest.get('vision_manifest'):
+            from .gemma3n_vision_runtime import Vision
+            if self.manifest['vision_manifest']!='vision.json':
+                self.close()
+                raise ValueError('Unsupported vision manifest member')
+            try:
+                self.vision=Vision(self.folder,self.host_tables[0].shape[1],device_id)
+            except BaseException:
+                self.close()
+                raise
 
     def close(self):
         if getattr(self,'vm',None) is None:
@@ -111,6 +123,7 @@ class _CudaSession(Session):
         self.host_parameters.clear()
         self.host_tables.clear()
         self.arrays.clear()
+        self.vision=None
 
     def __enter__(self):
         return self
@@ -122,15 +135,21 @@ class _CudaSession(Session):
         return [tvm.runtime.tensor(np.zeros(self.manifest['cache_shape'],dtype='float32'),self.device)
                 for _ in range(self.manifest['cache_count'])]
 
-    def step(self,token,position,caches):
+    def step(self,token,position,caches,embedding=None):
         if self.vm is None:
             raise RuntimeError('This CUDA session is closed')
         if not 0<=position<self.manifest['context']:
             raise ValueError('Token position exceeds the compiled context')
-        if any(not 0<=token<len(table) for table in self.host_tables):
-            raise ValueError('Token is outside the source embedding tables')
-        embeddings=[tvm.runtime.tensor(np.array(table[token],copy=True).reshape(1,1,-1),self.device)
-                    for table in self.host_tables]
+        if embedding is None:
+            if any(not 0<=token<len(table) for table in self.host_tables):
+                raise ValueError('Token is outside the source embedding tables')
+            rows=[np.array(table[token],copy=True) for table in self.host_tables]
+        else:
+                                                                            
+                                                                         
+            rows=[np.asarray(embedding,dtype='float32')/math.sqrt(self.host_tables[0].shape[1]),
+                  np.array(self.host_tables[1][token if 0<=token<len(self.host_tables[1]) else 0],copy=True)]
+        embeddings=[tvm.runtime.tensor(row.reshape(1,1,-1),self.device) for row in rows]
         index=tvm.runtime.tensor(np.array([position],dtype='int64'),self.device)
         try:
             result=self.vm['main'](*embeddings,index,*caches,*self.parameters)
@@ -140,13 +159,21 @@ class _CudaSession(Session):
         self.workspace.check()
         return result[0],list(result[1:])
 
-    def generate(self,prompt,max_new_tokens=0,on_text=None,should_stop=None,chat=True):
+    def generate(self,prompt,max_new_tokens=0,on_text=None,should_stop=None,chat=True,options=None,images=None):
         if type(max_new_tokens) is not int or max_new_tokens<0:
             raise ValueError('Use zero for automatic generation or a positive manual limit')
-        tokens=self.encode(prompt,chat)
+        if images:
+            if self.vision is None:
+                raise ValueError('This bundle has no converted vision encoder; remove the image or select an image bundle')
+            tokens,overrides,image_report=self.vision.prompt(self,prompt,images,chat,should_stop)
+        else:
+            tokens=self.encode(prompt,chat)
+            overrides,image_report={},[]
         count=len(tokens)
         if count>=self.manifest['context']:
             raise ValueError('The prompt does not fit the compiled context')
+        sampling=Generation(options,tokens)
+        limit,limit_reason=sampling.limit(max_new_tokens,self.manifest['context']-count)
         cache=self.new_cache()
         self.device.sync()
         started=time.perf_counter()
@@ -156,7 +183,7 @@ class _CudaSession(Session):
             for position in range(self.manifest['context']-1):
                 if should_stop and should_stop():
                     stop='user_stop';break
-                logits,cache=self.step(tokens[position],position,cache)
+                logits,cache=self.step(tokens[position],position,cache,overrides.get(position))
                 if position+1<count:
                     continue
                 logits=logits.numpy()
@@ -166,19 +193,19 @@ class _CudaSession(Session):
                     first=elapsed
                 if not np.isfinite(logits).all():
                     raise RuntimeError('Non-finite native CUDA output')
-                token=int(logits.argmax())
+                token=sampling.choose(logits)
                 times.append(elapsed)
                 if token in stop_ids:
                     stop='eos';break
                 output.append(token);tokens.append(token)
                 if on_text:
                     on_text(self.tokenizer.decode(output))
-                if max_new_tokens and len(output)>=max_new_tokens:
-                    stop='manual_limit';break
+                if len(output)>=limit:
+                    stop=limit_reason;break
         except KeyboardInterrupt:
             stop='user_stop'
         self.device.sync()
-        return {'backend':self.manifest['backend'],'gpu':self.device.device_name,
+        return {'images':image_report,'generation_options':sampling.report(),'backend':self.manifest['backend'],'gpu':self.device.device_name,
                 'compiled_arch':self.manifest['cuda_arch'],'load_seconds':self.load_seconds,
                 'prompt_tokens':count,'generated_tokens':len(output),'token_ids':output,
                 'text':self.tokenizer.decode(output),'stop':stop,'first_token_seconds':first,
