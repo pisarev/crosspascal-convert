@@ -1,6 +1,6 @@
 {
   "schema": "crosspascal-windows-source-index-v1",
-  "release_id": "early-access-010",
+  "release_id": "early-access-012",
   "repository": "crosspascal-convert",
   "local_metadata": [
     {
@@ -16,6 +16,21 @@
       "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da"
     },
     {
+      "path": "docs/FIRST-RUN-VALIDATION.md",
+      "bytes": 1319,
+      "sha256": "51964e9a9b9eef48f816dff31442d09f67a88847c0bec7a16c7218635b2731bd"
+    },
+    {
+      "path": "docs/GEMMA3N.md",
+      "bytes": 8040,
+      "sha256": "b1686b7031c66e0110776449eac295c47625c48a35552868820102a0b4992066"
+    },
+    {
+      "path": "docs/SOURCE-NOTES.md",
+      "bytes": 10700,
+      "sha256": "9245359077dcbff09b47ee2ded009cdb3ed00adbfd3d7b31642fc23bee608edb"
+    },
+    {
       "path": "INSTALL.md",
       "bytes": 30076,
       "sha256": "13931e517d57b33b0c7bbddfff4a965150695cb6fdf0294e128ab72e709d79e9"
@@ -26,24 +41,14 @@
       "sha256": "04b643fe3d2d95be3b9a0ad9d3882d00a9b2d9dfb74694f35fe8edfc77e67815"
     },
     {
-      "path": "README.md",
-      "bytes": 3267,
-      "sha256": "beaf3e1d1d6c697f6c219b20b18d1bce4ac5b3fe49746655149d476ff89ea7c1"
-    },
-    {
-      "path": "docs/FIRST-RUN-VALIDATION.md",
-      "bytes": 1319,
-      "sha256": "51964e9a9b9eef48f816dff31442d09f67a88847c0bec7a16c7218635b2731bd"
-    },
-    {
-      "path": "docs/SOURCE-NOTES.md",
-      "bytes": 10700,
-      "sha256": "9245359077dcbff09b47ee2ded009cdb3ed00adbfd3d7b31642fc23bee608edb"
-    },
-    {
       "path": "pyproject.toml",
       "bytes": 1047,
       "sha256": "74fc6d1bb0c432920cd99584c17bd43826c86ca26ae6a1613200c11c640487f6"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4908,
+      "sha256": "7c3173f2d40855e03ecea6b30e24cda2040adb70d59cfae9f311aa52f73fb818"
     },
     {
       "path": "scripts/verify_source.py",
@@ -57,8 +62,8 @@
     },
     {
       "path": "source/master.py",
-      "bytes": 180240,
-      "sha256": "06c321c5b635d195abe165cdd6d187d1237c39dcc4335fac88be2dc6c5a2ecd6"
+      "bytes": 180616,
+      "sha256": "dc8f0d3998641cf326a7eb41a2bb593f80c9e27ce99c5758ce3a4a3d2600052a"
     },
     {
       "path": "source/pascalvision_convert/__init__.py",
@@ -151,9 +156,74 @@
       "sha256": "17fb563ede223a56f02f5aa59f21ba5d2b8a7a0033d45de49684e892f518cf4b"
     },
     {
+      "path": "source/pascalvision_convert/export_tokenizer_gemma.py",
+      "bytes": 5073,
+      "sha256": "98c88cc04980807c47a2815e630a3f2561cf37b95ea37161d76bfc74d3ad67f5"
+    },
+    {
       "path": "source/pascalvision_convert/exported_onnx_hold.py",
       "bytes": 14671,
       "sha256": "edb0c0bc56b03b14c978c208ee766593dd3efb6baa562dc2bf088a9af3f67c26"
+    },
+    {
+      "path": "source/pascalvision_convert/gemma3n_compile.py",
+      "bytes": 1576,
+      "sha256": "c2c77e9532905e29e245f52c7b27677389f194ea81e314517167c0854c79c1dd"
+    },
+    {
+      "path": "source/pascalvision_convert/gemma3n_export.py",
+      "bytes": 13118,
+      "sha256": "31f348b48970423efb13cc7412e3140281b93f48c196f0927b2d44da29b464d9"
+    },
+    {
+      "path": "source/pascalvision_convert/gemma3n_gpu.py",
+      "bytes": 8194,
+      "sha256": "b4fbe2dfa672e579bb23482e74d643e7e5929b917b41fa1207e5a047b68d5d46"
+    },
+    {
+      "path": "source/pascalvision_convert/gemma3n_gpu_runtime.py",
+      "bytes": 11632,
+      "sha256": "15193b277b98f75a9934c525c682c32a5c68a7cf78fc47b66899f434a82f69c8"
+    },
+    {
+      "path": "source/pascalvision_convert/gemma3n_inspect.py",
+      "bytes": 1914,
+      "sha256": "041c263f1e20afe1a4a8320f0a827b1a11cfdc0296ac819811ec072994d1fc89"
+    },
+    {
+      "path": "source/pascalvision_convert/gemma3n_runtime.py",
+      "bytes": 7799,
+      "sha256": "7aebe5130ca458f179b048f8f6a50e04f1037f514135965d40254ebdff1ca7cb"
+    },
+    {
+      "path": "source/pascalvision_convert/gemma3n_stage.py",
+      "bytes": 7397,
+      "sha256": "e3457d2198a381e4cbc707bb255288e515418df09b826c36fb65099fca1b406b"
+    },
+    {
+      "path": "source/pascalvision_convert/gemma3n_workspace.py",
+      "bytes": 5794,
+      "sha256": "971673f25e32096c606684813b826417556cb8d408e29eddc472d87cb53f656d"
+    },
+    {
+      "path": "source/pascalvision_convert/gemma_chat_worker.py",
+      "bytes": 5052,
+      "sha256": "18d02af0e4115cde6baf12a8e8882c3cdcd7f83b85059d1785ff1632a4842687"
+    },
+    {
+      "path": "source/pascalvision_convert/gemma_cpu_schedule.py",
+      "bytes": 2394,
+      "sha256": "6ff0246cfd35e859cbb8404199ff1537412a17daa3280b35e05d58e91a1f351f"
+    },
+    {
+      "path": "source/pascalvision_convert/gemma_family.py",
+      "bytes": 11103,
+      "sha256": "d1b68ce607f853ddab984f051cc1b6533e314cb99342cbee7e353d72bddf0323"
+    },
+    {
+      "path": "source/pascalvision_convert/gemma_showcase.py",
+      "bytes": 10676,
+      "sha256": "c1ce360410ec5c16a110ce4a3f27bbae0a54532e9ace682ff88bdbe4427c5848"
     },
     {
       "path": "source/pascalvision_convert/hf_closure.py",
@@ -191,11 +261,6 @@
       "sha256": "287c7955aa46a1770a068039738dcbcd0e48b1448fdfeafd5aef8310cd7cf5a3"
     },
     {
-      "path": "source/pascalvision_convert/llm_helpers/HELPER-SHA256.json",
-      "bytes": 537,
-      "sha256": "6a5f9a43b907d342600ece402417339b3983c0f9f3f61278c606d1856720730a"
-    },
-    {
       "path": "source/pascalvision_convert/llm_helpers/__init__.py",
       "bytes": 146,
       "sha256": "5f281ba368b8cdd7cba4baaf36e8dde597e50ce1e995d07c495214002c37207a"
@@ -209,6 +274,11 @@
       "path": "source/pascalvision_convert/llm_helpers/gemma2_model.py",
       "bytes": 13032,
       "sha256": "50a60adfbce71e38d611588352c2c7ea547ced458b83052acab7977c306fe25e"
+    },
+    {
+      "path": "source/pascalvision_convert/llm_helpers/HELPER-SHA256.json",
+      "bytes": 537,
+      "sha256": "6a5f9a43b907d342600ece402417339b3983c0f9f3f61278c606d1856720730a"
     },
     {
       "path": "source/pascalvision_convert/llm_helpers/qwen2_model.py",
@@ -227,8 +297,8 @@
     },
     {
       "path": "source/pascalvision_convert/master_page.html",
-      "bytes": 106800,
-      "sha256": "0b212d3d1cbb4d9145d912f3d65e2196492788cb40bc636c52d38c5371ac62e1"
+      "bytes": 111162,
+      "sha256": "bf25789f676f1200dec982bdc95f526862998dadb0f746539742590b759f2adc"
     },
     {
       "path": "source/pascalvision_convert/model_catalog.json",
