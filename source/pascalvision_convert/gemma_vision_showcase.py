@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Add image support to an existing CUDA text bundle without rebuilding it."""
+"""Add native images to a compatible CPU or CUDA Gemma 3n text bundle."""
 from contextlib import ExitStack
 import hashlib
 import json
@@ -38,9 +38,9 @@ def inspect(data):
     api.assert_local_ntfs(bundle)
     api.assert_local_ntfs(projector)
     model = json.loads((bundle / 'model.json').read_text(encoding='utf-8'))
-    if (model.get('architecture') != 'gemma3n' or model.get('backend') != 'TVM CUDA W8A32'
+    if (model.get('architecture') != 'gemma3n' or model.get('backend') not in ('TVM CUDA W8A32', 'TVM LLVM CPU FP32')
             or not model.get('host_embeddings') or model.get('vision_manifest')):
-        raise ValueError('Select a converted Gemma 3n CUDA text bundle without an existing vision add-on')
+        raise ValueError('Select a Gemma 3n CPU or CUDA text bundle with host embeddings and no existing vision add-on. Reconvert older CPU bundles first.')
     script = Path(__file__).with_name('gemma3n_vision_export.py')
     result = subprocess.run([gemma_showcase._gemma_python(), '-B', str(script), str(projector), '--inspect'],
         capture_output=True, text=True, timeout=90, creationflags=subprocess.CREATE_NO_WINDOW)
@@ -67,7 +67,7 @@ def preview(data):
             token = secrets.token_hex(24)
             _preview = SimpleNamespace(data=dict(data), token=token, expires=time.monotonic()+600,
                                        text_pins=text_pins, vision_pins=vision_pins)
-        return {'preview_token': token, 'cuda_arch': model['cuda_arch'], 'image_size': metadata['clip.vision.image_size'],
+        return {'preview_token': token, 'cuda_arch': model.get('cuda_arch'), 'backend': model['backend'], 'image_size': metadata['clip.vision.image_size'],
                 'modalities': ['text', 'image']}
     except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.TimeoutExpired) as exc:
         return {'trouble': str(exc)}

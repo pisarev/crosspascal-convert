@@ -24,7 +24,7 @@ Enter a local Gemma 2 checkpoint directory or a Gemma 3n GGUF file in the model 
 
 The current native backend builds CPU FP32 bundles for compatible Gemma 2 text checkpoints with the expected tokenizer and contexts up to 1,024 tokens. This experimental short-context implementation omits attention-score soft-capping. The preview reports when a Gemma architecture requires another backend. Build confirms conversion and reports the bundle directory. Inference requires a separate check.
 
-Gemma 3n has a separate native TVM text backend with AltUp, LAuReL, per-layer embeddings, activation sparsity, alternating local/global attention, shared KV layers and output soft-capping. Its source format is GGUF. The CPU profile uses file-backed FP32 parameters. The CUDA profile uses compact int8 projection weights with FP32 arithmetic and host embedding lookup. GPU memory requirements depend on the architecture and compiled context; available memory is checked before loading. For CUDA text bundles, the experimental image add-on converts a matching Gemma 3n projector and creates an independent text-and-image bundle. Audio and arbitrary other Gemma architectures are outside this route. Compilation success alone does not establish model quality or performance.
+Gemma 3n has a separate native TVM text backend with AltUp, LAuReL, per-layer embeddings, activation sparsity, alternating local/global attention, shared KV layers and output soft-capping. Its source format is GGUF. The CPU profile uses file-backed FP32 parameters. The CUDA profile uses compact int8 projection weights with FP32 arithmetic and host embedding lookup. GPU memory requirements depend on the architecture and compiled context; available memory is checked before loading. For CPU or CUDA text bundles with host embeddings, the experimental image add-on converts a matching Gemma 3n projector and creates an independent text-and-image bundle. Audio and arbitrary other Gemma architectures are outside this route. Compilation success alone does not establish model quality or performance.
 
 An additional **compatible local Qwen2 dense-text** profile is available for explicitly selected local original Safetensors folders. It derives supported topology and resource requirements from verified configuration and tensor headers instead of a model-specific name or official-source catalog entry. The local route retains Windows x64, CUDA FP32, one batch, a 2,048-token context and the exact established Qwen byte-BPE tokenizer semantics. Use the **Compatible local Qwen2** dropdown entry, inspect the Preview memory/disk requirements and source SHA-256, and supply the existing native Qwen tokenizer/runtime kit; this kit does not establish an official identity for the selected local weights. It is **not** general support for Qwen-VL, MoE, arbitrary tokenizers, quantized formats or arbitrary context lengths. The Pascal consumer checks bundle structure and available GPU memory before loading.
 
@@ -35,3 +35,15 @@ A completed build confirms the converter's file checks. Run the Pascal example t
 ## License
 
 Original source and documentation use the [MIT license](LICENSE). Runtime dependencies and pretrained models retain their own terms.
+
+## Qwen2.5-VL images on CPU
+
+The separate Qwen2.5-VL route reads checkpoint configuration and tensor shapes
+instead of matching model names. It converts the vision encoder, multimodal
+positions, a 16-token prompt graph and cached token decoder to native TVM CPU
+libraries. Completed bundles work through the same chat and console API as
+the other supported language architectures. Dense Qwen2.5 remains text-only.
+See [Qwen2.5-VL conversion](docs/QWEN2.5-VL.md) for manual steps, memory needs,
+model terms and the distinction between executed checkpoints and configuration
+validation. CPU image inference is an optional local route; it is not a claim
+of GPU-like speed or support for every checkpoint.

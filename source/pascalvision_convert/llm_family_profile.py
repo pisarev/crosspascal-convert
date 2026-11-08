@@ -111,7 +111,7 @@ def identify_model_key(config, *, generic=False):
                 validate_config(config)
                 return KEY
             except ValueError:
-                pass  # Preserve precise curated mismatch errors.
+                pass                                             
         raise ValueError('No approved native LLM structural profile matches: ' +
                          '; '.join(errors))
     return None

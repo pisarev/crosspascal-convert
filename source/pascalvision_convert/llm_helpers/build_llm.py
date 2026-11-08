@@ -311,8 +311,8 @@ def main():
         generic_config = qwen_universal.validate_config(raw)
         qwen_universal.verify_tokenizer(compiler_source)
         qwen_universal.inspect_local_headers(compiler_source, generic_config)
-        # Recheck host admission before graph export. GPU free memory is
-        # independently checked by the Pascal runtime, not guessed here.
+                                                                        
+                                                                        
         import shutil
         qwen_universal.admit(
             generic_config, disk_free=shutil.disk_usage(

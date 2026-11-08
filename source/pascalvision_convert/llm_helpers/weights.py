@@ -429,8 +429,8 @@ def plan(source, num_layers):
 
     joined['model.embed_tokens.weight'] = lambda: take('model.embed_tokens.weight')
     joined['model.norm.weight'] = lambda: take('model.norm.weight')
-    # The shared Qwen2 graph exposes an independent LM head only for untied
-    # checkpoints. A tied input must not synthesize or claim a second head.
+                                                                           
+                                                                           
     if 'lm_head.weight' in source.names:
         joined['lm_head.weight'] = lambda: take('lm_head.weight')
 

@@ -375,6 +375,25 @@ details .card:last-child{margin-bottom:0}
     <div class="rows" id="recognised"></div>
     <div class="log-wrap" id="recognise-advice" hidden></div>
 
+    <details class="technical-details" id="qwen-vl-panel">
+      <summary>Qwen2.5-VL text and images on CPU (experimental)</summary>
+      <p class="hint">Select the original checkpoint folder in the model path above.
+        Compatibility is checked from its configuration and every tensor shape, without a model-name list.
+        This profile creates native TVM text and vision libraries for CPU execution.
+        Images retain their proportions inside the selected square size. Larger images and contexts
+        require more memory and processing time. Video and audio input are not implemented.</p>
+      <div class="toolbar">
+        <label for="qwen-vl-context">Context tokens</label>
+        <input id="qwen-vl-context" type="number" min="128" step="128" value="2048">
+        <label for="qwen-vl-size">Image size</label>
+        <select id="qwen-vl-size"><option selected>224</option><option>336</option><option>448</option></select>
+        <label for="qwen-vl-cpu">LLVM CPU target</label>
+        <input id="qwen-vl-cpu" value="generic" maxlength="32">
+        <button type="button" id="qwen-vl-preview">Inspect image checkpoint</button>
+        <button type="button" id="qwen-vl-build" disabled>Convert Qwen2.5-VL</button>
+      </div>
+      <p id="qwen-vl-status" role="status"></p>
+    </details>
     <details class="technical-details" id="gemma-family-panel">
       <summary>Gemma conversion (experimental)</summary>
       <p class="hint">Use the model path above to select a Gemma 2 Hugging Face
@@ -382,7 +401,7 @@ details .card:last-child{margin-bottom:0}
         determine compatibility; model names are not a whitelist. Conversion creates
         a native TVM text bundle with a KV cache for Gemma 3n. CUDA uses compact
         int8 projection weights and FP32 arithmetic; embedding tables remain in host memory.
-        To add images to a converted Gemma 3n CUDA bundle, use the vision section below.
+        To add images to a converted Gemma 3n CPU or CUDA bundle, use the vision section below.
         Audio input is not implemented. Gemma 3n requires
         the documented Python conversion dependencies and substantial disk space for
         expanded FP32 weights. Conversion does not imply inference acceptance.</p>
@@ -409,9 +428,9 @@ details .card:last-child{margin-bottom:0}
     </details>
     <details class="technical-details" id="gemma-vision-panel">
       <summary>Add images to a Gemma 3n bundle (experimental)</summary>
-      <p class="hint">Select your converted Gemma 3n CUDA text bundle and its matching
+      <p class="hint">Select your converted Gemma 3n CPU or CUDA text bundle and its matching
         Gemma 3n vision projector GGUF. A new text-and-image bundle will be created;
-        the text graph is reused. The vision compiler uses the bundle's CUDA architecture.
+        the text graph is reused. The vision compiler uses the bundle's selected CPU or CUDA target.
         Conversion requires timm 1.0.22 and onnxsim 0.4.36 in the documented Gemma conversion Python.
         The new bundle includes an independent copy of the text parameters. Allow enough
         disk space for the existing bundle plus at least 4 GiB.</p>
@@ -925,6 +944,64 @@ async function ask(route, body){
   }
 }
 
+const qwenVLInputs = ['model-path', 'qwen-vl-context', 'qwen-vl-size', 'qwen-vl-cpu'].map(
+  id => document.getElementById(id));
+const qwenVLPreview = document.getElementById('qwen-vl-preview');
+const qwenVLBuild = document.getElementById('qwen-vl-build');
+const qwenVLStatus = document.getElementById('qwen-vl-status');
+let qwenVLApproval = null;
+function qwenVLOptions(){
+  return {path:qwenVLInputs[0].value.trim(), context:Number(qwenVLInputs[1].value),
+          image_size:Number(qwenVLInputs[2].value), cpu:qwenVLInputs[3].value.trim()};
+}
+for (const field of qwenVLInputs){
+  field.addEventListener('input', () => {qwenVLApproval = null; qwenVLBuild.disabled = true;});
+}
+qwenVLPreview.addEventListener('click', async () => {
+  const selection = JSON.stringify(qwenVLOptions());
+  qwenVLApproval = null;
+  qwenVLBuild.disabled = true;
+  qwenVLPreview.disabled = true;
+  qwenVLStatus.textContent = 'Checking the architecture, tensor shapes and source hashes…';
+  try {
+    const result = await ask('/api/qwen-vl-preview', qwenVLOptions());
+    if (selection !== JSON.stringify(qwenVLOptions())){
+      qwenVLStatus.textContent = 'The selection changed. Inspect the checkpoint again.';
+    } else if (result.trouble) {
+      qwenVLStatus.textContent = result.trouble;
+    } else {
+      qwenVLApproval = {token:result.preview_token, selection};
+      qwenVLBuild.disabled = false;
+      qwenVLStatus.textContent = result.architecture + ' · ' + result.layers + ' layers · ' +
+        result.backend + ' · ' + result.context + ' context tokens · ' + result.soft_tokens + ' image tokens';
+    }
+  } catch (error) {
+    qwenVLStatus.textContent = String(error);
+  } finally {
+    qwenVLPreview.disabled = false;
+  }
+});
+qwenVLBuild.addEventListener('click', async () => {
+  const approved = qwenVLApproval;
+  qwenVLApproval = null;
+  qwenVLBuild.disabled = true;
+  if (!approved || approved.selection !== JSON.stringify(qwenVLOptions())){
+    qwenVLStatus.textContent = 'Inspect the selected checkpoint again.';
+    return;
+  }
+  qwenVLPreview.disabled = true;
+  qwenVLStatus.textContent = 'Converting the approved text and image graphs through TVM…';
+  try {
+    const result = await ask('/api/qwen-vl-build', {preview_token:approved.token});
+    qwenVLStatus.textContent = result.trouble ||
+      ('Bundle saved to ' + result.bundle_root + '. Ready for inference verification in Language Chat.');
+  } catch (error) {
+    qwenVLStatus.textContent = String(error);
+  } finally {
+    qwenVLPreview.disabled = false;
+  }
+});
+
 const gemmaInputs = ['model-path', 'gemma-context', 'gemma-cpu', 'gemma-target', 'gemma-cuda-arch'].map(
   id => document.getElementById(id));
 const gemmaPreview = document.getElementById('gemma-preview');
@@ -1011,7 +1088,8 @@ visionPreview.addEventListener('click', async () => {
     } else if (result.trouble){ visionStatus.textContent = result.trouble;
     } else {
       visionApproval = {token: result.preview_token, selection}; visionBuild.disabled = false;
-      visionStatus.textContent = 'Compatible vision projector · ' + result.image_size + ' px · ' + result.cuda_arch;
+      const device = result.cuda_arch ? 'CUDA ' + result.cuda_arch : result.backend;
+      visionStatus.textContent = 'Compatible vision projector · ' + result.image_size + ' px · ' + device;
     }
   } finally { visionPreview.disabled = false; }
 });

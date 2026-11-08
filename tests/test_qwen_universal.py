@@ -177,7 +177,7 @@ class LocalQwenCompatibilityTests(unittest.TestCase):
         self.assertIn('Preview output parent changed', refusal['trouble'])
 
     def test_small_actual_single_and_sharded_safetensors_headers(self):
-        # Exercise the real local file/header parser without 1 GiB allocations.
+                                                                               
         expected = {'embed': [2, 2], 'norm': [2]}
         first = {'embed': ('F32', [2, 2], b'\0' * 16)}
         second = {'norm': ('F32', [2], b'\0' * 8)}
@@ -287,7 +287,7 @@ class LocalQwenCompatibilityTests(unittest.TestCase):
                          'min_free_host_ram_bytes', 'GenericMaxPackedBytes',
                          'source_tree_sha256'):
             self.assertIn(fragment, text)
-        # Static source inspection is not a Pascal compile or CUDA acceptance.
+                                                                              
 
 
 if __name__ == '__main__':

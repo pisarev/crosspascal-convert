@@ -439,9 +439,9 @@ def scan_selected_hf_source(directory, *, expected_model_key=None,
     _check_reference_metadata(config, 'config.json', selected)
     _check_reference_metadata(tokenizer, 'tokenizer.json', selected)
     if model_key == qwen_universal.KEY:
-        # Do not infer compatibility from a model label or config alone:
-        # require the exact accepted tokenizer and the complete unfused
-        # Safetensors header layout before a potentially costly hash/Build.
+                                                                        
+                                                                       
+                                                                           
         qwen_universal.validate_config(config)
         qwen_universal.verify_tokenizer(base)
         qwen_universal.inspect_local_headers(base, qwen_universal.validate_config(config))

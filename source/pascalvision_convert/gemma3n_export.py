@@ -59,7 +59,7 @@ def load_model(bundle):
     config._attn_implementation = "eager"
     with torch.device("meta"):
         model = Gemma3nTextModel(config)
-    arrays = {name: np.memmap(bundle / spec["file"], mode="r", dtype="float32",
+    arrays = {name: np.memmap(bundle / spec["file"], mode="r", dtype=spec.get('dtype','float32'),
                              shape=tuple(spec["shape"]))
               for name, spec in record["weights"].items()}
     state = {}
@@ -158,6 +158,75 @@ class GpuTokenGraph(TokenGraph):
         return (torch.tanh(logits / cap) * cap, *cache.current)
 
 
+class PrefillCache(TokenCache):
+    def __init__(self, previous, positions, start, chunk):
+        relative = positions - start
+        super().__init__(previous, ((relative >= 0) & (relative < chunk)).reshape(1, 1, -1, 1))
+        self.indices = relative.clamp(0, chunk-1)
+
+    def update(self, key, value, layer, options):
+        return super().update(key.index_select(2, self.indices), value.index_select(2, self.indices), layer, options)
+
+
+class CpuPrefillGraph(GpuTokenGraph):
+    def forward(self, embedding, per_layer_embedding, position, *previous):
+        chunk = embedding.shape[1]
+        distance = position.reshape(1, 1, chunk, 1) - self.positions.reshape(1, 1, 1, -1)
+        full = torch.where(distance >= 0, 0.0, torch.finfo(torch.float32).min)
+        sliding = torch.where((distance >= 0) & (distance < self.text.config.sliding_window),
+                              0.0, torch.finfo(torch.float32).min)
+        cache = PrefillCache(previous, self.positions, position[0], chunk)
+        inputs = embedding * self.text.embed_tokens.embed_scale
+        per_layer = per_layer_embedding.reshape(1, chunk, self.text.config.num_hidden_layers,
+                                                self.text.config.hidden_size_per_layer_input)
+        per_layer = per_layer * self.text.embed_tokens_per_layer.embed_scale
+        hidden = self.text(inputs_embeds=inputs, per_layer_inputs=per_layer,
+                           attention_mask={'full_attention': full, 'sliding_attention': sliding},
+                           past_key_values=cache, position_ids=position.reshape(1, chunk),
+                           cache_position=position, use_cache=False).last_hidden_state
+        logits = torch.nn.functional.linear(hidden[:, -1, :], self.text.embed_tokens.weight)
+        cap = self.text.config.final_logit_softcapping
+        return (torch.tanh(logits / cap) * cap, *cache.current)
+
+
+def export_prefill(bundle, model, record):
+    import onnx
+    manifest = json.loads((bundle/'model.json').read_bytes())
+    if manifest['backend'] != 'TVM LLVM CPU FP32' or not manifest.get('host_embeddings'):
+        raise ValueError('CPU prefill requires a CPU host-embedding token graph')
+    context, chunk = manifest['context'], 16
+    if context < chunk:
+        raise ValueError('Block prefill requires a context of at least 16 tokens')
+    graph = CpuPrefillGraph(model, context).eval()
+    caches = tuple(torch.zeros(manifest['cache_shape']) for _ in range(manifest['cache_count']))
+    arguments = (torch.zeros((1, chunk, model.config.hidden_size)),
+                 torch.zeros((1, chunk, model.config.num_hidden_layers*model.config.hidden_size_per_layer_input)),
+                 torch.arange(chunk), *caches)
+    runtime_inputs = ['embedding','per_layer_embedding','position'] + ['cache_%d' % i for i in range(len(caches))]
+    outputs = ['logits'] + ['updated_%d' % i for i in range(len(caches))]
+    torch.onnx.export(graph,arguments,str(bundle/'prefill.onnx'),export_params=False,dynamo=False,
+                      opset_version=18,do_constant_folding=False,input_names=runtime_inputs,output_names=outputs)
+    names = [item.name for item in onnx.load(bundle/'prefill.onnx').graph.input]
+    parameters = {}
+    buffers = dict(graph.named_buffers())
+    for name in names[len(runtime_inputs):]:
+        if name not in manifest['parameters']:
+            raise ValueError('Prefill parameter has no verified token-graph binding: ' + name)
+        parameters[name] = manifest['parameters'][name]
+        if name in buffers:
+            binding = parameters[name]
+            row = record['weights'][binding['tensor']]
+            data = np.memmap(bundle/row['file'],mode='r',dtype=row.get('dtype','float32'),shape=tuple(row['shape']))
+            if binding['slice'] is not None:data=data[binding['slice']]
+            if not np.array_equal(data,buffers[name].detach().numpy()):
+                raise ValueError('Prefill buffer differs from the token graph: ' + name)
+    manifest['prefill'] = dict(chunk=chunk,onnx='prefill.onnx',library='gemma3n-prefill-cpu.dll',
+                               input_names=names,runtime_inputs=runtime_inputs,parameters=parameters)
+    manifest['inference_acceptance'] = 'NOT_CHECKED'
+    (bundle/'model.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
+    print('Exported CPU prefill graph',flush=True)
+
+
 def masks(context, window):
     positions = np.arange(context)
     distance = positions[:, None] - positions[None, :]
@@ -172,7 +241,6 @@ def main():
     context = int(sys.argv[2])
     torch.set_num_threads(4)
     model, record, arrays = load_model(bundle)
-    sp = tokenizer(bundle)
     pieces = json.loads((bundle / "tokenizer-gguf.json").read_text(encoding="utf-8"))["tokenizer.ggml.tokens"]
     if not 1 <= context <= model.config.max_position_embeddings:
         raise ValueError("The requested context exceeds the architecture's position range")
@@ -186,7 +254,11 @@ def main():
             multiplier = torch.distributions.Normal(0, 1).icdf(torch.tensor(mlp.activation_sparsity))
             mlp.register_buffer("multiplier", multiplier, persistent=False)
             mlp._gaussian_topk = MethodType(sparsity, mlp)
-    gpu = "--gpu" in sys.argv[3:]
+    if '--prefill-only' in sys.argv[3:]:
+        export_prefill(bundle, model, record)
+        return
+    sp = tokenizer(bundle)
+    gpu = "--gpu" in sys.argv[3:] or "--host-embeddings" in sys.argv[3:]
     token_graph = (GpuTokenGraph if gpu else TokenGraph)(model, context).eval()
     cache_count = 2 * (model.config.num_hidden_layers - model.config.num_kv_shared_layers)
     caches = tuple(torch.zeros((1, model.config.num_key_value_heads, context, model.config.head_dim))
@@ -241,6 +313,8 @@ def main():
         "cache_shape": [1, model.config.num_key_value_heads, context, model.config.head_dim],
         "source_sha256": record["source_sha256"],
     }, indent=2), encoding="utf-8")
+    if '--host-embeddings' in sys.argv[3:] and '--gpu' not in sys.argv[3:] and context >= 16:
+        export_prefill(bundle, model, record)
 
 
 if __name__ == "__main__":

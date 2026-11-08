@@ -10,6 +10,7 @@ import numpy as np
 import tvm
 from tvm import relax
 from .gemma3n_workspace import CudaWorkspace
+from .cpu_cancellation import cancellable_cpu_call
 
 
 class Vision:
@@ -126,7 +127,11 @@ class Vision:
             vm = relax.VirtualMachine(tvm.runtime.load_module(str(library)), device)
             if claim is not None:
                 workspace = CudaWorkspace(library, self.device_id, maximum_bytes=2 * 1024**3, claimed_key=claim)
-            features = vm['main'](*values).numpy()
+            if self.manifest['backend'] == 'TVM CPU FP32':
+                with cancellable_cpu_call(vm, should_stop):
+                    features = vm['main'](*values).numpy()
+            else:
+                features = vm['main'](*values).numpy()
             device.sync()
             if workspace:
                 workspace.check()

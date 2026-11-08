@@ -742,8 +742,8 @@ def inspect_selected_native_consumer_kit(directory, *, model_key, device,
     qwen_licenses = {
         'qwen2.5-0.5b': 'LICENSE-Qwen2.5-0.5B-Instruct.txt',
         'qwen2.5-1.5b': 'LICENSE-Qwen2.5-1.5B-Instruct.txt',
-        # A generic local checkpoint may reuse the EA009 *tokenizer/runtime*
-        # kit, not its model weights or official-model provenance claim.
+                                                                            
+                                                                        
         'qwen2-compatible-local': 'LICENSE-Qwen2.5-0.5B-Instruct.txt',
     }
     model_files = ({qwen_licenses[model_key], 'MODEL-SOURCE.json'}
@@ -756,9 +756,9 @@ def inspect_selected_native_consumer_kit(directory, *, model_key, device,
         raise UnsafePublication('unapproved or incomplete selected native consumer kit')
     if model_key == 'qwen2-compatible-local':
         from .model_sources import catalog_model
-        # The EA009 0.5B kit is being used solely for its known native
-        # tokenizer/runtime exports. Its MODEL-SOURCE never attests the local
-        # selected model. The *new* model.json uses local-sha256 exclusively.
+                                                                      
+                                                                             
+                                                                             
         official_kit = catalog_model('qwen2.5-0.5b')
         pin = official_kit['license_file']
         name = qwen_licenses[model_key]

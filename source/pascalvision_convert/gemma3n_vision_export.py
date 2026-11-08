@@ -113,8 +113,12 @@ def export(source, output, text_manifest, vocabulary):
         np.save(output / name, tensor(source_name).numpy())
     with source.open('rb') as stream:
         digest = hashlib.file_digest(stream, 'sha256').hexdigest()
-    manifest = {'schema': 'crosspascal.gemma3n.vision.v1', 'architecture': 'gemma3nv', 'backend': 'TVM CUDA FP32',
-        'cuda_arch': text_manifest['cuda_arch'], 'library': 'gemma3n-vision-cuda.dll', 'layout': 'vision-parameters.json',
+    cuda = text_manifest['backend'] == 'TVM CUDA W8A32'
+    manifest = {'schema': 'crosspascal.gemma3n.vision.v1', 'architecture': 'gemma3nv',
+        'backend': 'TVM CUDA FP32' if cuda else 'TVM CPU FP32',
+        'cuda_arch': text_manifest.get('cuda_arch') if cuda else None,
+        'cpu_arch': text_manifest.get('cpu_arch', 'generic'),
+        'library': 'gemma3n-vision-cuda.dll' if cuda else 'gemma3n-vision-cpu.dll', 'layout': 'vision-parameters.json',
         'parameters': 'vision-params.bin', 'hard_embeddings': 'vision-hard.npy', 'hard_norm': 'vision-hard-norm.npy',
         'projection': 'vision-projection.npy', 'image_size': size, 'mean': metadata['clip.vision.image_mean'],
         'std': metadata['clip.vision.image_std'], 'rms_norm_eps': metadata['clip.vision.attention.layer_norm_epsilon'],

@@ -107,7 +107,7 @@ def _build_gemma3n(source, raw, staged, context, cpu, stream):
     folder = Path(__file__).parent
     steps = [
         [_gemma_python(), "-B", str(folder / "gemma3n_stage.py"), str(source / raw["source_file"]), str(staged)],
-        [_gemma_python(), "-B", str(folder / "gemma3n_export.py"), str(staged), str(context)],
+        [_gemma_python(), "-B", str(folder / "gemma3n_export.py"), str(staged), str(context), "--host-embeddings"],
         [sys.executable, "-B", str(folder / "gemma3n_compile.py"), str(staged), cpu],
     ]
     if raw["target"] == "cuda":

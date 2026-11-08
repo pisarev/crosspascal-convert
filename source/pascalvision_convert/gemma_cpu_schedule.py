@@ -9,6 +9,8 @@ def schedule_gemma_cpu(mod):
     for symbol, func in list(mod.functions.items()):
         if not isinstance(func, tirx.PrimFunc):
             continue
+        if func.attrs.get("tirx.is_scheduled", False):
+            continue
         if not (symbol.name_hint.startswith("NT_matmul") or
                 symbol.name_hint.startswith("fused_NT_matmul")):
             continue

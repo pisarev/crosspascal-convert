@@ -74,6 +74,7 @@ def main():
             if message is None or closing.is_set():
                 break
             request_id = message['id']
+            reused, images = False, []
             try:
                 if message['command'] == 'unload':
                     if session is not None:
@@ -92,20 +93,29 @@ def main():
                 images = message.get('images', [])
                 if not isinstance(images, list) or any(not isinstance(p, str) for p in images):
                     raise ValueError('Images must be a list of file paths')
-                if images and (manifest.get('vision_manifest') != 'vision.json' or manifest.get('backend') != 'TVM CUDA W8A32'):
-                    raise ValueError('This bundle accepts text only. Remove the image or select a Gemma 3n bundle converted with its vision projector.')
-                if manifest.get('backend') == 'TVM CUDA W8A32':
+                gemma_images = (manifest.get('architecture') == 'gemma3n' and
+                                manifest.get('vision_manifest') == 'vision.json' and
+                                manifest.get('backend') in ('TVM CUDA W8A32', 'TVM LLVM CPU FP32'))
+                qwen_images = (manifest.get('architecture') == 'qwen2_5_vl' and
+                               manifest.get('schema') == 'crosspascal.qwen2_5_vl.v1' and
+                               manifest.get('backend') == 'TVM LLVM CPU FP32')
+                if images and not (gemma_images or qwen_images):
+                    raise ValueError('This bundle accepts text only. Remove the image or select a converted Qwen2.5-VL or Gemma 3n image bundle.')
+                if qwen_images:
+                    from pascalvision_convert.qwen_vl_runtime import Session as QwenVLSession
+                    factory = QwenVLSession
+                elif manifest.get('backend') == 'TVM CUDA W8A32':
                     factory = GpuSession
                 elif manifest.get('architecture') == 'gemma3n':
                     factory = Cpu3nSession
                 elif manifest.get('model_type') == 'gemma2':
                     factory = Cpu2Session
                 else:
-                    raise ValueError('Select a converted Gemma 2 CPU or Gemma 3n CPU/CUDA bundle')
+                    raise ValueError('Select a converted Qwen2.5-VL CPU, Gemma 2 CPU or Gemma 3n CPU/CUDA bundle')
                 identity = (str(folder), (folder / 'model.json').read_bytes())
                 reused = identity == loaded and session is not None
                 if not reused:
-                    emit('status', request_id, text='Loading the selected Gemma model...')
+                    emit('status', request_id, text='Loading the selected language model...')
                     if session is not None:
                         session.close()
                         session, loaded = None, None
@@ -131,6 +141,10 @@ def main():
                 result['model_reused'] = reused
                 result['modalities'] = ['text', 'image'] if images else ['text']
                 emit('result', request_id, result=result)
+            except InterruptedError:
+                emit('result', request_id, result={'text': '', 'generated_tokens': 0,
+                     'stop': 'user_stop', 'model_reused': reused,
+                     'modalities': ['text', 'image'] if images else ['text']})
             except Exception as exc:
                 emit('error', request_id, message=f'{type(exc).__name__}: {exc}')
             finally:
