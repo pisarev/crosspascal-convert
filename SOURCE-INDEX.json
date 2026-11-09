@@ -37,8 +37,8 @@
     },
     {
       "path": "INSTALL.md",
-      "bytes": 30076,
-      "sha256": "13931e517d57b33b0c7bbddfff4a965150695cb6fdf0294e128ab72e709d79e9"
+      "bytes": 30086,
+      "sha256": "8415ce01d63c3557614fd42286c3039ba121c765c2dde0ad2dc864477f18d7d6"
     },
     {
       "path": "LICENSE",
@@ -640,5 +640,6 @@
       "bytes": 9054,
       "sha256": "95d0fa6591668a87a22d0e760bf9c57bc7a6fa1b77146ed034429a7f8feceba0"
     }
-  ]
+  ],
+  "documentation_revision": "public-access-20261109"
 }

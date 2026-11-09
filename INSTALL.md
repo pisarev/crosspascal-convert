@@ -2,7 +2,7 @@
 
 This guide takes you from the Windows x64 SDK to a short Qwen answer in Delphi or Lazarus. It uses the supplied converter and Python environment.
 
-Use the coordinated Windows x64 SDK and the companion assets listed in the release notes. Before starting the converter, run the TVM and Python setup command in the [Windows setup guide](https://github.com/pisarev/crosspascal/blob/early-access-008/docs/WINDOWS-EARLY-ACCESS.md) (`crosspascal/docs/WINDOWS-EARLY-ACCESS.md` in the SDK). It downloads and checks the pinned packages in the SDK.
+Use the coordinated Windows x64 SDK and the companion assets listed in the release notes. Before starting the converter, run the TVM and Python setup command in the [Windows setup guide](https://github.com/pisarev/crosspascal/blob/main/docs/WINDOWS-EARLY-ACCESS.md) (`crosspascal/docs/WINDOWS-EARLY-ACCESS.md` in the SDK). It downloads and checks the pinned packages in the SDK.
 
 ## 1. Check the PC and decide where the files will live
 
@@ -29,7 +29,7 @@ Leave room for the archive, its extracted contents, the source model download (a
 
 ## 2. Download and extract the complete CrossPascal bundle
 
-1. Open [CrossPascal Releases](https://github.com/pisarev/crosspascal/releases) in your browser. Sign in with the GitHub account that has access while the repositories are private.
+1. Open [CrossPascal Releases](https://github.com/pisarev/crosspascal/releases) in your browser. The source repositories and releases are public; no GitHub sign-in is required for downloads.
 2. Open the Windows x64 early access release. Expand **Assets** and download the Windows x64 SDK asset listed in the release notes. The automatically generated **Source code** archives contain repository source only. **Code > Download ZIP** also downloads only one repository.
 3. In File Explorer, locate the downloaded archive. Right-click it and choose **Extract All**. Extract the complete contents to your chosen working location.
 4. Open the extracted folder. Find the directory containing `CrossPascalConvert.exe` and all five repository folders. If extraction created an extra outer folder, use the inner directory containing those items as your working root, or move its complete contents together to `C:\CrossPascal`.
@@ -177,9 +177,9 @@ The [first-run validation record](docs/FIRST-RUN-VALIDATION.md) describes the me
 
 ## 11. Convert a supplied CPU vision model
 
-Use the matching Windows SDK and CPU model source archive from the same private release. Build OpenCV and install the TVM runtime using the [Windows setup guide](https://github.com/pisarev/crosspascal/blob/early-access-008/docs/WINDOWS-EARLY-ACCESS.md) (`crosspascal/docs/WINDOWS-EARLY-ACCESS.md` in the SDK) before running VisionModels. Follow the table to select the exact input for each profile.
+Use the matching Windows SDK and CPU model source archive from the same release. Build OpenCV and install the TVM runtime using the [Windows setup guide](https://github.com/pisarev/crosspascal/blob/main/docs/WINDOWS-EARLY-ACCESS.md) (`crosspascal/docs/WINDOWS-EARLY-ACCESS.md` in the SDK) before running VisionModels. Follow the table to select the exact input for each profile.
 
-1. In your browser, open [CrossPascal Releases](https://github.com/pisarev/crosspascal/releases) and sign in to the account with access.
+1. In your browser, open [CrossPascal Releases](https://github.com/pisarev/crosspascal/releases) and download the listed assets. No GitHub account or token is required.
 2. Download the coordinated CPU model source archive and Windows SDK listed in the release notes. Extract them into separate directories and keep the source-pack folders intact.
 3. In Explorer, create `C:\CrossPascal\Sources`. Right-click the source ZIP, choose **Extract All**, and extract its complete contents there. The archive contains a `crosspascal-cpu-model-sources` folder with these model subfolders:
 
