@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Add native images to a compatible CPU or CUDA Gemma 3n text bundle."""
+
 from contextlib import ExitStack
 import hashlib
 import json

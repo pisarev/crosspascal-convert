@@ -1,13 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""One versioned *intention* for the wizard, CLI, core and family builders.
 
-The TargetProfile resolver in targets.py remains the ONLY target classifier.
-BuildPlan adds the actual user choices and a deterministic accidental-change
-digest; it does not claim immutable source bytes or prove a model ran. A client
-must still bind HTTP Preview to source SHA and its one-use token, and a native
-verification result must be independently earned after the build.
-"""
 
 import hashlib
 import json
@@ -39,12 +32,6 @@ def resolve(host_facts, *, target='cpu', req_sm=None, req_os=None,
             shape=None, dtype='float32', tune=False, trials_per_task=None,
             contract=None, cpu_codegen=None, llm_options=None,
             compiler_python=None):
-    """Resolve effective target and selections; refuse unsupported requests.
-
-    No numerical success is possible here. A saved plan is valid only as a
-    replayable request; its SHA is NOT an authenticating signature against a
-    malicious editor, just an accidental/stale-field consistency guard.
-    """
     if route not in _ROUTES:
         raise ValueError('unsupported BuildPlan route %r' % route)
     if type(target) is not str or target.strip().lower() not in ('cpu', 'cuda'):
@@ -67,7 +54,6 @@ def resolve(host_facts, *, target='cpu', req_sm=None, req_os=None,
     if cpu_codegen is not None and (route != 'raw' or target != 'cpu' or not tune):
         raise ValueError('CPU codegen choice requires tuned raw CPU route')
     if route == 'family_full_build':
-
         if shape or contract or tune or trials_per_task is not None:
             raise ValueError('LLM family builder cannot honour a model shape, '
                              'vision contract or tuning controls in this route')
@@ -135,7 +121,6 @@ def resolve(host_facts, *, target='cpu', req_sm=None, req_os=None,
     if selected_python is not None:
         output['options']['compiler_python'] = selected_python
     if admitted_cpu is not None:
-
         output['cpu_codegen'] = admitted_cpu
         output['compiler_target'] = admitted_cpu['tvm_target']
         output['compiler_binding_status'] = 'PENDING_ACTUAL_CODEGEN'
@@ -147,11 +132,6 @@ def validate_recorded(plan, *, source=None, target=None, req_sm=None,
                       target_profile=None, shape=None, dtype=None,
                       tune=None, trials_per_task=None, contract=None,
                       llm_options=None, compiler_python=None):
-    """Validate a stored plan against its own inputs and optional recipe fields.
-
-    Cannot validate the *current* source/model bytes: that belongs to the
-    later immutable-source workflow. Native VERIFIED is NEVER a BuildPlan field.
-    """
     if not isinstance(plan, dict):
         raise ValueError('build_plan must be a JSON object')
     if plan.get('build_plan_version') != BUILD_PLAN_VERSION:
@@ -225,12 +205,6 @@ def validate_native_family_execution(plan, *, source, target, req_sm,
                                      dtype, host_os, host_arch,
                                      actual_tvm_target=None, model_key=None,
                                      context=None, chunk=None):
-    """Native HF builder-side validation, separate from wizard assurances.
-
-    Refuse *before loading weights* when the compiler process, actual local OS,
-    ISA, requested GPU and data source differ from the reviewed BuildPlan.
-    A plan is still not a model-source lock, UAT or a verification passport.
-    """
     validate_recorded(plan, source=source, target=target,
                       req_sm=req_sm, dtype=dtype)
     if plan['route'] != 'family_full_build':
@@ -276,11 +250,6 @@ def validate_native_family_execution(plan, *, source, target, req_sm,
 
 
 def read_native_plan(path, *, expected_sha256=None):
-    """Load a bounded exact plan without duplicate JSON keys or NaN.
-
-    Only the native family builder consumes this transfer file; the outer
-    wizard stores an independently audited copy with its own bundle receipt.
-    """
     candidate = Path(path).absolute()
     if candidate.is_symlink() or getattr(candidate, 'is_junction', lambda: False)():
         raise ValueError('linked native BuildPlan transfer file is untrusted')
@@ -319,8 +288,6 @@ def read_native_plan(path, *, expected_sha256=None):
                     any(ch not in '0123456789abcdef' for ch in expected_sha256)):
                 raise ValueError('native BuildPlan approved SHA-256 is invalid')
             if hashlib.sha256(raw).hexdigest() != expected_sha256:
-
-
                 raise ValueError(
                     'native BuildPlan content changed since initial ZIP inventory')
     except OSError as exc:

@@ -1,17 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Experimental staging with Win32-held handles for selected Paddle inputs.
 
-Only explicitly selected inference graph/weights/metadata plus a caller-chosen
-recognition dictionary are copied. WSL can be given the yielded private path,
-but a real DrvFs/paddle2onnx compatibility run is still REQUIRED before this
-is allowed to claim a supported compiler-window integration. No unlocked
-WSL/POSIX fallback, no default public wizard switch, and no numerical oracle.
-
-SECURITY: The private tree is ALWAYS RETAINED after child access or error.
-FileID proves identity but never permits recursive deletion: the child might
-have added or changed owner bytes. Original models/dictionaries remain intact.
-"""
 
 from __future__ import annotations
 
@@ -34,21 +23,19 @@ _PREFIX = '.crosspascal-paddle-held-'
 
 
 class PaddleHeldStageError(ValueError):
-    """Selected Paddle source cannot be protected by the bounded native pilot."""
+    pass
 
 
 class PaddleHeldStageUnavailable(PaddleHeldStageError):
-    """Local Win32 NTFS/space/native handle guarantee is unavailable."""
+    pass
 
 
 class PaddleHeldStageChanged(PaddleHeldStageError):
-    """Selected original or private staged bytes/identities changed."""
+    pass
 
 
 @dataclass(frozen=True)
 class HeldPaddleStage:
-    """Use compiler_input only while context keeps every selected file held."""
-
     staged_directory: str
     compiler_input: str
     staged_dictionary: str | None
@@ -180,13 +167,6 @@ def hold_private_selected_paddle_stage(source_directory, *, stage_parent,
                                        role, dictionary=None,
                                        expected_tree_sha256,
                                        block_bytes=MAX_IO_BLOCK_BYTES):
-    """Hold all chosen staged Paddle inputs for an injected converter callback.
-
-    Original bytes are twice rescanned; selected staged files are opened with
-    CreateFileW(GENERIC_READ, FILE_SHARE_READ), read back and held until child
-    exit. The source AND staged tree are rechecked on successful exit.
-    No stage directory is recursively cleaned on either success or failure.
-    """
     if not source_lock._is_windows():
         raise PaddleHeldStageUnavailable(
             'native Windows local NTFS required, no unlocked WSL/POSIX fallback')
@@ -273,7 +253,6 @@ def hold_private_selected_paddle_stage(source_directory, *, stage_parent,
 def run_with_private_selected_paddle_stage(source_directory, *, stage_parent,
                                            role, dictionary,
                                            expected_tree_sha256, child):
-    """Synchronous child callback with native Win32 held handles; never VERIFIED."""
     if not callable(child):
         raise PaddleHeldStageError('explicit callable child required')
     with hold_private_selected_paddle_stage(

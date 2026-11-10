@@ -1,11 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Bounded, source-neutral Qwen2 dense-text compatibility contract.
 
-This is NOT an upstream Qwen2.5 identity detector. It only admits a precisely
-specified subset of Qwen2-style dense causal-language-model *operators* and
-the existing CrossPascal Qwen byte-BPE chat contract. It never executes data
-from a selected checkpoint.
-"""
 
 import hashlib
 import math
@@ -43,7 +37,6 @@ def _real(raw, name, low, high):
 
 
 def validate_config(raw):
-    """Return exact graph dimensions, without inferring an upstream model name."""
     if type(raw) is not dict:
         raise ValueError('Qwen2-compatible config must be a JSON object')
     if raw.get('architectures') != ['Qwen2ForCausalLM'] or raw.get('model_type') != 'qwen2':
@@ -121,7 +114,6 @@ def packed_layout(cfg):
 
 
 def hf_layout(cfg):
-    """Exact unfused HF tensor names/shapes; an untied head is separate."""
     h, i = cfg['hidden_size'], cfg['intermediate_size']
     kv = cfg['num_key_value_heads'] * cfg['head_dim']
     result = {'model.embed_tokens.weight': [cfg['vocab_size'], h],
@@ -175,7 +167,6 @@ def admit(cfg, *, disk_free=None, ram_free=None, gpu_free=None):
 
 
 def measured_available_ram():
-    """OS-measured free physical RAM, or None when no authoritative API exists."""
     if os.name != 'nt':
         return None
     import ctypes
@@ -230,7 +221,6 @@ def validate_descriptor(value, model):
 
 
 def _header(base, name):
-    """Read bounded headers only; full body hashing is done by HF closure scan."""
     from . import hf_closure
     with hf_closure._opened_regular(base, name, max_bytes=hf_closure.MAX_TOTAL_BYTES) as (stream, info):
         prefix = stream.read(8)
@@ -246,7 +236,6 @@ def _header(base, name):
 
 
 def inspect_local_headers(directory, cfg):
-    """Check names, dtypes, shapes and shard ownership without weight allocation."""
     from . import hf_closure
     base, _ = hf_closure._root(directory)
     expected = hf_layout(cfg)
@@ -286,7 +275,6 @@ def inspect_local_headers(directory, cfg):
 
 
 def verify_tokenizer(directory):
-    """Require the already-accepted Qwen native byte-BPE semantics by content."""
     from . import hf_closure
     base, _ = hf_closure._root(directory)
     path, info = hf_closure._regular(base, 'tokenizer.json',

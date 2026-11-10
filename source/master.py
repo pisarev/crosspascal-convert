@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Serve the model conversion wizard on this computer."""
+
 
 import hashlib
 import json
@@ -22,8 +22,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 if os.name == 'nt':
-
-
     import ctypes
     from ctypes import wintypes
 
@@ -47,7 +45,6 @@ if os.name == 'nt':
 
 
 def _native_change_time(path):
-    """Read Windows ChangeTime (100 ns ticks); POSIX st_ctime is sufficient."""
     if os.name != 'nt':
         return None
 
@@ -106,7 +103,6 @@ PREVIEW_LIFETIME_SECONDS = 600
 
 
 def _model_inputs(path, kind):
-    """Input names and shapes, so nobody has to type them out by hand."""
     if kind == detect.TFLITE:
         import tflite
         from pascalvision_convert.convert import _tflite_input_names
@@ -131,7 +127,6 @@ def _model_inputs(path, kind):
 
 
 def _environment_report(python_executable=None):
-    """Check the local tools and the selected language model compiler environment."""
     report = environment.collect()
     adapter = import_adapters.LLMImportAdapter()
     selected_python = llm_build_profile.console_python(python_executable or adapter.PYTHON)
@@ -143,8 +138,6 @@ def _environment_report(python_executable=None):
     step.say('builder     %s' % adapter.BUILDER)
     version = ''
     if interpreter:
-
-
         try:
             asked = subprocess.run(
                 [selected_python, '-B', '-c', 'import tvm,sys; sys.stdout.write(tvm.__version__)'],
@@ -177,13 +170,6 @@ def _environment_report(python_executable=None):
 
 
 def _output_directory(model_path, require_new=False, parent=None):
-    """Select an unused bundle directory; never overwrite an earlier result.
-
-    The first build retains the established `<source>-tvm` spelling. A repeat
-    automatically moves to `<source>-tvm-2`, then -3, and so on. The legacy
-    direct builder may reuse an empty directory. HTTP Preview uses require_new
-    because Build must claim the *exact* displayed path via atomic mkdir.
-    """
     base = os.path.splitext(os.path.basename(model_path))[0]
     initial = os.path.join(
         parent or os.path.dirname(os.path.abspath(model_path)), base + '-tvm')
@@ -199,12 +185,10 @@ def _output_directory(model_path, require_new=False, parent=None):
 
 
 def _output_parent_identity(path):
-    """Resolve the physical output parent, including any symlink/junction."""
     return os.path.normcase(os.path.realpath(os.path.dirname(path)))
 
 
 def _reserved_output_identity(path):
-    """Require our reserved folder, not a substituted link or junction."""
     junction = getattr(os.path, 'isjunction', None)
     if os.path.islink(path) or (junction and junction(path)):
         raise ValueError('Reserved output was replaced by a link or junction')
@@ -216,7 +200,6 @@ def _reserved_output_identity(path):
 
 
 def _source_fingerprint(path):
-    """Hash the complete source tree and its metadata to detect changes between scans."""
     if not path or path.lower().startswith(('http://', 'https://')):
         raise ValueError('Recognise/download the model to a local file before Preview')
     root = os.path.abspath(path)
@@ -285,12 +268,6 @@ _FROZEN_RAW_GRAPH_MAX_BYTES = 64 * 1048576
 
 
 def _frozen_raw_closure(path):
-    """Prove a bounded RAW graph has no known external weight dependencies.
-
-    This deliberately excludes family exporters, custom-op file loaders and
-    models carrying other resources. It is a *static candidate* proof, not an
-    OS lock, nor an exhaustive assertion about runtime access by every op.
-    """
     candidate = os.path.abspath(path)
     pinned = source_freeze.fingerprint_content(
         candidate, max_entries=1, max_bytes=_FROZEN_RAW_GRAPH_MAX_BYTES)
@@ -353,8 +330,6 @@ def _frozen_raw_closure(path):
 
         check_graph(model.graph)
     else:
-
-
         try:
             import tflite
         except ImportError as error:
@@ -405,7 +380,6 @@ def _frozen_raw_closure(path):
 
 
 def _raw_source_freeze_candidate(path, *, forbidden_roots=()):
-    """Validate the selected raw model and its external files for compiler-held staging."""
     candidate = os.path.abspath(path)
     if (candidate.lower().endswith('.onnx') and os.path.isfile(candidate)
             and os.path.getsize(candidate) <= onnx_closure.MAX_MODEL_BYTES):
@@ -453,7 +427,6 @@ def _raw_freeze_warning(frozen):
 
 
 def _frozen_raw_preview(data, *, reserved_output=None):
-    """Return the only supported opt-in configuration, or an explicit refusal."""
     requested = data.get('freeze_local_raw_source', False)
     if requested is False:
         return None
@@ -476,12 +449,6 @@ def _frozen_raw_preview(data, *, reserved_output=None):
 
 
 def _raw_source_protection_offer(path, recognised):
-    """Return an honest server-measured UI default, not a promise of a lock.
-
-    The actual held Win32 handle is acquired later in _start_job after the
-    one-time Preview token and a new full source/dependency verification. Never
-    infer suitability from just a .onnx extension or the browser OS string.
-    """
     result = {
         'eligible': False,
         'recommended': False,
@@ -524,13 +491,11 @@ def _raw_source_protection_offer(path, recognised):
 
 
 def _request_signature(data):
-    """Exact JSON request/plan comparison, without key-order dependence."""
     return json.dumps(data, sort_keys=True, ensure_ascii=False,
                       separators=(',', ':'), allow_nan=False)
 
 
 def _omdet_candidate_directory_id(path):
-    """FileID/creation identity only; unrelated siblings may be pre-staged."""
     info = omdet_public_candidate.bundle_atomic._guard_stat(
         str(path), directory=True)
     return (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode),
@@ -538,13 +503,11 @@ def _omdet_candidate_directory_id(path):
 
 
 def _omdet_candidate_file_id(path, info):
-    """A selected file's pathname, NTFS identity, native ChangeTime and length."""
     return (info.st_dev, info.st_ino, info.st_nlink, info.st_size,
             info.st_mtime_ns, info.st_ctime_ns, _native_change_time(str(path)))
 
 
 def _omdet_candidate_selection(data):
-    """Check the candidate files and the independent pins required for packaging."""
     if type(data) is not dict or set(data) != {
             'candidate_dir', 'expected_pins_file', 'into'}:
         raise ValueError('OmDet candidate requires exact candidate_dir, '
@@ -617,8 +580,6 @@ def _omdet_candidate_selection(data):
     selected, identities, aliases = [], [], set()
     total_bytes = 0
     for role, source_record in records:
-
-
         pin = omdet_public_candidate._pin(source_record, role)
         relative = pin['file']
         folded = relative.casefold()
@@ -663,7 +624,6 @@ def _omdet_candidate_selection(data):
 
 
 def _omdet_candidate_preview(data):
-    """Issue one short-lived, independent OmDet authorization from real SHA."""
     global OMDET_CANDIDATE_PREVIEW, OMDET_CANDIDATE_SERIAL
     with LOCK:
         OMDET_CANDIDATE_SERIAL += 1
@@ -704,7 +664,6 @@ def _omdet_candidate_preview(data):
 
 
 def _omdet_candidate_build(data):
-    """Consume Preview once, recheck all source bytes, invoke ONLY v2 publish."""
     global OMDET_CANDIDATE_PREVIEW
     if type(data) is not dict:
         return {'trouble': 'OmDet candidate Build requires a JSON object'}
@@ -743,8 +702,6 @@ def _omdet_candidate_build(data):
             return {'trouble': 'OmDet final destination already occupied or reserved'}
         ATOMIC_PENDING_OUTPUTS.add(reservation)
     try:
-
-
         publication = omdet_public_candidate.publish(
             options['candidate_dir'], options['into'],
             expected_pins=fresh['pins'])
@@ -771,8 +728,6 @@ def _omdet_candidate_build(data):
                         'No HTTP ZIP READY for unverified v2 closure.'),
         }
     except Exception as exc:
-
-
         return {'trouble': 'OmDet candidate Build refused; retained data '
                            'untouched: %s' % exc,
                 'status': 'NOT_CHECKED', 'download_ready': False}
@@ -782,7 +737,6 @@ def _omdet_candidate_build(data):
 
 
 def _ocr_draft_selection(data):
-    """Strictly selected, independent Det+Rec DRAFT inputs and typed settings."""
     from pascalvision_convert import ocr_composite
     if not isinstance(data, dict) or set(data) != {
             'det', 'rec', 'dictionary', 'settings'}:
@@ -920,7 +874,6 @@ def _ocr_draft_build(data):
 
 
 def _ocr_draft_evidence(data):
-    """Advisory captured-evidence review; never certifies native execution."""
     if (type(data) is not dict or set(data) !=
             {'draft_job', 'evidence_directory'}):
         return {'trouble': 'OCR evidence requires draft_job and evidence_directory'}
@@ -958,10 +911,6 @@ def _ocr_draft_evidence(data):
 
 
 def _selected_paddle_preview(data):
-    """Compute a server-approved exact Paddle Det/Rec tree for Preview.
-
-    An external dictionary belongs to this digest. Scanning is not locking.
-    """
     path = str(data.get('path') or '').strip()
     role = data.get('paddle_role', '')
     dictionary = data.get('paddle_dictionary', '')
@@ -1048,7 +997,6 @@ def _add_hf_plan_details(plan, selected, path):
 
 
 def _selected_llm_key(data):
-    """Preserve curated defaults; explicit local route never claims a catalog pin."""
     from pascalvision_convert import qwen_universal
     generic = data.get('llm_profile') == qwen_universal.PROFILE
     return import_adapters.LLMImportAdapter()._key_for(
@@ -1056,7 +1004,6 @@ def _selected_llm_key(data):
 
 
 def _selected_hf_preview(data):
-    """Record the selected language model weights and tokenizer for build validation."""
     if not data.get('full_build'):
         return None
     path = str(data.get('path') or '').strip()
@@ -1160,7 +1107,6 @@ def _selected_family_consumer(data, report):
 
 
 def _issue_preview(data):
-    """Issue one short-lived authorization for the most recent HTTP Preview."""
     global ACTIVE_PREVIEW, PREVIEW_SERIAL
     with LOCK:
         PREVIEW_SERIAL += 1
@@ -1234,7 +1180,6 @@ def _issue_preview(data):
 
 
 def _build_from_preview(data):
-    """Revalidate the exact displayed plan, then atomically claim its output."""
     global ACTIVE_PREVIEW
     if not isinstance(data, dict):
         return {'trouble': 'Build request must be a JSON object'}
@@ -1331,8 +1276,6 @@ def _build_from_preview(data):
             output_identity = ('PENDING_ATOMIC', approved['output_parent'])
         else:
             try:
-
-
                 os.mkdir(approved['output'])
             except FileExistsError:
                 return {'trouble': 'Preview output directory is already occupied; '
@@ -1380,14 +1323,6 @@ _ILLEGAL_NAME = re.compile(r'[\x00-\x1f<>:"/\\|?*]')
 
 
 def _safe_upload_name(raw):
-    """A basename safe to write inside uploads/, or a fixed fallback.
-
-    The browser hands over the picked file's name but never its path, and even the
-    name is treated as hostile. Only the last component is kept - any directory
-    part, forward or backward slash, is dropped - characters a path could turn
-    against us are replaced, and a name that reduces to nothing or to dots alone is
-    refused for a fallback. So the write can never climb out of uploads/.
-    """
     name = str(raw or '').replace('\\', '/').split('/')[-1]
     name = _ILLEGAL_NAME.sub('_', name).strip().strip('.').strip()
 
@@ -1399,11 +1334,6 @@ def _safe_upload_name(raw):
 
 
 def _form_float(value):
-    """A float out of a form field, or None when it was left blank.
-
-    The page sends every field as text, so a number arrives as a string; a blank
-    one arrives as the empty string, which must become None rather than a zero.
-    """
     if value is None:
         return None
     if isinstance(value, str):
@@ -1414,7 +1344,6 @@ def _form_float(value):
 
 
 def _form_int(value):
-    """An int out of a form field, or None when it was left blank. See _form_float."""
     if value is None:
         return None
     if isinstance(value, str):
@@ -1425,7 +1354,6 @@ def _form_int(value):
 
 
 def _contract_from_request(data):
-    """Parse the model contract shared by the wizard and command-line builder."""
     return build_contract_input(
         data.get('task') or '', data.get('adapter') or '',
         adapter_api_version=_form_int(data.get('adapter_api_version')) or 1,
@@ -1478,12 +1406,6 @@ def _preview_output_directory(data, model_path):
 
 
 def _preview_build_plan(data):
-    """Describe the ACTUAL selected target before building anything.
-
-    This is a preview, not a successful build or a device verification. It uses
-    the same target classifier as the core, and refuses options the local
-    pipeline cannot honour. Never report a guessed CUDA compatibility result.
-    """
     path = str(data.get('path') or '').strip()
     atomic_request = data.get('atomic_complete_bundle', False)
     if type(atomic_request) is not bool:
@@ -1569,8 +1491,6 @@ def _preview_build_plan(data):
         return {'trouble': 'the selected source model does not exist: %s' % path}
 
     if data.get('cpu_codegen') is not None:
-
-
         if not os.path.isfile(path):
             return {'trouble': 'selected CPU codegen requires a local ONNX file '
                     'for tuned compilation, not a URL or model directory'}
@@ -1588,8 +1508,6 @@ def _preview_build_plan(data):
         return {'trouble': 'full_build requires a local recognised HF model '
                 'directory; download and pin the source before Preview'}
     if full_build or os.path.isdir(path):
-
-
         try:
             recognised = detect.recognise(path)
             adapter = (import_adapters.find_adapter(path, recognised)
@@ -1604,8 +1522,6 @@ def _preview_build_plan(data):
                     'registered model-family route; recognise the source again'}
 
     if path.lower().startswith(('http://', 'https://')):
-
-
         eventual_path = str(app_paths.data_path('downloads') / 'model.bin')
     else:
         eventual_path = path
@@ -1638,8 +1554,6 @@ def _preview_build_plan(data):
               'A local numeric verification is planned, NOT yet completed')
     warnings = []
     if atomic_request:
-
-
         files += [
             'source/ - exact selected RAW model and approved sidecars (full SHA-256)',
             'source-closure.json only for selected ONNX external_data '
@@ -1749,7 +1663,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                approved_paddle_closure=None, native_family_atomic=False,
                approved_family_consumer=None, approved_hf_closure=None,
                approved_onnx_source_pack=None):
-    """Run a build on its own thread and return the job number."""
     if (approved_onnx_source_pack != onnx_source_pack.selected(data) or
             (approved_onnx_source_pack is not None and
              (source_fingerprint is None or approved_build_plan is None))):
@@ -2030,8 +1943,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                                            % stage)
         try:
             if atomic_complete_bundle:
-
-
                 configured = os.environ.get(
                     'PASCALVISION_I03_RETAINED_EVIDENCE_ROOT')
                 if configured:
@@ -2089,8 +2000,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
 
             import_provenance = None
             if wants_freeze:
-
-
                 current_freeze = _frozen_raw_preview(
                     data, reserved_output=output_directory)
                 if current_freeze != approved_raw_freeze:
@@ -2107,12 +2016,8 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                 private_dir = (os.path.abspath(output_directory) +
                                '.source-freeze-' + secrets.token_hex(12))
                 if atomic_complete_bundle:
-
-
                     private_source_snapshot_path = private_dir
                     if retained_ledger_run is not None:
-
-
                         retained_ledger_confirmed_intents['snapshot'] = (
                             retained_ledger.record_selected_stage_intent(
                                 evidence_directory=retained_ledger_run,
@@ -2120,8 +2025,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                                 selected_stage=private_dir, kind='snapshot',
                                 job_nonce=retained_ledger_job_nonce))
                 if selected_file_set:
-
-
                     frozen_snapshot = onnx_closure.freeze_selected_closure(
                         requested_source, private_dir,
                         expected_tree_sha256=approved_raw_freeze['tree_sha256'],
@@ -2137,8 +2040,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                         on_created=(remember_created_snapshot
                                     if atomic_complete_bundle else None))
                 if atomic_complete_bundle:
-
-
                     observed = bundle_publication.bundle_atomic._guard_stat(
                         private_dir, directory=True)
                     if ((observed.st_dev, observed.st_ino)
@@ -2184,8 +2085,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                 raise RuntimeError('Staged source was not recognised as the '
                                    'original reviewed RAW format')
             if atomic_complete_bundle:
-
-
                 approved_native_io = bundle_publication.expected_native_inputs(
                     path, recognised.kind, data.get('shape') or None)
             adapter = (import_adapters.find_adapter(path, recognised)
@@ -2210,8 +2109,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                 raise RuntimeError('selected full_build mode differs from actual '
                                    'recognised model family; review Preview again')
             if adapter is not None and getattr(adapter, 'kind', 'export') == 'full_build':
-
-
                 label = 'Full build: %s' % adapter.name
                 recheck_hf('immediately before native full-family build')
 
@@ -2272,8 +2169,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                 recheck_model('during full-family model build')
                 recheck_hf('after native full-family build')
                 if approved_hf_closure is not None:
-
-
                     proven = built.get('provenance')
                     if type(proven) is not dict:
                         raise RuntimeError('Preview-approved HF builder returned '
@@ -2340,8 +2235,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                     plan, build_directory, model_key=built['key'],
                     provenance=built['provenance'])
                 if native_family_atomic:
-
-
                     stage_locks.close()
                     recheck_model('before native family publication')
                     committed_inventory, committed_receipt = (
@@ -2374,8 +2267,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                         JOBS[number]['_atomic_inventory'] = committed_inventory
                 return
             if adapter is not None:
-
-
                 recheck_paddle('immediately before Paddle exporter')
                 label = 'Import: %s to ONNX' % adapter.name
                 _record_step(number, label, 'running', 'exporting',
@@ -2411,8 +2302,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                 import_provenance = exported['provenance']
                 if (approved_paddle_closure is not None and
                         data.get('paddle_native_hold') is True):
-
-
                     exporter_hold = import_provenance.get('compiler_held_source')
                     if (type(exporter_hold) is not dict or
                             exporter_hold.get('status') !=
@@ -2497,8 +2386,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
             recheck_paddle('during TVM compilation/verification')
             recheck_staged('during TVM compilation/verification')
             if exported_onnx_ticket is not None:
-
-
                 stage_locks.close()
 
 
@@ -2584,8 +2471,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                 approved_bundle_sources = bundle_publication.stage_approved_sources(
                     build_directory, frozen_snapshot['snapshot_directory'], model_entries)
             if frozen_snapshot is not None:
-
-
                 stage_locks.close()
                 report.summary['source_freeze'] = {
                     'status': stage_ticket.status,
@@ -2598,8 +2483,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                         else 'NARROW_RAW_GRAPH_ONLY'),
                 }
                 if selected_file_set:
-
-
                     report.summary['source_freeze']['selected_closure'] = {
                         'schema': approved_raw_freeze['closure_schema'],
                         'version': approved_raw_freeze['source_closure_version'],
@@ -2612,8 +2495,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                         'total_bytes': approved_raw_freeze['total_bytes'],
                     }
                     if report.sound:
-
-
                         saved_recipe = read_recipe(
                             os.path.join(build_directory, 'recipe.json'))
                         if (saved_recipe.get('source_closure')
@@ -2687,8 +2568,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                     **({'on_validated_precommit': remember_validated_precommit}
                        if retained_ledger_run is not None else {}))
                 if retained_ledger_run is not None:
-
-
                     retained_ledger_publication_observation = (
                         retained_ledger.record_selected_publication_observation(
                             evidence_directory=retained_ledger_run,
@@ -2709,8 +2588,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                 }
                 build_directory = receipt.destination
             if retained_ledger_run is not None:
-
-
                 report.summary['retained_dpapi_ledger'] = ledger_observation()
             candidate_download_ready = bool(
                 report.sound and report.summary.get('verification_status') in
@@ -2720,8 +2597,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
             deferred_lease_download_ready = bool(
                 candidate_download_ready and retained_ledger_run is not None)
             with LOCK:
-
-
                 steps = list(JOBS[number]['steps'])
                 recorded = {entry['name'] for entry in steps}
                 for step in report.steps:
@@ -2744,14 +2619,10 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                 if approved_onnx_source_pack is not None:
                     JOBS[number]['_onnx_source_pack'] = approved_onnx_source_pack
                 if committed_inventory is not None:
-
-
                     JOBS[number]['_atomic_inventory'] = committed_inventory
         except Exception as trouble:
             try:
                 if exported_onnx_ticket is not None:
-
-
                     stage_locks.__exit__(type(trouble), trouble,
                                          trouble.__traceback__)
                 else:
@@ -2862,8 +2733,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                     'numbers': {},
                 })
         finally:
-
-
             lease_finalized_successfully = False
             try:
                 try:
@@ -2872,8 +2741,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                     lease_stack.close()
                 lease_finalized_successfully = True
             except Exception as lease_problem:
-
-
                 with LOCK:
                     JOBS[number]['sound'] = False
                     JOBS[number]['download_ready'] = False
@@ -2886,8 +2753,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                         'numbers': {},
                     })
             finally:
-
-
                 with LOCK:
                     if (atomic_complete_bundle or native_family_atomic) and output_directory is not None:
                         ATOMIC_PENDING_OUTPUTS.discard(
@@ -2899,8 +2764,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
                         JOBS[number]['finished'] = True
                         JOBS[number]['download_ready'] = True
                     elif deferred_lease_download_ready:
-
-
                         JOBS[number]['finished'] = True
                         JOBS[number]['sound'] = False
                         JOBS[number]['download_ready'] = False
@@ -2908,8 +2771,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
     try:
         threading.Thread(target=work, daemon=True).start()
     except Exception as trouble:
-
-
         with LOCK:
             JOBS[number].update({
                 'finished': True,
@@ -2926,7 +2787,6 @@ def _start_job(data, *, output_directory=None, source_fingerprint=None,
 
 
 def _record(number, step):
-    """Append a step as it lands, so the page shows progress and not just a result."""
     with LOCK:
         job = JOBS.get(number)
         if job is None:
@@ -2948,7 +2808,6 @@ def _record(number, step):
             raise OSError('Incomplete diagnostic log write')
         sys.stderr.flush()
     except Exception as log_error:
-
         with LOCK:
             if JOBS.get(number) is job:
                 job['diagnostic_log_error'] = {
@@ -2959,8 +2818,6 @@ def _record(number, step):
 
 
 def _record_step(number, name, state, state_name, lines):
-    """Append a synthetic step - the import (framework -> ONNX) step - so the page
-    shows it like any core step. Same replace-by-name rule as _record."""
     with LOCK:
         job = JOBS.get(number)
         if job is None:
@@ -2972,16 +2829,12 @@ def _record_step(number, name, state, state_name, lines):
 
 
 class _JSONPostRejected(ValueError):
-    """Client-side HTTP refusal before a JSON route can run any build action."""
-
     def __init__(self, status, message):
         super().__init__(message)
         self.status = status
 
 
 class Responder(BaseHTTPRequestHandler):
-    """Serve the converter page and its loopback API."""
-
     server_version = 'PascalVisionMaster'
     JSON_POST_MAX_BYTES = 1024 * 1024
 
@@ -3147,16 +3000,6 @@ class Responder(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def _download_job(self, route):
-        """Serve only a finished, successful job-owned artifact tree.
-
-        The request supplies a job ID, never a filesystem path. Validate all
-        members and finish the ZIP before sending HTTP 200, including legacy
-        jobs without an atomic inventory. Late integrity failures return 409
-        without a partial 200. Atomic jobs additionally verify every byte
-        against their committed SHA inventory; legacy jobs gain no immutable
-        snapshot or new verification claim. An unverified compile stays
-        NOT_CHECKED within the downloaded ZIP.
-        """
         values = parse_qs(route.query).get('job') or []
         job_id = values[0] if len(values) == 1 else ''
         if not job_id.isascii() or not job_id.isdecimal():
@@ -3228,8 +3071,6 @@ class Responder(BaseHTTPRequestHandler):
                     if (recorded is not None and
                             recorded.get('bundle_root') == state.get('bundle_root') and
                             recorded.get('_atomic_inventory') is atomic_inventory):
-
-
                         recorded['download_ready'] = False
                         recorded['summary']['bundle_export_status'] = (
                             'REFUSED_COMMITTED_INVENTORY_OR_ZIP_INTEGRITY'
@@ -3240,8 +3081,6 @@ class Responder(BaseHTTPRequestHandler):
             self.send_error(409, 'Unsafe or incomplete bundle')
             return
         except Exception:
-
-
             if sealed_zip is not None:
                 try:
                     sealed_zip.close()
@@ -3260,8 +3099,6 @@ class Responder(BaseHTTPRequestHandler):
         try:
             shutil.copyfileobj(sealed_zip, self.wfile, 1024 * 1024)
         except (BrokenPipeError, ConnectionResetError):
-
-
             pass
         finally:
             sealed_zip.close()
@@ -3438,21 +3275,6 @@ class Responder(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def _upload(self, route):
-        """Save a posted file into uploads/ without replacing another source.
-
-        The page cannot pass the picked file's path - the browser withholds it -
-        so it posts the bytes here instead. The name rides in the query and is
-        made safe (see _safe_upload_name); the body is the raw file, read by
-        Content-Length a megabyte at a time straight to disk, so a large model is
-        never held whole in memory. Re-uploading the same name must not silently
-        change the bytes of an earlier recognised model: a numbered filename and
-        exclusive create protect the old source even when two uploads race.
-
-        Only fully received, independently reread bytes acquire a normal model
-        filename through an exclusive hardlink. A short request leaves its own
-        uniquely named .part evidence, NOT a normal recognisable model. Existing
-        model filenames are never overwritten, even in an upload race.
-        """
         try:
             raw_name = (parse_qs(route.query).get('name') or [''])[0]
             name = _safe_upload_name(raw_name)
@@ -3562,8 +3384,6 @@ class Responder(BaseHTTPRequestHandler):
             answer['size'] = ('%.1f' % (os.path.getsize(path) / 1048576.0)) if a_file else '-'
             answer['first_bytes'] = detect.first_bytes(path) if a_file else 'a directory'
             if pack is not None:
-
-
                 conversion = pack['metadata']['conversion']
                 answer['inputs'] = [{
                     'name': conversion['input_name'],
@@ -3605,7 +3425,6 @@ class Responder(BaseHTTPRequestHandler):
 
 
 def serve(port=DEFAULT_PORT, open_browser=True):
-    """Start the responder and return it. If the port is taken, take the next."""
     app_paths.prepare()
     for attempt in range(port, port + 20):
         try:

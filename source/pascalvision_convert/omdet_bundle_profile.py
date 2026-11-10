@@ -1,12 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Independent candidate contract for four-input OmDet.
 
-This module is deliberately separate from public Pascal manifest.txt and
-contract.py. Its checks attest file bytes and static tensor expectations at
-inspection time only. They do not attest native target execution, numerical
-parity, redistribution rights or immutability after the inspection.
-"""
 
 import hashlib
 import json
@@ -300,12 +294,6 @@ def _check_target_profile(profile):
 
 
 def create_candidate_profile(bundle_root, *, pinned, target_profile, tvm_version):
-    """Assemble a NOT_CHECKED candidate from explicit SHA-pinned real files.
-
-    The caller provides every expected SHA-256. No SHA of arbitrary bytes is
-    silently promoted to trusted provenance. Output is an in-memory descriptor;
-    this API never writes a Pascal manifest, executes a model or starts a job.
-    """
     root = _root(bundle_root)
     _exact_keys(pinned, (*FILE_ROLES, "runtime_libraries"), "candidate pins")
     if not isinstance(tvm_version, str) or not tvm_version.strip():
@@ -392,13 +380,6 @@ def create_candidate_profile(bundle_root, *, pinned, target_profile, tvm_version
 
 
 def validate_candidate_profile(candidate, bundle_root, *, expected_pins=None):
-    """Rehash all candidate files and rederive every field. Never grant VERIFIED.
-
-    File hashes are point-in-time checks, not a lock. Supplying separately
-    trusted expected_pins prevents accepting a substituted descriptor's hashes.
-    Without expected_pins, only internal consistency with current disk bytes
-    is proven; origin and independent target UAT remain NOT_CHECKED.
-    """
     if not isinstance(candidate, dict):
         raise ValueError("OmDet candidate must be an object")
     if (candidate.get("schema") != SCHEMA or
@@ -448,12 +429,6 @@ def validate_candidate_profile(candidate, bundle_root, *, expected_pins=None):
 
 
 def write_candidate_profile(candidate, bundle_root):
-    """Publish complete standalone candidate JSON atomically; never a manifest.
-
-    A crashed direct 'xb' write could leave a truncated final file that cannot
-    be retried safely. Build owned scratch bytes first and hardlink no-replace
-    only after completion. No rename that would overwrite user documents.
-    """
     root = _root(bundle_root)
     validated = validate_candidate_profile(candidate, root)
     body = (json.dumps(validated, indent=2, ensure_ascii=False,

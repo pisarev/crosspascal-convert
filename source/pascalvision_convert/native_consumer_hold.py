@@ -1,10 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Win32-held, caller-prepared PRIVATE native LLM consumer kit.
 
-Point-in-time Inventory is required; holding all private files denies new
-write/delete opens during the caller's work. This is neither numerical
-verification nor custody of the original owner-selected consumer directory.
-"""
 
 import os
 import stat
@@ -52,11 +47,6 @@ def _snapshot(root, inventory, model_key, device, *, allow_native_outputs=False)
 @contextmanager
 def hold_private_native_consumer_stage(private_stage, approved_inventory, *,
                                        model_key, device):
-    """Yield the unchanged private stage while every approved leaf is Win32-held.
-
-    Caller must prepare this PRIVATE stage using stage_selected_native_consumer_kit.
-    The stage is NEVER removed; a failure forbids caller publication/READY.
-    """
     if not isinstance(approved_inventory, bundle_atomic.Inventory):
         raise NativeConsumerHoldError('approved Inventory required')
     if not source_lock._is_windows():

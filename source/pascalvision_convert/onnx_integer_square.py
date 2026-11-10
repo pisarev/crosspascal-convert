@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Keep real-valued x**2 valid for negative x under CUDA fast math."""
+
 import numpy as np
 from onnx import numpy_helper
 

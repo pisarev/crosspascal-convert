@@ -53,7 +53,7 @@ class Session:
             array = self.arrays[spec["tensor"]]
             if spec["slice"] is not None:
                 array = array[spec["slice"]]
-                                                                                   
+
             self.parameters.append(tvm_ffi.from_dlpack(array.__dlpack__(max_version=(1, 0))))
         self.prefill_vm, self.prefill_parameters = None, []
         if self.manifest.get('prefill'):
@@ -178,7 +178,6 @@ class Session:
         stop_ids = {self.tokenizer.eos_id(), self.special.get("<end_of_turn>")}
         output, first, stop = [], None, "context_limit"
         try:
-                                                                                
             position = 0
             chunk = self.manifest.get('prefill',{}).get('chunk',1)
             while position < context - 1:
@@ -233,7 +232,6 @@ def main():
         previous = text
     manifest = json.loads((args.bundle / "model.json").read_text(encoding="utf-8"))
     if manifest.get("backend") == "TVM CUDA W8A32":
-                                                                                   
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from pascalvision_convert.gemma3n_gpu_runtime import GpuSession
         session = GpuSession(args.bundle)

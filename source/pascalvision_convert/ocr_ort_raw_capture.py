@@ -1,20 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Capture *actual* original ONNX Runtime CPU float32 tensors for OCR review.
 
-This independently executes one caller-selected, self-contained ORIGINAL ONNX
-model with one caller-supplied preprocessed NCHW f32le input. It does not
-preprocess an image, run Pascal, decode CTC, annotate ground truth or verify a
-Det+Rec composite. Its output is advisory ORT_RAW_CAPTURE_ONLY / NOT_CHECKED,
-never a Pascal Facade manifest, READY marker or native/human attestation.
-
-The original and input are byte-pinned against private exclusive-create copies
-before a bounded child is launched. Windows additionally holds read/share-only
-NTFS file handles over the child lifetime. A SHA comparison is a point-in-time
-measurement, not a claim of protection against preexisting writable mappings.
-Failed attempts deliberately retain their newly created private evidence; the
-caller owns it and this module never deletes, replaces or cleans up any file.
-"""
 
 from __future__ import annotations
 
@@ -66,7 +52,7 @@ _ACTIVE_CHILD_JOB = None
 
 
 class CaptureRefused(ValueError):
-    """No trustworthy raw ORT capture can be reported."""
+    pass
 
 
 def _absolute(raw, label):
@@ -102,7 +88,6 @@ def _regular(path, label, *, limit, expected_bytes=None):
 
 
 def _identity(info):
-
     return source_freeze._descriptor_identity(info) + (info.st_nlink,)
 
 
@@ -187,12 +172,6 @@ def _require_heavy_memory():
 
 
 def _install_child_job_limit():
-    """Enforce a real 4 GiB Windows job/process memory ceiling before ORT.
-
-    The caller's available-RAM gate is not a hard limit on native allocations.
-    A child inside an incompatible existing Windows job fails closed rather
-    than running an unbounded graph. This function MUST be child-only.
-    """
     global _ACTIVE_CHILD_JOB
     if os.name != 'nt' or ctypes.sizeof(ctypes.c_void_p) != 8:
         raise CaptureRefused('bounded ORT inference requires 64-bit Windows Job Objects')
@@ -304,11 +283,6 @@ def _copy_exact(source, target, label, *, sha, size, limit):
 
 @contextmanager
 def _held_files(records):
-    """Hold exact selected NTFS bytes, rejecting unsupported Windows custody.
-
-    On other operating systems the exclusive copies + before/after SHA remain
-    point-in-time evidence. No release-grade immutable-source claim is made.
-    """
     if os.name != 'nt':
         yield
         return
@@ -336,13 +310,6 @@ def _held_files(records):
 
 @contextmanager
 def _fresh_held_destination(target):
-    """Hold every NTFS parent and the new stage against rename/junction.
-
-    A pathname check after `open('xb')` cannot undo a new file created under
-    an injected junction. Reuse the independently negative-tested NTFS
-    GENERIC_READ directory holder used by the OmDet v2 publisher; critically,
-    it excludes FILE_SHARE_DELETE and rejects a replaced directory FileID.
-    """
     if os.name != 'nt':
         _safe_path(target, missing_leaf=True)
         target.mkdir(mode=0o700, exist_ok=False)
@@ -443,12 +410,6 @@ def _ticket_identity(root):
 
 
 def _issue_parent_ticket(root, secret, model_sha, input_sha, shape, input_name):
-    """Create-only capability for this parent-owned NEW stage, not release auth.
-
-    A standalone `__cpu_child` invoked against an unrelated existing folder
-    must refuse without writing even a diagnostic file there. This ticket is
-    intentionally *not* presented as a signature or independent attestation.
-    """
     if not _HEX64.fullmatch(secret):
         raise CaptureRefused('invalid parent stage capability')
     payload = {
@@ -470,7 +431,6 @@ def _issue_parent_ticket(root, secret, model_sha, input_sha, shape, input_name):
 
 def _admit_parent_ticket(root, secret, model_sha, input_sha, shape, input_name,
                          *, before_inference=True):
-
     if not isinstance(secret, str) or not _HEX64.fullmatch(secret):
         raise CaptureRefused('missing/invalid exclusive parent-stage capability')
     path = root / _OWNER_TICKET
@@ -598,7 +558,6 @@ def _verify_capture(root, model_sha, input_sha, shape):
 
 
 def _child_reason(root):
-    """Read a bounded refusal note; an uncooperative child may provide none."""
     path = root / _REFUSAL
     if not os.path.lexists(path):
         return 'child produced no bounded refusal detail'
@@ -620,13 +579,6 @@ def _child_reason(root):
 
 def _specialize_static_output_shapes(model, input_name, shape, *,
                                      source_bytes):
-    """Prove static output shapes from a selected input IN MEMORY, without IO.
-
-    Preserve the ORIGINAL ONNX model bytes for the actual ORT session. Never
-    accept a runtime-observed output dimension as a substitute for a pre-run
-    bound. This only admits a modest graph whose ONNX shape inference resolves
-    EVERY output axis under the existing output budget.
-    """
     import onnx
 
     if (type(source_bytes) is not int or not
@@ -706,12 +658,6 @@ def _specialize_static_output_shapes(model, input_name, shape, *,
 
 
 def _admit_declared_ort_outputs(metadata, *, inferred_shapes=None):
-    """Reject unaffordable output shapes BEFORE session.run materializes them.
-
-    Symbolic/dynamic output axes remain an explicit future acceptance gate;
-    silently assuming their runtime size fits the byte budget is unsafe. The
-    separate OS child memory limit also covers large internal graph buffers.
-    """
     if not isinstance(metadata, list) or not 1 <= len(metadata) <= MAX_OUTPUT_TENSORS:
         raise CaptureRefused('ORT declared output count is outside bounded quota')
     if inferred_shapes is not None:
@@ -754,7 +700,6 @@ def _admit_declared_ort_outputs(metadata, *, inferred_shapes=None):
 
 
 def _child_inference(root, shape, model_sha, input_sha, input_name):
-    """Never returns an invented output: ORT and all raw floats must execute."""
     _require_heavy_memory()
     _check_private_root(root)
     if os.path.lexists(root / _CAPTURE):
@@ -784,7 +729,6 @@ def _child_inference(root, shape, model_sha, input_sha, input_name):
             not axis.HasField('dim_value') or axis.dim_value <= 0
             for entry in graph.graph.output
             for axis in entry.type.tensor_type.shape.dim):
-
         graph_input = (input_name if input_name is not None else
                        graph.graph.input[0].name if len(graph.graph.input) == 1
                        else '')
@@ -947,8 +891,6 @@ def _parent_run(model_arg, input_arg, shape_arg, into_arg, input_name):
     originals = [(model, model_sha, model_size),
                  (input_file, input_sha, input_size)]
     with _held_files(originals), _fresh_held_destination(target):
-
-
         _check_private_root(target)
         _copy_exact(model, target / _MODEL_COPY, 'original ONNX',
                     sha=model_sha, size=model_size, limit=MAX_MODEL_BYTES)
@@ -960,8 +902,6 @@ def _parent_run(model_arg, input_arg, shape_arg, into_arg, input_name):
         stages = [(target / _MODEL_COPY, model_sha, model_size),
                   (target / _INPUT_COPY, input_sha, input_size)]
         with _held_files(stages):
-
-
             command = [console_python(), '-B', '-P', '-s', '-m',
                        'pascalvision_convert.ocr_ort_raw_capture',
                        '__cpu_child', '--into', str(target),
@@ -1031,7 +971,6 @@ def _child_main(argv):
                          args.model_sha256, args.input_sha256, args.input_name)
         return 0
     except (CaptureRefused, OSError, ValueError, ImportError, RuntimeError) as exc:
-
         if owned and root is not None:
             try:
                 _check_private_root(root)

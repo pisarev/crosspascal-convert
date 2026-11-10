@@ -1,14 +1,7 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Inspect CUDA compatibility without loading a possibly incompatible runtime.
 
-The NVIDIA *driver* API is queried first. Only if it reports a sufficiently
-recent API do we probe the selected toolkit's cudart in a short-lived child
-process. A broken native DLL cannot crash the conversion wizard itself.
 
-This is a LOCAL TOOLKIT readiness check, not proof that an exported TVM module
-or a CUDA runtime from a different wheel will work on another machine.
-"""
 import ctypes
 import json
 import os
@@ -20,7 +13,6 @@ from .llm_build_profile import console_python
 
 
 def parse_nvcc_release(text):
-    """Return (major, minor), or None if nvcc returned no credible release."""
     match = re.search(r'\brelease\s+(\d+)\.(\d+)\b', text or '', re.I)
     if not match:
         return None
@@ -28,7 +20,6 @@ def parse_nvcc_release(text):
 
 
 def installed_toolkit_version(nvcc_path, ask_program):
-    """Read the selected nvcc's release without loading CUDA native libraries."""
     if not nvcc_path:
         return None
     first = ask_program(nvcc_path, ['--version'])
@@ -48,7 +39,6 @@ def installed_toolkit_version(nvcc_path, ask_program):
 
 
 def driver_api_version():
-    """Read the driver library only; do not import TVM or load cudart here."""
     try:
         dll = (ctypes.WinDLL('nvcuda.dll') if sys.platform == 'win32'
                else ctypes.CDLL('libcuda.so.1'))
@@ -65,12 +55,6 @@ def driver_api_version():
 
 
 def compare_driver_toolkit(driver_api, toolkit_release):
-    """Fail definitely incompatible CUDA; do not overclaim minor compatibility.
-
-    Both parts are machine-reported. No GPU family or CUDA version is
-    hard-coded. CUDA minor-version compatibility may allow a smaller driver
-    API within the same major; without a runtime smoke test we say UNKNOWN.
-    """
     if driver_api is None or toolkit_release is None:
         return 'unknown', 'CUDA driver or toolkit version could not be determined'
     major, minor = toolkit_release
@@ -88,7 +72,6 @@ def compare_driver_toolkit(driver_api, toolkit_release):
 
 
 def runtime_in_toolkit(nvcc_path, toolkit_release):
-    """Locate the selected toolkit's matching runtime, never an arbitrary DLL."""
     if not nvcc_path or not toolkit_release:
         return None
     root = os.path.dirname(os.path.abspath(nvcc_path))
@@ -118,11 +101,6 @@ print(json.dumps({"version_rc":version_rc,"runtime_api":version.value,
 
 
 def check_cuda_toolkit(nvcc_path, ask_program, run=None):
-    """Return a structured, honest, isolated CUDA preflight report.
-
-    ask_program: the caller's existing nvcc --version reader.
-    run: injectable subprocess function for deterministic contract tests.
-    """
     driver, driver_reason = driver_api_version()
     toolkit = installed_toolkit_version(nvcc_path, ask_program)
     state, reason = compare_driver_toolkit(driver, toolkit)

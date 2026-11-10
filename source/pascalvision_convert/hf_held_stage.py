@@ -1,21 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Stage selected Hugging Face model files on a local NTFS volume.
 
-The caller supplies an approved source-tree SHA-256 and a dedicated parent
-directory. The stage preserves the relative paths of the selected
-configuration, tokenizer, processor and safetensors files.
-
-The context manager opens each staged file with Win32 read access and read
-sharing. It checks file identities and hashes before giving the caller the
-directory and after successful use. Reads and copies use blocks of at most
-1 MiB. The original files stay in place.
-
-The checks cover the selected files while the context is open. They cannot
-establish checkpoint provenance or model behavior. The stage remains on disk
-after exit, including on errors. Use a parent directory with a disk quota and
-review the staged copies before disposing of them.
-"""
 
 from __future__ import annotations
 
@@ -41,21 +26,19 @@ _STAGE_PREFIX = '.crosspascal-hf-stage-'
 
 
 class HfHeldStageError(ValueError):
-    """This selected HF source cannot be staged and held safely."""
+    pass
 
 
 class HfHeldStageUnavailable(HfHeldStageError):
-    """Unsupported filesystem/host or unavailable native Win32 share lock."""
+    pass
 
 
 class HfHeldStageChanged(HfHeldStageError):
-    """Approved HF data, staged paths, bytes or native identities changed."""
+    pass
 
 
 @dataclass(frozen=True)
 class HeldHfStage:
-    """Ephemeral path valid only while the context retains all native handles."""
-
     staged_directory: str
     compiler_input: str
     source_tree_sha256: str
@@ -122,8 +105,6 @@ def _directory(path, label, api):
 
 
 def _same_object(info, identity):
-
-
     return (info.st_dev, info.st_ino, stat.S_IFMT(info.st_mode)) == identity
 
 
@@ -212,12 +193,6 @@ def _copy_selected_file(origin, stage, relative, size, sha, block_bytes):
 
 
 def _audit_exact_private_tree(stage, root_id, files, directories):
-    """Reject unexpected paths, nested junctions or edited selection.
-
-    hf_closure deliberately IGNORES unrelated files in the user's original.
-    A PRIVATE stage has no such exception: any extra file or directory is a
-    threat to a child that scans its own working directory.
-    """
     _assert_owned_root(stage, root_id)
     expected_files = {item[0]: item[1] for item in files}
     expected_dirs = set(directories)
@@ -289,7 +264,6 @@ def _audit_hf_bytes(stage, expected, max_total_bytes):
 
 
 def _hash_win32_handle(api, handle, *, block_bytes, expected_bytes):
-    """Bounded ReadFile hashing without source_lock's *ONNX-only* 64-MiB cap."""
     if not api.kernel.SetFilePointerEx(
             handle, 0, None, source_lock.FILE_BEGIN):
         raise HfHeldStageChanged(
@@ -338,11 +312,6 @@ def _native_check(api, path, handle, identity, size, sha, block_bytes):
 
 
 def _required_stage_space(parent, files, directories):
-    """Estimate required NTFS space using the volume's allocation unit.
-
-    Small files can occupy an entire cluster. If Windows cannot report the
-    cluster size, the space check fails.
-    """
     from ctypes import wintypes
 
     disk = ctypes.WinDLL('kernel32', use_last_error=True)
@@ -382,12 +351,6 @@ def hold_private_selected_hf_stage(source_directory, *, stage_parent,
                                    max_total_bytes=MAX_HF_SELECTED_BYTES,
                                    max_selected_files=MAX_HF_SELECTED_FILES,
                                    block_bytes=MAX_IO_BLOCK_BYTES):
-    """Yield a stage directory while the selected files are open for reading.
-
-    Pass the yielded directory to the consumer. The context checks the stage
-    before yielding and again on normal exit. It closes the handles on every
-    exit and leaves the staged files available for inspection.
-    """
     if not source_lock._is_windows():
         raise HfHeldStageUnavailable(
             'native Win32 NTFS required for HF staged handles; no WSL/fallback')
@@ -473,8 +436,6 @@ def hold_private_selected_hf_stage(source_directory, *, stage_parent,
         try:
             yield ticket
         except BaseException:
-
-
             raise
         else:
             for path, handle, identity, size, sha in opened:
@@ -489,7 +450,6 @@ def run_with_private_selected_hf_stage(source_directory, *, stage_parent,
                                        max_total_bytes=MAX_HF_SELECTED_BYTES,
                                        max_selected_files=MAX_HF_SELECTED_FILES,
                                        block_bytes=MAX_IO_BLOCK_BYTES):
-    """Run the supplied callback with the stage held open and return its result."""
     if not callable(child):
         raise HfHeldStageError('an injected callable HF child is required')
     with hold_private_selected_hf_stage(

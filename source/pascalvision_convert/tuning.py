@@ -1,10 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Schedule and check MetaSchedule tuning for CPU models.
 
-Count the distinct lowered tasks before choosing a budget. The scheduler
-can leave tasks unmeasured if the budget is too small. Use a tuned CPU
-target only when the resulting database covers every task.
-"""
 
 from __future__ import annotations
 
@@ -17,12 +12,10 @@ MINIMUM_TRIALS_PER_TASK = 8
 
 
 def logical_cores() -> int:
-    """Logical cores of this machine, never less than one."""
     return max(1, os.cpu_count() or 1)
 
 
 def cpu_target(cores: Optional[int] = None, mcpu: Optional[str] = None):
-    """Select a CPU target for tuning or for a measured tuning database."""
     import tvm
 
     spec: Dict[str, object] = {'kind': 'llvm', 'num-cores': cores or logical_cores()}
@@ -32,12 +25,6 @@ def cpu_target(cores: Optional[int] = None, mcpu: Optional[str] = None):
 
 
 def _pipeline_head(mod, target):
-    """The part of ``static_shape_tuning`` that runs before the tuning itself.
-
-    Copied from the pipeline's own source rather than reinvented: two different
-    readings of the same lowering would drift apart silently, and the task count
-    would stop matching what the scheduler actually sees.
-    """
     import tvm
     from tvm.relax import transform
     from tvm.relax.pipeline import zero_pipeline
@@ -51,10 +38,6 @@ def _pipeline_head(mod, target):
 
 
 def count_tasks(mod, target) -> Tuple[int, List[str]]:
-    """Count distinct lowered tasks and return their names.
-
-    Structurally identical functions share a tuning task.
-    """
     import tvm
 
     lowered = _pipeline_head(mod, target)
@@ -75,7 +58,6 @@ def count_tasks(mod, target) -> Tuple[int, List[str]]:
 
 
 def budget_for(tasks: int, per_task: int = DEFAULT_TRIALS_PER_TASK) -> int:
-    """Allocate the same trial budget to each lowered task."""
     if tasks < 1:
         raise ValueError('a model with no tuning tasks cannot be tuned')
     if per_task < MINIMUM_TRIALS_PER_TASK:
@@ -87,7 +69,6 @@ def budget_for(tasks: int, per_task: int = DEFAULT_TRIALS_PER_TASK) -> int:
 
 
 def database_files(work_dir: str) -> Tuple[str, str]:
-    """Where the tuning pipeline keeps its database."""
     return (os.path.join(work_dir, 'database_workload.json'),
             os.path.join(work_dir, 'database_tuning_record.json'))
 
@@ -95,13 +76,6 @@ _SENTINEL_RUN_SECS = 1e10
 
 
 def _record_has_real_trial(row: object) -> bool:
-    """True when a tuning record carries at least one real run time.
-
-    A record's run times live at ``row[1][1]``. A candidate that built but was
-    never timed still gets a record - with every run time set to the sentinel -
-    so a record existing is not proof its task was measured. Only a positive
-    time below the sentinel counts as a real trial.
-    """
     try:
         run_secs = row[1][1]
     except (IndexError, TypeError, KeyError):
@@ -116,7 +90,6 @@ def _record_has_real_trial(row: object) -> bool:
 
 
 def coverage(work_dir: str, expected_tasks: int) -> Dict[str, object]:
-    """Check that the database contains a measured record for each task."""
     import json
 
     workload_path, record_path = database_files(work_dir)
@@ -192,7 +165,6 @@ TUNING_PACKAGES = ('xgboost', 'psutil', 'cloudpickle')
 
 
 def refuse_without_packages() -> None:
-    """Raise if the tuning dependencies are not installed."""
     import importlib
 
     missing = []
@@ -208,7 +180,6 @@ def refuse_without_packages() -> None:
 
 
 def refuse_on_windows() -> None:
-    """Raise unless tuning can be expected to survive on this platform."""
     import platform
 
     if platform.system() != 'Windows':
@@ -221,7 +192,6 @@ def refuse_on_windows() -> None:
 
 
 def apply_pipeline(target, work_dir: str):
-    """Apply an existing tuning database without running new trials."""
     from tvm import relax
 
     return relax.get_pipeline(
@@ -234,12 +204,6 @@ def apply_pipeline(target, work_dir: str):
 
 
 def tuning_pipeline(total_trials: int, target, work_dir: str, per_task: int):
-    """The tuning pipeline with both limits set explicitly.
-
-    Both, always. Leaving ``max_trials_per_task`` unset makes it default to the
-    whole budget, and the pipeline's own documentation calls that out as the
-    way to skip tasks entirely.
-    """
     from tvm import relax
 
     return relax.get_pipeline(

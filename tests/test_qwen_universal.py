@@ -1,5 +1,3 @@
-"""Cheap synthetic local Qwen2-compatible contract tests; no model/TVM/CUDA."""
-
 import copy
 import hashlib
 import json
@@ -36,7 +34,6 @@ def compatible_raw(*, untied=False):
 
 
 def save_safetensors(path, contents):
-    """Only a few bytes; all large shapes are tested with a mocked table."""
     spans, data = {}, b''
     for name, (dtype, shape, values) in contents.items():
         begin = len(data)
@@ -177,7 +174,6 @@ class LocalQwenCompatibilityTests(unittest.TestCase):
         self.assertIn('Preview output parent changed', refusal['trouble'])
 
     def test_small_actual_single_and_sharded_safetensors_headers(self):
-                                                                               
         expected = {'embed': [2, 2], 'norm': [2]}
         first = {'embed': ('F32', [2, 2], b'\0' * 16)}
         second = {'norm': ('F32', [2], b'\0' * 8)}
@@ -287,7 +283,6 @@ class LocalQwenCompatibilityTests(unittest.TestCase):
                          'min_free_host_ram_bytes', 'GenericMaxPackedBytes',
                          'source_tree_sha256'):
             self.assertIn(fragment, text)
-                                                                              
 
 
 if __name__ == '__main__':

@@ -1,14 +1,7 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Compile the opt-in OmDet tiny route from eight approved source files.
 
-The existing OmDet v2 candidate *publisher* is NOT a compiler. This route
-explicitly compiles a separately approved, eight-member ONNX/features/config
-closure while Win32 private copies stay held until pipeline.run returns.
-It issues source/compiled-byte custody evidence only. A trained Pascal
-four-input IDetector run, original ORT oracle, native runtime/license provenance,
-and an independently authenticated consumer kit remain NOT_ATTESTED/NOT_RUN.
-"""
+
 from __future__ import annotations
 
 import argparse
@@ -61,7 +54,6 @@ TRAINED_WIN64_CPU_RUNTIME_WHEEL_PINS = {
 
 
 def _direct_revision_pins(pins):
-    """Select fixed byte family only for the exact real trained graph/contract."""
     trained = ((pins["source_onnx"]["bytes"], pins["source_onnx"]["sha256"])
                == TRAINED_DIRECT_ONNX)
     if trained:
@@ -73,7 +65,7 @@ def _direct_revision_pins(pins):
 
 
 class OmDetCompilerRouteRefused(ValueError):
-    """A selected OmDet four-input source cannot reach a trustworthy compiler."""
+    pass
 
 
 def _unique_pinset(root: Path, output: Path, pin_file):
@@ -115,7 +107,6 @@ def _unique_pinset(root: Path, output: Path, pin_file):
 
 
 def _selection(args):
-    """Select either eight ORIGINAL inputs or an existing v1 recompile kit."""
     if args.source_dir is not None:
         return _selection_direct_eight(args)
     root, output = omdet_public_candidate._paths(args.candidate_dir, args.into)
@@ -183,13 +174,6 @@ def _selection(args):
 
 
 def _validate_direct_eight_static(root, pins):
-    """Native fixed-eight OmDet original-source contract, no prior DLL needed.
-
-    The accepted revision is the actual Pascal-pinned HF trained-feature
-    snapshot. It cannot stand in for independent native/ORT numeric proof. This
-    intentionally reuses the tested v1 INPUT/OUTPUT/feature validators without
-    demanding an already-built module, .inputs or TVM runtime DLL.
-    """
     if set(pins) != {role for role, _staged, _max in STAGED_ROLES}:
         raise OmDetCompilerRouteRefused("OmDet direct source requires exact eight pins")
     from . import omdet_bundle_profile as profile
@@ -212,7 +196,6 @@ def _validate_direct_eight_static(root, pins):
         if PurePosixPath(pins[role]["file"]).name != name:
             raise OmDetCompilerRouteRefused("OmDet selected feature filename differs: " + role)
     def selected_json(role, label):
-
         body = omdet_public_candidate._small_bytes(
             root, pins[role]["file"], MAX_DECLARATION_BYTES)
         if (len(body) != pins[role]["bytes"] or
@@ -256,7 +239,6 @@ def _validate_direct_eight_static(root, pins):
 
 
 def _selection_direct_eight(args):
-    """Real first-compiler route: EIGHT source resources, no previous TVM DLL."""
     root, output = omdet_public_candidate._paths(args.source_dir, args.into)
     approved, pinset_sha = _unique_pinset(root, output, args.expected_pins)
     selected = omdet_compiler_hold.scan_selected_omdet(root, approved)
@@ -340,7 +322,6 @@ def preview_main(argv=None):
 
 
 def _four_native_inputs(path):
-    """Check all FOUR real native .inputs rows, without converting to v1 IO."""
     source_freeze._safe_ancestors(path)
     observed = source_freeze._lstat(path)
     if not stat.S_ISREG(observed.st_mode) or not 0 < observed.st_size <= 65536:
@@ -364,12 +345,6 @@ def _four_native_inputs(path):
 
 
 def _copy_held_consumer_resource(source, destination, selected):
-    """Copy exactly one approved held source to an exclusive user-visible leaf.
-
-    This does not publish READY or create a manifest; its purpose is to keep
-    the previously selected Pascal config/feature bytes available with the
-    compiled candidate rather than leaving them ONLY in a private stage.
-    """
     limit = next(max_bytes for role, _name, max_bytes in STAGED_ROLES
                  if role == selected["role"])
     expected_size, approved = selected["bytes"], selected["sha256"]
@@ -401,7 +376,6 @@ def _copy_held_consumer_resource(source, destination, selected):
 
 
 def _retain_selected_pipeline_diagnostic(report, output, api, output_locks):
-    """Preserve actual refused steps; never interpret this as verification."""
     if not callable(getattr(report, "as_dict", None)):
         raise OmDetCompilerRouteRefused("selected compiler returned no diagnostic report")
     payload = report.as_dict()
@@ -432,13 +406,6 @@ def _retain_selected_pipeline_diagnostic(report, output, api, output_locks):
 
 
 def _prestage_exact_trained_win64_cpu_runtime(output, api, output_locks):
-    """Prehold only the exact CPU wheel/rights bytes for THIS trained revision.
-
-    runtime.place still verifies all existing wheel members in its regular
-    pipeline step. The Win32 source/output directory remains held throughout;
-    a failed exclusive direct copy is retained as evidence, never cleaned up or
-    mistaken for a completed product. No hardlink/rename, no READY or GT claim.
-    """
     if os.name != "nt":
         raise OmDetCompilerRouteRefused("trained runtime pre-stage needs Win32 NTFS")
     inventory, libraries, licences = runtime._plan_runtime_files(
@@ -535,8 +502,6 @@ def main(argv=None):
         if shutil.disk_usage(stage_parent).free < (
                 2 * selected["total_bytes"] +
                 2 * omdet_compiler_hold.DISK_HEADROOM):
-
-
             raise OmDetCompilerRouteRefused("OmDet stage/compiled output disk headroom low")
 
 
@@ -552,12 +517,6 @@ def main(argv=None):
             inputs = output / (module.name + ".inputs")
 
             def hold_compiled_at_build_done(step):
-                """Hold the real DLL and four-input ABI before runtime/verify.
-
-                Pipeline emits the completed build step synchronously after
-                writing .inputs and before runtime.place or reference verify.
-                A post-pipeline pin would attest potentially substituted bytes.
-                """
                 if (getattr(step, "name", None) != "Building the module" or
                         getattr(step, "state", None) != "done"):
                     return

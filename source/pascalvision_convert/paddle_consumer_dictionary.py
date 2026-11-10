@@ -1,17 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Actual selected Paddle Rec dictionary bytes for a compiled Pascal consumer.
 
-The exporter holds its input dictionary only until WSL returns. A later TVM
-compiler bundle must not contain merely its former *absolute source path*:
-there would be no selected recognition alphabet to deliver to Pascal/CTC.
-
-This opt-in compiler-window scope copies the exact Preview-approved dictionary
-into output/dictionary, holds BOTH owner and output bytes with native Win32
-read/share-only handles until the caller's compiler returns, and then audits
-the complete selected source and output again. Failed scopes retain all output
-bytes. It is resource delivery, NOT Det+Rec+CTC execution, a numerical oracle,
-an immutable checkpoint or a release-grade manifest.
-"""
 
 from __future__ import annotations
 
@@ -28,7 +16,7 @@ _BLOCK_BYTES = 1024 * 1024
 
 
 class PaddleConsumerDictionaryError(ValueError):
-    """Selected dictionary cannot be shipped to the Pascal consumer safely."""
+    pass
 
 
 def _selection(approved):
@@ -63,11 +51,6 @@ def _selection(approved):
 
 @contextmanager
 def hold_selected_rec_dictionary(approved, output_directory):
-    """Yield in-compiler advisory receipt while both exact Rec dictionaries hold.
-
-    The same mutable receipt is promoted to POST only *after* Win32/FileID/SHA
-    checks pass on context exit. Never publish the pending receipt beforehand.
-    """
     selected = _selection(approved)
     if selected is None:
         yield None
@@ -103,7 +86,6 @@ def hold_selected_rec_dictionary(approved, output_directory):
             raise PaddleConsumerDictionaryError('compiler dictionary destination occupied')
 
         with ExitStack() as holds:
-
             opened_directories = set()
             for tree in (root, source.parent):
                 for directory in reversed((tree, *tree.parents)):
@@ -166,8 +148,6 @@ def hold_selected_rec_dictionary(approved, output_directory):
                 'retained_after_context': True,
             }
             def post_audit():
-
-
                 hf_held_stage._native_check(
                     api, source, source_handle, source_identity, length,
                     digest, _BLOCK_BYTES)

@@ -1,11 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Fail-closed SSH *probe* transport with local-only evidence.
 
-Remote execution is restricted to fixed no-argument introspection commands.
-It does not transfer models, run arbitrary shell, create remote files, install
-packages, or attest any native model. OpenSSH itself may make OS-managed logs;
-this API cannot guarantee a remote computer is physically diskless.
-"""
 
 from dataclasses import dataclass
 import os
@@ -49,12 +43,6 @@ class ProbeResult:
 def probe_ssh(*, host, user, known_hosts, local_evidence_dir, probe,
               port=22, timeout_seconds=20, max_output_bytes=65536,
               ssh_executable="ssh"):
-    """Run one immutable probe; evidence directory must exist and be empty.
-
-    A known_hosts file containing an independently verified pinned host key is
-    mandatory. No password, key, token or host fingerprint is saved here.
-    Caller provides an already-configured noninteractive SSH identity.
-    """
     if (type(host) is not str or not _IDENTITY.fullmatch(host) or
             type(user) is not str or not _USER.fullmatch(user) or
             type(probe) is not str or probe not in _PROBES or

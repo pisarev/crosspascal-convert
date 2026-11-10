@@ -1,10 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Stream a finished converter bundle as ZIP without copying it or trusting URLs.
 
-This is transport, NOT model verification.  The status inside the archive comes
-from the already finished pipeline job, never from this packager.  The compiler
-outputs may be large, so bytes are streamed, hashed, and ZIP-CRC'd in one pass.
-"""
 
 import hashlib
 import json
@@ -37,32 +32,18 @@ _WINDOWS_RESERVED_DEVICES = {'CON', 'PRN', 'AUX', 'NUL'} | {
 
 
 class UnsafeBundle(ValueError):
-    """The requested job does not have a safe, complete directory of files."""
+    pass
 
 
 class UnsafeBundleIntegrity(UnsafeBundle):
-    """Persistent unsafe member/schema; unlike a late race, do not retry READY."""
+    pass
 
 
 def _reserved_windows_component(name):
-    """Reject Win32 device basenames regardless of extension or letter case.
-
-    Applied to every directory segment, not only archive leaf members. Some
-    non-Windows/NT namespace sources can contain names Win32 cannot extract.
-    No broad temporary-name policy is imposed on historical legacy bundles.
-    """
     return name.split('.', 1)[0].upper() in _WINDOWS_RESERVED_DEVICES
 
 
 class _CollectedMember:
-    """A legacy three-field ZIP entry retaining scanned identity AND content.
-
-    Iteration intentionally yields (name, path, size) so existing callers and
-    destination preflight continue accepting the original collection contract.
-    The SHA pin catches same-inode, same-size mutations even when the filesystem
-    exposes a stale/explicitly restored last-write time between the two reads.
-    """
-
     __slots__ = ('name', 'path', 'size', 'identity', 'sha256')
 
     def __init__(self, name, path, info, sha256):
@@ -79,17 +60,10 @@ class _CollectedMember:
 
 
 def _identity(info):
-    """OS file ID plus byte-size/last-write state, not a content snapshot."""
     return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
 
 
 def _regular_path(path, *, directory, structural_admission=False):
-    """Refuse redirected/special paths with a phase-correct retry verdict.
-
-    A structurally unsafe member at INITIAL ZIP inventory is persistent. The
-    same observation AFTER that inventory may be a concurrent filesystem
-    mutation; it must refuse the current ZIP, but not revoke legacy READY.
-    """
     try:
         info = os.lstat(path)
     except OSError as exc:
@@ -107,19 +81,11 @@ def _regular_path(path, *, directory, structural_admission=False):
 
 
 def _refuse_walk_error(error):
-    """Never treat an unenumerated legacy child as a complete ZIP snapshot."""
     raise UnsafeBundle(
         'cannot fully enumerate bundle directory: %s' % error) from error
 
 
 def _bounded_zip_members(root, *, allow_download_info):
-    """Inventory all legacy members before full SHA, with bounded scandir.
-
-    os.walk materializes each directory's complete name list before the
-    caller can enforce quotas. This explicit iterator refuses after a
-    bounded number of members, checks aggregate bytes, and never quietly
-    skips a folder that becomes unreadable.
-    """
     pending = [(root, '')]
     selected = []
     member_count = 0
@@ -193,14 +159,6 @@ def _bounded_zip_members(root, *, allow_download_info):
 
 
 def _hash_inventory_member(path, info):
-    """Full SHA pin with bounded RAM, before exposing an untrusted ZIP member.
-
-    OS FileID/mtime/length are only an identity guard. On NTFS a same-file
-    rewrite may be observed before its last-write timestamp changes; a caller
-    can even restore that timestamp. Hashing the selected bytes during the
-    inventory, then again while streaming, closes this ordinary content gap.
-    This is not an OS-held immutable-source guarantee against mapped writers.
-    """
     initial = _identity(info)
     measured = hashlib.sha256()
     seen = 0
@@ -228,7 +186,6 @@ def _hash_inventory_member(path, info):
 
 
 def _bounded_pascal_file(entry):
-    """Read a small passport while checking scanned and opened file identity."""
     _, path, size = entry
     if not 0 < size <= _MAX_PASSPORT_BYTES:
         raise UnsafeBundleIntegrity('Pascal manifest/passport exceeds safe byte limit')
@@ -259,11 +216,6 @@ def _bounded_pascal_file(entry):
 
 
 def _hash_pascal_artifact(entry):
-    """Stream the declared binary's full SHA before allowing HTTP success.
-
-    O(1 MiB) RAM; an additional disk read of a large model is intentional and
-    does NOT establish a lock against a later mutation while ZIP is streaming.
-    """
     _, path, expected_bytes = entry
     identity = getattr(entry, 'identity', None)
     if identity is not None and _identity(
@@ -319,11 +271,6 @@ def _reject_json_constant(value):
 
 
 def _validate_pascal_passport_pair(entries):
-    """Validate that the two Pascal passports represent the exact same contract.
-
-    This is a bounded pre-HTTP-200 consistency check, NOT numerical verification,
-    immutable source locking or a directory-wide atomic commit.
-    """
     pair = {entry.name: entry for entry in entries if entry.name in _PASSPORT_PAIR}
     if set(pair) != _PASSPORT_PAIR:
         raise UnsafeBundleIntegrity('Pascal manifest pair is incomplete')
@@ -374,14 +321,6 @@ def _validate_pascal_passport_pair(entries):
 
 
 def _require_vision_bundle_closure(entries, contract):
-    """Do not download a declared Pascal vision model without its native kit.
-
-    The current Windows vision pipeline requires an input ABI sidecar, recipe,
-    report, TVM runtime DLLs and at least one redistribution licence beside the
-    verified module. A pair of valid passport documents is not enough. LLM and
-    non-Windows layouts are intentionally outside this particular Windows kit
-    gate; this is not a portable binary dependency resolver.
-    """
     if contract.get('task_kind') == 'text_generation':
         _require_native_llm_bundle_closure(entries)
         return
@@ -410,14 +349,6 @@ def _require_vision_bundle_closure(entries, contract):
 
 
 def _native_llm_closure_transient_read_failure(error, approved_sizes=None):
-    """Classify actual file-read races, not a malformed committed contract.
-
-    Some existing native family readers wrap OSError in ValueError, while
-    other bounded readers report identity changes directly as ValueError.
-    A late read race warrants HTTP409 retry without clearing legacy READY.
-    Only these narrowly identified I/O observations have that classification;
-    malformed family schema/receipt remains persistent UnsafeBundleIntegrity.
-    """
     seen = set()
     current = error
     for _ in range(16):
@@ -466,12 +397,6 @@ def _native_llm_closure_transient_read_failure(error, approved_sizes=None):
 
 
 def _require_native_llm_bundle_closure(entries):
-    """A native LLM ZIP must be a complete user bundle, never a bare DLL.
-
-    The pure compiler output validator is shared with native build and CLI
-    receipt. Recheck it immediately before HTTP 200 because files can change
-    between build completion and a later download request.
-    """
     from .build_plan import read_native_plan
     from .llm_bundle_contract import (_FAMILIES, _RUNTIME, _MAX_JSON,
                                       _MAX_INDEX, validate_llm_output)
@@ -555,12 +480,8 @@ def _require_native_llm_bundle_closure(entries):
                                 name: member.sha256
                                 for name, member in by_name.items()})
     except UnsafeBundle:
-
-
         raise
     except OSError as exc:
-
-
         raise UnsafeBundle('native LLM ZIP closure temporarily inaccessible: %s'
                            % exc) from exc
     except (ValueError, TypeError, KeyError, UnicodeError,
@@ -576,13 +497,6 @@ def _require_native_llm_bundle_closure(entries):
 
 def _validate_selected_source_receipt(entries, expected_tree_sha256=None,
                                       expected_closure=None):
-    """Refuse ZIP export if the selected-source post-lock receipt and recipe are missing.
-
-    No trusted future acceptance is inferred from JSON alone; the server also
-    passes its *in-memory job-approved* source tree SHA for a selected Build.
-    Without the paired post-audit seal, that job MUST NOT be downloaded even if
-    a compiler wrote some plausible DLL/recipe files before the audit failed.
-    """
     from .recipe_file import validate_selected_source_closure
 
     names = {entry.name: entry for entry in entries if '/' not in entry.name}
@@ -592,7 +506,6 @@ def _validate_selected_source_receipt(entries, expected_tree_sha256=None,
                 expected_tree_sha256 is not None or expected_closure is not None)
     recipe = None
     if recipe_entry is not None and 0 < recipe_entry.size <= _MAX_PASSPORT_BYTES:
-
         try:
             recipe_bytes = _bounded_pascal_file(recipe_entry)
         except UnsafeBundle:
@@ -606,7 +519,6 @@ def _validate_selected_source_receipt(entries, expected_tree_sha256=None,
                                 parse_constant=_reject_json_constant)
             except (UnicodeError, ValueError, TypeError, RecursionError) as exc:
                 if selected:
-
                     raise UnsafeBundleIntegrity(
                         'selected source closure recipe JSON is malformed') from exc
 
@@ -636,8 +548,6 @@ def _validate_selected_source_receipt(entries, expected_tree_sha256=None,
 
     seal_bytes = _bounded_pascal_file(seal_entry)
     try:
-
-
         seal = json.loads(seal_bytes.decode('utf-8'),
                           object_pairs_hook=_unique_object,
                           parse_constant=_reject_json_constant)
@@ -693,12 +603,6 @@ def _validate_selected_source_receipt(entries, expected_tree_sha256=None,
 def _validate_selected_paddle_rec_dictionary(
         entries, expected, *, expected_source_root=None,
         expected_build_plan=None):
-    """Bind a ZIP's physical Rec alphabet to the original job-approved SHA.
-
-    A newly calculated ZIP member hash alone does not prevent exporting an
-    attacker-edited *different* dictionary after compiler handles are closed.
-    This is transport integrity, not native CTC or trained model acceptance.
-    """
     if expected is None:
         return
     if (type(expected_source_root) is not str or
@@ -803,16 +707,6 @@ def collect_bundle_files(root, *, allow_download_info=False,
                          expected_paddle_source_root=None,
                          expected_paddle_build_plan=None,
                          expected_onnx_source_pack=None):
-    """Return (zip-name, absolute-path, size) after a full fail-closed walk.
-
-    Before HTTP 200 is sent, scan every entry, including hidden files, and
-    refuse *the whole download* if anything links out or is not a regular file.
-    Caller must use the server-recorded completed job root, never a path from
-    the request. Sorting makes archive member order deterministic. Only the
-    read-only destination inspector may opt in to an ALREADY EXTRACTED ZIP's
-    _pascalvision_download_info.json. Ordinary HTTP bundle creation always
-    refuses an existing reserved metadata file, so no source can spoof it.
-    """
     if not isinstance(root, (str, os.PathLike)) or not os.path.isabs(root):
         raise UnsafeBundle('bundle directory must be an absolute server path')
     root = os.path.abspath(root)
@@ -821,7 +715,6 @@ def collect_bundle_files(root, *, allow_download_info=False,
         if not isinstance(expected_atomic_inventory, bundle_atomic.Inventory):
             raise UnsafeBundle('committed bundle has no trusted inventory object')
         try:
-
             max_bytes = (bundle_atomic.MAX_NATIVE_FAMILY_BYTES
                          if expected_atomic_inventory.total_bytes >
                          bundle_atomic.MAX_BYTES else bundle_atomic.MAX_BYTES)
@@ -875,8 +768,6 @@ def collect_bundle_files(root, *, allow_download_info=False,
     if present and present != _PASSPORT_PAIR:
         raise UnsafeBundleIntegrity('bundle has an incomplete Pascal manifest pair')
     if present and not allow_download_info:
-
-
         passport = _validate_pascal_passport_pair(entries)
         _require_vision_bundle_closure(entries, passport)
     if expected_onnx_source_pack is not None:
@@ -899,12 +790,6 @@ def collect_bundle_files(root, *, allow_download_info=False,
 
 def stream_bundle(destination, entries, *, job, verification_status,
                   expected_atomic_inventory=None):
-    """Write an uncompressed ZIP to any writable binary stream, even a socket.
-
-    SHA-256 values describe the exact bytes added to this archive.  The info
-    file is NOT a verified model manifest; it records whether the source job
-    had independently passed, or was only compiled and NOT_CHECKED.
-    """
     if verification_status not in ('VERIFIED_LOCAL', 'NOT_CHECKED'):
         raise UnsafeBundle('this job did not finish in an exportable state')
     expected_files = None
@@ -927,7 +812,6 @@ def stream_bundle(destination, entries, *, job, verification_status,
             if (type(scanned) is not tuple or len(scanned) != 4
                     or type(pinned_sha) is not str
                     or not _HEX_SHA256.fullmatch(pinned_sha)):
-
                 raise UnsafeBundle('ZIP source lacks pinned identity/SHA '
                                    'from trusted file inventory')
             if _identity(_regular_path(full, directory=False)) != scanned:
@@ -963,7 +847,6 @@ def stream_bundle(destination, entries, *, job, verification_status,
                 expected = expected_files[archive_name]
                 if (actual_size != expected.size or
                         digest.hexdigest() != expected.sha256):
-
                     raise UnsafeBundle('streamed bytes differ from committed SHA: '
                                        + archive_name)
             if digest.hexdigest() != pinned_sha:

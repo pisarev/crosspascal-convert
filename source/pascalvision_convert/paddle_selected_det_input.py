@@ -1,15 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Prepare a diagnostic input tensor for PP-OCRv5 Server detection.
 
-The selected TVM graph has a fixed [1, 3, 960, 960] input. Square RGB8 PNGs
-match the geometry of the original resize-long-960 preprocessing. The
-diagnostic refuses rectangular images and applies the BGR normalization
-from the pinned model configuration.
-
-The output is a SHA-checked input.f32le for a separate ONNX Runtime
-comparison. It reconstructs preprocessing with NumPy and OpenCV and
-runs no inference. It writes only to a new output directory.
-"""
 
 from __future__ import annotations
 
@@ -49,7 +39,7 @@ _RECEIPT = 'input-source.json'
 
 
 class SelectedDetInputRefused(ValueError):
-    """The selected native Det source/input contract is not satisfied."""
+    pass
 
 
 def _require(condition, message):
@@ -78,12 +68,6 @@ def _model(source_dir, approved_sha):
 
 
 def _encode_original_det_square(png_bytes):
-    """OpenCV BGR HWC -> 960 square -> channelwise mean/std -> NCHW float32.
-
-    No general-image claim: the independent original DetResizeForTest has
-    dynamic aspect geometry. A non-square input cannot be represented by this
-    static 960x960 native Det model with proven vendor-equivalent geometry.
-    """
     try:
         import cv2
         import numpy as np
@@ -120,7 +104,6 @@ def _encode_original_det_square(png_bytes):
 
 
 def prepare(source_dir, approved_sha, image_png, into):
-    """Create one real pinned original Det source-profile *input only*."""
     try:
         chosen = _model(source_dir, approved_sha)
         image, image_sha, png_bytes, png_dims = ocr_png_preprocess._checked_source(

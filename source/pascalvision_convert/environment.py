@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Report the installed tools and available model conversion routes."""
+
 
 import os
 import platform
@@ -13,7 +13,6 @@ from . import cuda_preflight
 
 
 def llvm_locations():
-    """Return shared linker search locations in priority order."""
     places = []
     for variable in ('ProgramFiles', 'ProgramFiles(x86)', 'LOCALAPPDATA'):
         root = os.environ.get(variable, '')
@@ -40,7 +39,6 @@ LLVM_LOCATIONS = llvm_locations()
 
 
 def _package_version(name):
-    """Version of an installed package, or None. Asked by import, not by files."""
     try:
         package = __import__(name)
     except Exception:
@@ -49,7 +47,6 @@ def _package_version(name):
 
 
 def _ask_program(path, args):
-    """First non-empty line a program answers with, or None."""
     try:
         finished = subprocess.run([path] + args, capture_output=True, timeout=30)
     except Exception:
@@ -64,7 +61,6 @@ def _ask_program(path, args):
 
 
 def find_clang():
-    """Find clang and report whether it is already on PATH."""
     on_path = shutil.which('clang')
     if on_path:
         return on_path, True
@@ -77,11 +73,6 @@ def find_clang():
 
 
 def find_cuda():
-    """The NVIDIA toolkit, if visible. We look for the compiler, not a variable.
-
-    An environment variable survives an uninstalled toolkit, so the presence of
-    nvcc decides; the variable is only a second place to look.
-    """
     nvcc = shutil.which('nvcc')
     if nvcc:
         return nvcc
@@ -95,13 +86,6 @@ def find_cuda():
 
 
 def find_gpu():
-    """The card itself, asked of the driver. Returns its line, or None.
-
-    The toolkit and the card are different facts: a machine can carry the
-    toolkit with no card in it, and a card with no toolkit installed. Reporting
-    one as the other names a false cause, and a false cause sends the reader to
-    the wrong place.
-    """
     smi = shutil.which('nvidia-smi')
     if not smi:
         return None
@@ -110,7 +94,6 @@ def find_gpu():
 
 
 def find_gpu_arch():
-    """Return the detected CUDA architecture, using TVM first and the driver as a fallback."""
     from pascalvision_convert import targets
     through_tvm = targets.host().get('cuda_arch')
     if through_tvm:
@@ -133,7 +116,6 @@ def find_gpu_arch():
 
 
 def core_verdict(python_ok, tvm_ok, onnx_reader, tflite_reader, linker_ok):
-    """Report which source formats this interpreter can compile with TVM and the linker."""
     common = [name for name, ok in (('Python', python_ok), ('TVM', tvm_ok),
                                     ('the linker', linker_ok)) if not ok]
     if common:
@@ -159,7 +141,6 @@ def core_verdict(python_ok, tvm_ok, onnx_reader, tflite_reader, linker_ok):
 
 
 def reference_verdict(onnx_runner, tflite_runner):
-    """Report which source formats have an installed reference runner."""
     if onnx_runner and tflite_runner:
         return {'ready': True, 'formats': ('onnx', 'tflite'),
                 'reason': 'ONNX and TFLite builds can both be compared with their models'}
@@ -177,7 +158,6 @@ def reference_verdict(onnx_runner, tflite_runner):
 
 
 def full_build_verdict(interpreter, builder, tvm_in_builder, linker):
-    """Report whether the separate model-family builder and linker are available."""
     missing = []
     if not interpreter:
         missing.append('its interpreter is not where it is expected')
@@ -196,7 +176,6 @@ def full_build_verdict(interpreter, builder, tvm_in_builder, linker):
 
 
 def gpu_verdict(card, nvcc):
-    """Report whether CUDA is selectable and whether the target must be entered manually."""
     if not nvcc:
         return {
             'ready': False,
@@ -216,7 +195,6 @@ def gpu_verdict(card, nvcc):
 
 
 def cudnn_locations():
-    """Where cuDNN is looked for. Named out loud so a miss can be argued with."""
     places = []
     for variable in ('CUDNN_PATH', 'CUDA_PATH'):
         root = os.environ.get(variable, '')
@@ -251,7 +229,6 @@ def cudnn_locations():
 
 
 def find_cudnn():
-    """Return the first detected cuDNN library and all search locations."""
     names = ('cudnn64_9.dll', 'cudnn64_8.dll', 'libcudnn.so', 'libcudnn.so.9',
              'libcudnn.so.8', 'libcudnn.dylib')
     places = cudnn_locations()
@@ -270,7 +247,6 @@ def find_cudnn():
 
 
 def tvm_cudnn_support():
-    """Return the TVM build setting and runtime availability of cuDNN."""
     try:
         import tvm
         from tvm.contrib import cudnn
@@ -288,7 +264,6 @@ def tvm_cudnn_support():
 
 
 def _has_wsl():
-    """Whether this Windows has a working WSL. Needed ONLY for Paddle models."""
     if platform.system() != 'Windows':
         return None
     wsl = shutil.which('wsl')
@@ -302,7 +277,6 @@ def _has_wsl():
 
 
 def collect():
-    """Collect the machine report and make an off-PATH clang available to this process."""
     report = Report('Machine report')
 
     step = report.step('Machine and Python')
@@ -370,8 +344,6 @@ def collect():
             step.done(_ask_program(clang, ['--version']) or 'version not reported')
             step.say(clang)
         elif clang:
-
-
             os.environ['PATH'] = os.path.dirname(clang) + os.pathsep + os.environ.get('PATH', '')
             step.done('found off the path; the path was added for this run')
             step.say(clang)

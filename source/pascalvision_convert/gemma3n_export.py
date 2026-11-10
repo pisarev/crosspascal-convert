@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Export a native text graph with external file-backed parameters."""
+
 import copy
 import json
 import os
@@ -16,7 +16,6 @@ from transformers.models.gemma3n.modeling_gemma3n import Gemma3nTextRotaryEmbedd
 
 
 class SharedPrefix:
-    """Full-prefix execution retaining the architecture's shared KV layers."""
     def __init__(self):
         self.shared_layers = {}
     def get_seq_length(self):
@@ -138,7 +137,6 @@ class TokenGraph(torch.nn.Module):
 
 
 class GpuTokenGraph(TokenGraph):
-    """Keep large lookup tables in host memory and transfer only selected rows."""
     def forward(self, embedding, per_layer_embedding, position, *previous):
         distance = position.reshape(1, 1, 1, 1) - self.positions.reshape(1, 1, -1)
         full = torch.where(distance >= 0, 0.0, torch.finfo(torch.float32).min)
@@ -244,7 +242,7 @@ def main():
     pieces = json.loads((bundle / "tokenizer-gguf.json").read_text(encoding="utf-8"))["tokenizer.ggml.tokens"]
     if not 1 <= context <= model.config.max_position_embeddings:
         raise ValueError("The requested context exceeds the architecture's position range")
-                                                                         
+
     def sparsity(self, value):
         return torch.relu(value - (value.mean(-1, keepdim=True) +
                           value.std(-1, keepdim=True, unbiased=False) * self.multiplier))
@@ -283,8 +281,6 @@ def main():
     for name in names[len(input_names):]:
         original = name.removeprefix("text.")
         if original.endswith(".altup.correction_coefs.weight"):
-                                                                                    
-                                                                              
             array = token_graph.get_parameter(name).detach().numpy()
             filename = "coefficient-" + str(len(parameters)) + ".bin"
             array.tofile(bundle / filename)

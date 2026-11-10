@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Compare a compiled module with its source model on reproducible inputs.
 
-The generic path compares numeric outputs and reports additional diagnostics.
-Named strict paths check all required candidates or outputs. Synthetic probes
-are separate from task-specific acceptance on representative inputs.
-"""
 
 import numpy as np
 from collections import deque
@@ -17,17 +12,6 @@ _CUDA_DLL_DIRECTORIES = {}
 
 
 def _prepare_cuda_runtime_directory(device_kind):
-    """Make the selected toolkit's cudart visible to this Windows verifier.
-
-    Only the toolkit actually discovered on THIS machine may supply the path;
-    never scan unrelated host CUDA installations or guess a CUDA major version.
-    This does not assert runtime compatibility: the real device and independent
-    numerical comparison still decide the final verification status.
-
-    Returns an explanatory warning when no credible directory could be added.
-    A missing toolkit does not mask a valid self-contained runtime supplied by
-    TVM: the normal runtime device probe remains the final availability check.
-    """
     import os
     import sys
 
@@ -66,16 +50,10 @@ RTDETR_FUSED_ATOL = 0.001
 
 
 class NothingToCompare(Exception):
-    """Comparison is impossible, and the reason is named.
-
-    Not to be confused with disagreement: there the comparison happened and
-    returned a verdict; here it never happened at all.
-    """
+    pass
 
 
 def is_tflite(model_path):
-
-
     if str(model_path).lower().endswith('.tflite'):
         return True
     try:
@@ -86,7 +64,6 @@ def is_tflite(model_path):
 
 
 def tflite_interpreter(model_path):
-    """Load an available TFLite interpreter for the reference run."""
     try:
         from ai_edge_litert.interpreter import Interpreter
     except ImportError:
@@ -101,7 +78,6 @@ def tflite_interpreter(model_path):
 
 
 def model_input(model_path):
-    """Name and shape of the single input, taken from the model itself."""
     if is_tflite(model_path):
         interpreter = tflite_interpreter(model_path)
         described = interpreter.get_input_details()
@@ -110,8 +86,6 @@ def model_input(model_path):
                                    % len(described))
         entry = described[0]
         if entry['dtype'] != np.float32:
-
-
             raise NothingToCompare(
                 'the model input has type %s rather than float32: this is a'
                 ' quantized model. The converter refuses those, so there is'
@@ -132,8 +106,6 @@ def model_input(model_path):
                 dims.append(None)
                 free.append(index)
         if free:
-
-
             raise NothingToCompare(
                 'input %s leaves dimensions %s free - name the shape as the third'
                 ' argument, for example 1,3,640,640' % (entry.name, free))
@@ -142,11 +114,6 @@ def model_input(model_path):
 
 
 def _onnx_input_contract(model_path):
-    """Runtime ONNX inputs in declaration order, excluding initializer weights.
-
-    Also return output names in ONNX declaration order, for disambiguating
-    equally shaped (B, N, 4) boxes and four-class score tensors.
-    """
     import onnx
 
     model = onnx.load(model_path)
@@ -166,7 +133,6 @@ def _onnx_input_contract(model_path):
 
 
 def _validated_multi_inputs(inputs):
-    """Refuse to invent shapes or types not given by the original ONNX graph."""
     supported = {1: np.float32, 7: np.int64}
     total = 0
     result = []
@@ -200,13 +166,11 @@ def _validated_multi_inputs(inputs):
 
 
 def _probe_multi_inputs(inputs):
-    """Three reproducible synthetic mappings, preserving every named dtype."""
     for label in ('smooth', 'noise', 'flat'):
         rng = np.random.RandomState(20260831)
         data = {}
         for index, (name, shape, dtype) in enumerate(inputs):
             if dtype == np.float32:
-
                 offset = (index + 1) / (len(inputs) + 2)
                 if label == 'smooth':
                     array = 0.5 * smooth_pattern(shape) + 0.5 * offset
@@ -216,8 +180,6 @@ def _probe_multi_inputs(inputs):
                     array = np.full(shape, 0.25 + 0.5 * offset)
                 data[name] = np.ascontiguousarray(array, dtype=np.float32)
             else:
-
-
                 if label == 'noise':
                     array = rng.randint(0, 2, size=shape).astype(np.int64)
                     if array.size:
@@ -233,7 +195,6 @@ def _probe_multi_inputs(inputs):
 
 
 def spatial_axes(shape):
-    """Return the height and width axes for NCHW or NHWC input."""
     if len(shape) != 4:
         return None
     if shape[-1] in (1, 3, 4) and shape[1] not in (1, 3, 4):
@@ -242,7 +203,6 @@ def spatial_axes(shape):
 
 
 def smooth_pattern(shape):
-    """A smooth, photograph-like pattern over the input's spatial dimensions."""
     axes = spatial_axes(shape)
     if axes is None:
         ramp = np.linspace(0.0, 1.0, int(np.prod(shape)), dtype=np.float32)
@@ -260,7 +220,6 @@ def smooth_pattern(shape):
 
 
 def probe_inputs(shape):
-    """Three different inputs: smooth, noisy and flat. All from a fixed seed."""
     rng = np.random.RandomState(20260831)
 
 
@@ -272,7 +231,6 @@ def probe_inputs(shape):
 
 
 def reference_road(model_path, input_names=None):
-    """Create the independent ONNX Runtime or TFLite reference runner."""
     if is_tflite(model_path):
         interpreter = tflite_interpreter(model_path)
         entry = interpreter.get_input_details()[0]
@@ -317,7 +275,6 @@ def reference_road(model_path, input_names=None):
 
 
 def _deviation(a, b):
-    """The 99.9th percentile and the largest, in one place, measured alike."""
     a64 = a.astype(np.float64)
     relative = np.abs(a64 - b.astype(np.float64)) / np.maximum(np.abs(a64), 1.0)
     return float(np.percentile(relative, 99.9)), float(relative.max())
@@ -327,12 +284,10 @@ DECISION_AGREEMENT = 0.999
 
 
 def _looks_like_decision(a):
-    """Detect per-class scores suitable for label diagnostics."""
     return a.ndim >= 4 and a.shape[0] == 1 and a.shape[1] > 1
 
 
 def _decision_agreement(a, b):
-    """Share of positions where both roads pick the same class."""
     return float((a.argmax(axis=1) == b.argmax(axis=1)).mean())
 
 
@@ -340,17 +295,11 @@ DETECTION_THRESHOLDS = (0.5, 0.35, 0.25)
 
 
 def _probability_shift(a, b):
-    """Find the maximum difference between sigmoid probabilities."""
     sigmoida = lambda x: 1.0 / (1.0 + np.exp(-x.astype(np.float64)))
     return float(np.abs(sigmoida(a) - sigmoida(b)).max())
 
 
 def _scores_output_index(outputs):
-    """Find class scores paired with a separate box tensor, if present.
-
-    The pair must share a candidate count and have shapes (B, N, C)
-    and (B, N, 4), respectively. This heuristic is for diagnostics.
-    """
     by_candidate_count = {}
     for i, a in enumerate(outputs):
         if a.ndim == 3 and a.shape[2] == 4:
@@ -367,7 +316,6 @@ def _scores_output_index(outputs):
 
 
 def _detections(a, threshold):
-    """Candidates whose best score passes the threshold, with their classes."""
     scores = 1.0 / (1.0 + np.exp(-a.astype(np.float64)))
     best = scores.max(axis=2)
     klass = scores.argmax(axis=2)
@@ -377,10 +325,6 @@ def _detections(a, threshold):
 
 
 def _detections_agree(a, b):
-    """Return thresholds with matching and differing detection sets.
-
-    Threshold agreement is diagnostic and does not change the numeric gate.
-    """
     agreeing, differing = [], []
     for threshold in DETECTION_THRESHOLDS:
         if _detections(a, threshold) == _detections(b, threshold):
@@ -391,10 +335,6 @@ def _detections_agree(a, b):
 
 
 def _find_permutation(reference, ours):
-    """Report an unambiguous numeric output permutation, if one exists.
-
-    The original output positions still determine verification.
-    """
     if len(reference) != len(ours):
         return None
     order = []
@@ -417,12 +357,6 @@ def _find_permutation(reference, ours):
 
 
 def _paired_output_indices(outputs, names):
-    """Identify one (boxes, scores/logits) pair, preserving output positions.
-
-    Different last dimensions establish the pair for ordinary detectors.
-    Names are required when the score dimension is itself four or several
-    equally shaped outputs would otherwise make the pairing ambiguous.
-    """
     candidates = []
     for box_index, boxes in enumerate(outputs):
         if boxes.ndim != 3 or boxes.shape[2] != 4:
@@ -454,11 +388,6 @@ def _paired_output_indices(outputs, names):
 
 
 def _has_perfect_matching(adjacency):
-    """Bipartite augmenting paths: each reference row uses one distinct TVM row.
-
-    Greedy matching is insufficient: a row with two possible partners must not
-    steal the only possible partner of a subsequent row.
-    """
     count = len(adjacency)
     right_to_left = [-1] * count
     left_to_right = [-1] * count
@@ -475,7 +404,6 @@ def _has_perfect_matching(adjacency):
                 parent_right[right] = left
                 occupied = right_to_left[right]
                 if occupied == -1:
-
                     while right != -1:
                         predecessor = parent_right[right]
                         previous_right = left_to_right[predecessor]
@@ -494,13 +422,6 @@ def _has_perfect_matching(adjacency):
 
 def _paired_candidates_agree(reference_boxes, reference_scores,
                              built_boxes, built_scores):
-    """Compare the *whole* (box, class-vector) row, as an unordered multiset.
-
-    Two rows can match only if EVERY coordinate AND EVERY score is within
-    measured atol=rtol=0.003. A full bipartite matching proves multiplicity,
-    so a duplicated TVM candidate cannot replace a missing reference candidate.
-    Rows from different batches never match.
-    """
     arrays = (reference_boxes, reference_scores, built_boxes, built_scores)
     if any(a.ndim != 3 for a in arrays):
         return False, 'boxes and scores must each have three dimensions'
@@ -562,13 +483,6 @@ def _paired_candidates_agree(reference_boxes, reference_scores,
 
 
 def _validate_rtdetr_fused_source(model_path):
-    """Independently enforce the declared single fused ONNX output profile.
-
-    The Pascal adapter is selected in the build contract, not inferred from a
-    coincidental six-column output.  Recheck the ONNX itself in this verifier so
-    a stale/incorrect caller cannot opt another model into reordered comparison.
-    Dynamic candidate counts are not evidence of a bounded exact comparison.
-    """
     if is_tflite(model_path):
         raise NothingToCompare('RT-DETR fused numeric profile needs ONNX output metadata')
     import onnx
@@ -591,13 +505,6 @@ def _validate_rtdetr_fused_source(model_path):
 
 
 def _rtdetr_fused_candidates_agree(reference, built):
-    """Match all fused (cx,cy,w,h,confidence,class_id) candidates bijectively.
-
-    Row permutations from TopK ties are legal, but missing, duplicated, altered
-    or cross-batch candidates are not.  Every float field must differ by <=0.001
-    ABSOLUTELY and every exact integral class ID must be identical.  There is no
-    percentile shortcut, thresholded subset, or nonjudging noise input.
-    """
     if reference.ndim != 3 or built.ndim != 3 or reference.shape != built.shape:
         return False, 'fused RT-DETR output shapes differ or are not rank 3'
     batch, count, fields = reference.shape
@@ -651,7 +558,6 @@ def _rtdetr_fused_candidates_agree(reference, built):
 
 
 def _strict_multi_outputs(reference, ours, output_names):
-    """New multi-input mode has no percentile or detection-count shortcuts."""
     if len(reference) != len(ours):
         return False, ('OUTPUT COUNT DIFFERS: ONNX Runtime %d, TVM %d'
                        % (len(reference), len(ours)))
@@ -706,12 +612,6 @@ def _strict_multi_outputs(reference, ours, output_names):
 
 
 def _compare_legacy_probe(reference, ours, label, judges):
-    """Compare a generic probe without changing its declared judging role.
-
-    Output-count failures retain their unconditional gate. Other failures
-    follow judges. Label and threshold agreement is diagnostic: no explicit
-    consumer contract authorizes it to replace a failed numeric comparison.
-    """
     result = {'agreed': False, 'blocking': False, 'lines': [], 'numbers': {}}
 
     def finish(agreed, blocking):
@@ -813,11 +713,6 @@ def _compare_legacy_probe(reference, ours, label, judges):
 
 def verify_here(model_path, module_path, shape_from_caller=None, device_kind='cpu',
                 comparison_profile=None):
-    """Compare a built module with its source model, IN THIS PROCESS.
-
-    Loading the module locks the file on Windows - see the note above
-    verify(). Call this directly only when the process is about to end.
-    """
     step = Step('Comparison with the reference')
     if comparison_profile not in (None, RTDETR_FUSED_PROFILE):
         return step.refuse('unknown numerical comparison profile %r'
@@ -894,8 +789,6 @@ def verify_here(model_path, module_path, shape_from_caller=None, device_kind='cp
 
     device = tvm.runtime.device(device_kind, 0)
     if not device.exist:
-
-
         step.say('this machine has no %s device, so the module was not run'
                  % device_kind)
         step.say('the module was built, but NOTHING about its numbers is known')
@@ -972,10 +865,6 @@ def verify_here(model_path, module_path, shape_from_caller=None, device_kind='cp
 
 def verify(model_path, module_path, shape_from_caller=None, device_kind='cpu',
            comparison_profile=None):
-    """Compare a built module with its source model in a child process.
-
-    Returns a report step, exactly as if the work had happened here.
-    """
     import json
     import os
     import subprocess
@@ -999,8 +888,6 @@ def verify(model_path, module_path, shape_from_caller=None, device_kind='cpu',
         finished = subprocess.run(command, capture_output=True, timeout=1800,
                                   env=environment)
     except Exception as trouble:
-
-
         return step.say('NOT CHECKED: independent comparison child could not '
                         'finish (%s); no in-process verification substituted'
                         % trouble)
@@ -1047,7 +934,6 @@ def verify(model_path, module_path, shape_from_caller=None, device_kind='cpu',
 
 
 def _main(argv):
-    """Entry point of the child process: compare, then print the step as JSON."""
     import json
     shape = None
     if len(argv) > 3 and argv[3]:

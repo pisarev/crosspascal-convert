@@ -1,16 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Read-only projection of a SUPPLIED original ORT raw capture onto OCR plan v2.
 
-This is a byte-integrity and contract adapter, not an execution witness.
-An ORT producer receipt and matching SHA-256 files cannot independently attest
-that ORT, Pascal, image preprocessing, or human annotation actually ran.
-Nothing here creates evidence.json, runs a model, or issues a Facade/READY marker.
-
-The selected output is identified by its exact declared semantic NAME. The
-resulting paths describe a point-in-time inspection of existing files; any
-future consumer must check the SHA-256 again when it opens their bytes.
-"""
 
 from __future__ import annotations
 
@@ -22,7 +12,7 @@ from . import ocr_ort_raw_capture as raw_producer
 
 
 class CaptureBridgeRefused(ValueError):
-    """The supplied capture cannot be bound to this OCR DRAFT plan."""
+    pass
 
 
 def _require(condition: bool, message: str) -> None:
@@ -242,12 +232,6 @@ def _inspect(bundle, stage, capture_dir, output_name):
 
 
 def inspect_ort_capture(bundle, stage, capture_dir, output_name) -> dict:
-    """Inspect a raw ORT capture read-only; refuse conflicts, never issue READY.
-
-    No output tree is created and no model, process, CLI, native runtime, or
-    independent annotation is invoked. Even a fully matching capture remains
-    NOT_CHECKED; raw producer metadata is inherently self-declared.
-    """
     try:
         return _inspect(bundle, stage, capture_dir, output_name)
     except CaptureBridgeRefused:

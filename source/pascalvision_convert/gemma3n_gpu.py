@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Native CUDA lowering with row-wise int8 weights and host embedding lookup."""
+
 import hashlib
 import json
 from pathlib import Path
@@ -65,8 +65,6 @@ class QuantizedMatvec(relax.PyExprMutator):
                 isinstance(call.args[1],relax.Constant)):
             exponent=call.args[1].data.numpy()
             if exponent.size==1 and float(exponent.reshape(-1)[0])==2.0:
-                                                                                 
-                                                                                 
                 value=self.visit_expr(call.args[0])
                 return relax.op.multiply(value,value)
         if (isinstance(call.op,tvm.ir.Op) and call.op.name=='relax.call_tir' and
@@ -114,7 +112,7 @@ def compile_gpu(bundle,arch):
     rewritten=rewriter.visit_expr(main)
     module=rewriter.builder_.get()
     module.update_func(module.get_global_var('main'),rewritten)
-                                                                        
+
     relax.analysis.well_formed(module)
     quantized={}
     for index,name in enumerate(selected.values()):

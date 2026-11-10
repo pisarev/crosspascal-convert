@@ -1,11 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Offline, read-only inspection of retained stages after a server restart.
 
-This deliberately does NOT claim stage ownership, restore READY, authorize
-deletion, recurse into child data, or execute/verify a native model. It only
-reports candidate sibling directory names and their observed NTFS FileIDs.
-No persistent state, cleanup, write, rename, or network access is performed.
-"""
 
 from __future__ import annotations
 
@@ -27,18 +21,11 @@ _SNAPSHOT = re.compile(r'(.+)\.source-freeze-[0-9a-f]{24}\Z')
 
 
 class UnsafeInspection(ValueError):
-    """No partial recovery inventory is authoritative after a refusal."""
+    pass
 
 
 def inspect_retained_candidates(parent, *, expected_output=None,
                                 max_entries=MAX_PARENT_ENTRIES):
-    """Observe exact one-level NTFS stage candidates, including orphan stages.
-
-    Atomic stage names cannot be attributed to a particular output after a
-    crash: they remain marked UNATTRIBUTED even when expected_output is set.
-    A source snapshot with the matching output prefix is only a name candidate,
-    not authenticated as belonging to a specific job.
-    """
     if type(max_entries) is not int or not 1 <= max_entries <= MAX_PARENT_ENTRIES:
         raise UnsafeInspection('bounded parent scan limit must be 1..16384')
     try:

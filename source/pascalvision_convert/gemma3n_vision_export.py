@@ -1,8 +1,8 @@
 # Original integration Copyright (C) 2026 Yuriy Pisarev, MIT; see LICENSE.
-# static_fusion adapts MobileNetV5MultiScaleFusionAdapter.forward from timm 1.0.22.
+
 # Copyright 2019 Ross Wightman. Licensed under Apache-2.0; see licenses/timm-LICENSE.txt.
-# Modification: constant spatial dimensions for ONNX export; explicit shape tests.
-"""Export a Gemma 3n MobileNetV5 projector, keeping parameters external."""
+
+
 import argparse
 import hashlib
 import json
@@ -69,7 +69,7 @@ def export(source, output, text_manifest, vocabulary):
             x = torch.nn.functional.linear(x, self.proj)
             return x * torch.rsqrt((x * x).mean(-1, keepdim=True) + eps)
 
-    # Preserve timm's MSFA algorithm while making spatial sizes constant for ONNX.
+
     def static_fusion(self, inputs):
         size = tuple(int(v) for v in inputs[0].shape[-2:])
         resized = [torch.nn.functional.interpolate(x, size=size, mode=self.interpolation_mode)

@@ -1,25 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Native Win32 read/share-only locks for frozen RAW and selected ONNX files.
 
-The wizard uses the single-file API for RAW snapshots and the file-set API
-for selected ONNX models with sidecars.
-Neither is a release-grade immutable snapshot. Each staged file is opened
-CreateFileW(GENERIC_READ, FILE_SHARE_READ), denying new write/delete opens
-while letting other readers in. The exact private ready marker, approved tree
-SHA and Win32 handle identities are inspected before and after the held scope.
-
-Only local fixed NTFS volumes are accepted; a mapped/network or unknown
-filesystem is not treated as a proven Windows sharing environment.
-Preexisting writable memory mappings may still alter contents; privileged
-raw-disk writes, a race BEFORE lock acquisition, parent namespace attacks,
-unselected external dependencies and arbitrary directory models remain outside
-the selected-file contract.
-NTFS may also permit renaming another hardlink alias while the primary
-staged pathname remains locked: the normal-exit native ChangeTime comparison
-detects the observed metadata drift, but does not prohibit the alias rename.
-No file is created, modified, renamed, replaced or deleted by this module.
-"""
 
 from __future__ import annotations
 
@@ -50,15 +31,15 @@ MAX_READ_BLOCK = 1024 * 1024
 
 
 class SourceLockError(ValueError):
-    """The staged file cannot be kept under a trusted share-read-only lock."""
+    pass
 
 
 class SourceLockUnavailable(SourceLockError):
-    """Unsupported OS, conflicting writer or kernel32 lock failure."""
+    pass
 
 
 class StagedSourceInvalid(SourceLockError):
-    """The source-freeze snapshot, marker, bytes or identity are invalid."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -73,12 +54,6 @@ class LockedSource:
 
 @dataclass(frozen=True)
 class LockedFileSet:
-    """A bounded, checked selected ONNX stage with *all* file handles held.
-
-    A ticket proves only a Win32 read/share-only candidate during its context.
-    It cannot attest an immutable source, a verified model or a native bundle.
-    """
-
     compiler_input: str
     source_tree_sha256: str
     staged_model_sha256: str
@@ -102,11 +77,6 @@ def _is_windows():
 
 
 def _trusted_tasklist_path():
-    """Resolve the OS-owned tasklist executable without PATH/CWD search.
-
-    An unqualified executable passed to Windows CreateProcess can resolve
-    through a caller-controlled working directory before System32.
-    """
     if not _is_windows():
         raise SourceLockUnavailable("Win32 required for trusted process inventory")
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -133,7 +103,6 @@ def _approved_sha(value):
 
 
 def _regular_file(path):
-    """Check every lexical ancestor plus NTFS reparse/symlink leaf."""
     try:
         source_freeze._safe_ancestors(path)
         info = source_freeze._lstat(path)
@@ -206,8 +175,6 @@ def _audit(snapshot, expected_tree_sha256):
 
 
 class _Kernel32:
-    """Typed Win32 calls; not loaded or used on POSIX/WSL."""
-
     def __init__(self):
         if not _is_windows():
             raise SourceLockUnavailable(
@@ -298,7 +265,6 @@ class _Kernel32:
                 % filesystem.value)
 
     def open(self, path):
-
         handle = self.kernel.CreateFileW(
             str(path), GENERIC_READ, FILE_SHARE_READ, None, OPEN_EXISTING,
             FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_SEQUENTIAL_SCAN, None)
@@ -371,14 +337,6 @@ def _path_matches_handle(path, identity):
 @contextmanager
 def hold_staged_single_file(snapshot_directory, *, expected_tree_sha256,
                             block_bytes=MAX_READ_BLOCK):
-    """Yield a staged compiler path while retaining a native read-only handle.
-
-    On NORMAL exit, verify bytes, Win32 ChangeTime/FileId and complete
-    source-freeze marker/tree again BEFORE CloseHandle. On an exception from
-    the consumer, do not claim successful comparison; CloseHandle is always
-    attempted in finally. The caller must not use the path after this scope
-    as an immutable or verified claim.
-    """
     if not _is_windows():
         raise SourceLockUnavailable(
             'native Windows is required; no unlocked or WSL fallback')
@@ -438,12 +396,6 @@ def hold_staged_single_file(snapshot_directory, *, expected_tree_sha256,
 
 
 def _selected_snapshot(root, approved):
-    """Read and independently audit the exact staged ONNX/sidecar allowlist.
-
-    The ONNX source directory may also contain unrelated owner files and an
-    already-reserved output directory; only this PRIVATE staged tree is checked
-    for unexpected members. The selected-closing SHA comes from Preview.
-    """
     try:
         audited = onnx_closure.audit_selected_closure(
             root, expected_tree_sha256=approved)
@@ -500,7 +452,6 @@ def _selected_snapshot(root, approved):
 
 
 def _selected_path_matches_handle(path, identity, expected_size):
-    """Compare lexical staged path to the *already-open* Win32 file handle."""
     try:
         source_freeze._safe_ancestors(path)
         info = source_freeze._lstat(path)
@@ -518,19 +469,6 @@ def _selected_path_matches_handle(path, identity, expected_size):
 @contextmanager
 def hold_staged_file_set(snapshot_directory, *, expected_tree_sha256,
                          block_bytes=MAX_READ_BLOCK):
-    """Hold every selected .onnx and external_data sidecar through a native job.
-
-    All approved file paths are opened in sorted order with
-    CreateFileW(GENERIC_READ, FILE_SHARE_READ). The Win32 FileID/ChangeTime,
-    bytes, ready-marker and entire *private* stage are checked before yielding,
-    then checked again on NORMAL return before any handle is released.
-
-    If a later handle is denied, ExitStack closes all earlier handles. If the
-    consumer raises, no successful post-verification audit is claimed. This
-    context NEVER locks or modifies files in the user's original model folder.
-    Preexisting writable mappings and privileged/namespace attacks remain out
-    of scope, so the ticket explicitly says NOT_RELEASE_GRADE.
-    """
     if not _is_windows():
         raise SourceLockUnavailable(
             'selected file-set locking requires native Windows; '

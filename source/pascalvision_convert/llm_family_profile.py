@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Validate the structural profile for a native language model build."""
+
 
 import json
 import os
@@ -62,7 +62,6 @@ _REAL_SCALARS = frozenset(('rope_theta', 'query_pre_attn_scalar',
 
 
 def validate_exact_model(config, model_key):
-    """Refuse an unapproved variant with a named, measurable field mismatch."""
     if model_key not in _PROFILES:
         raise ValueError('unsupported native LLM model_key %r' % model_key)
     if not isinstance(config, dict):
@@ -84,7 +83,6 @@ def validate_exact_model(config, model_key):
 
 
 def identify_model_key(config, *, generic=False):
-    """Return supported key or None; known family with wrong size is an ERROR."""
     if not isinstance(config, dict):
         raise ValueError('HF model config must be an object')
     declared = config.get('architectures') or []
@@ -111,14 +109,13 @@ def identify_model_key(config, *, generic=False):
                 validate_config(config)
                 return KEY
             except ValueError:
-                pass                                             
+                pass
         raise ValueError('No approved native LLM structural profile matches: ' +
                          '; '.join(errors))
     return None
 
 
 def load_source_config(directory, *, generic=False):
-    """Read a bounded local config with strict JSON and identifiable profile."""
     if not isinstance(directory, (str, os.PathLike)):
         raise ValueError('HF source must name a local model directory')
     root = Path(directory)

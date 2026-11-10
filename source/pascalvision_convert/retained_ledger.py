@@ -1,16 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Selected Win32 retained-stage DPAPI receipt: read-only, NOT recovered READY.
 
-This bounded building block writes only to an EXPLICIT already-created evidence
-directory under the configured application evidence root. It does not
-integrate with the wizard or automatically discover jobs.
-
-DPAPI CurrentUser protects a receipt against accidental edits and other users,
-NOT against a malicious process with the SAME Windows logon identity. FileIDs
-are point-in-time observations; no atomic NTFS mkdir/handle or power-loss
-transaction, persistent active-space lease, ownership recovery, immutable stage,
-verification, READY, export, reuse, or deletion permission is established.
-"""
 
 from __future__ import annotations
 
@@ -81,7 +70,7 @@ _PRECOMMIT_KEYS = frozenset({
 
 
 class UnsafeLedger(ValueError):
-    """A refusal grants NO ownership, download, READY or cleanup authority."""
+    pass
 
 
 class _Blob(ctypes.Structure):
@@ -99,7 +88,6 @@ def _blob(raw):
 
 
 def _crypt(raw, *, protect):
-    """Encrypt/decrypt with profile-scoped Windows DPAPI; free kernel memory."""
     if os.name != 'nt':
         raise UnsafeLedger('selected DPAPI retained ledger requires native Win32')
     limit = MAX_PLAINTEXT if protect else MAX_PROTECTED
@@ -139,7 +127,6 @@ def _crypt(raw, *, protect):
             raise UnsafeLedger('DPAPI output malformed or exceeds bounded receipt size')
         return ctypes.string_at(outgoing.pbData, outgoing.cbData)
     finally:
-
         _ = (incoming_keepalive, entropy_keepalive)
         if outgoing.pbData:
             kernel32.LocalFree(ctypes.cast(outgoing.pbData, ctypes.c_void_p))
@@ -157,7 +144,6 @@ def _absolute_directory(path, label):
 
 
 def _approved_evidence_directory(path):
-    """Require an existing run directory below the application evidence root."""
     evidence = _absolute_directory(path, 'evidence run')
     root = _absolute_directory(OWNER_EVIDENCE_ROOT, 'application evidence root')
     try:
@@ -177,11 +163,6 @@ def _approved_evidence_directory(path):
 
 
 def create_unique_evidence_run(evidence_parent):
-    """Create one new never-reused evidence subrun, without touching output.
-
-    The explicit parent must already be below the application evidence root.
-    An interrupted empty run stays on disk for inspection.
-    """
     parent = _approved_evidence_directory(evidence_parent)
     path = os.path.join(parent, 'i03-stage-ledger-' + secrets.token_hex(16))
     try:
@@ -236,7 +217,6 @@ def _unique_json(pairs):
 
 
 def _observed_stage(path):
-    """Never follow linked/reparse descendants or acquire child cleanup rights."""
     try:
         bundle_atomic._guard_existing_ancestors(os.path.dirname(path))
         return bundle_atomic._guard_stat(path, directory=True)
@@ -245,12 +225,6 @@ def _observed_stage(path):
 
 
 def _confirmed_path_absent(path):
-    """Only ENOENT confirms absence; ACL/reparse/I/O errors mean UNKNOWN.
-
-    os.path.lexists silently maps many OSError cases to False on Windows.
-    That is unsuitable for forensic classifications after a possible crash.
-    This does not pin the parent or provide an atomic namespace observation.
-    """
     try:
         os.lstat(path)
     except FileNotFoundError:
@@ -270,12 +244,6 @@ def _intent_record_path(evidence, kind, job_nonce):
 
 def record_selected_stage_intent(*, evidence_directory, output_final,
                                  selected_stage, kind, job_nonce):
-    """Write an exclusive DPAPI INTENT before creating the selected stage.
-
-    A recorded intent authenticates only this CurrentUser DPAPI blob's bounded
-    content, not CrossPascal application identity or the future stage object.
-    Missing/failed BOUND must NEVER confer READY, recovery or cleanup rights.
-    """
     evidence = _approved_evidence_directory(evidence_directory)
     evidence_info = bundle_atomic._guard_stat(evidence, directory=True)
     final, _parent, parent_info = _final_and_parent(output_final)
@@ -321,7 +289,6 @@ def record_selected_stage_intent(*, evidence_directory, output_final,
 
 
 def _read_selected_stage_intent(evidence, final, kind, nonce):
-    """Validate an exact DPAPI INTENT without requiring stage existence."""
     receipt = _intent_record_path(evidence, kind, nonce)
     if _confirmed_path_absent(receipt):
         return None
@@ -385,7 +352,6 @@ def _read_selected_stage_intent(evidence, final, kind, nonce):
 
 def inspect_selected_stage_events(*, evidence_directory, output_final,
                                   kind, job_nonce):
-    """Read-only 0/INTENT/BOUND observations; NEVER recover READY or cleanup."""
     evidence = _approved_evidence_directory(evidence_directory)
     final, _parent, _info = _final_and_parent(output_final)
     intent = _read_selected_stage_intent(evidence, final, kind, job_nonce)
@@ -415,8 +381,6 @@ def inspect_selected_stage_events(*, evidence_directory, output_final,
                     'DPAPI_CURRENT_USER_FILEID_MATCH_NOT_RECOVERED' and
                     _confirmed_path_absent(selected) and
                     _confirmed_path_absent(_published_path(evidence, job_nonce))):
-
-
                 try:
                     final_identity = _observed_stage(final)
                     if ((final_identity.st_dev, final_identity.st_ino,
@@ -455,7 +419,6 @@ def _published_path(evidence, nonce):
 
 
 def _checked_published_prerequisites(evidence, final, stage, nonce):
-    """Verify prior CurrentUser receipts, never revive a published ZIP."""
     intent = _read_selected_stage_intent(evidence, final, 'output', nonce)
     if intent is None or intent['stage'] != stage:
         raise UnsafeLedger('PUBLISHED observation has no matching prior INTENT')
@@ -481,11 +444,6 @@ def _precommit_path(evidence, nonce):
 def record_selected_precommit_inventory_observation(
         *, evidence_directory, output_final, selected_stage, job_nonce,
         approved_inventory):
-    """Observe a complete approved private kit BEFORE a no-clobber rename.
-
-    The CurrentUser DPAPI record is not proof of program authorship, publication,
-    power-loss durability, verification, recovered READY or cleanup permission.
-    """
     evidence = _approved_evidence_directory(evidence_directory)
     evidence_info = bundle_atomic._guard_stat(evidence, directory=True)
     final, _parent, parent_info = _final_and_parent(output_final)
@@ -557,7 +515,6 @@ def record_selected_precommit_inventory_observation(
 
 def inspect_selected_precommit_inventory_observation(
         receipt, *, expected_evidence_directory, expected_output_final):
-    """Read one signed precommit kit SHA; no post-crash publication recovery."""
     evidence = _approved_evidence_directory(expected_evidence_directory)
     evidence_info = bundle_atomic._guard_stat(evidence, directory=True)
     final, _parent, parent_info = _final_and_parent(expected_output_final)
@@ -658,8 +615,6 @@ def inspect_selected_precommit_inventory_observation(
                                     inventory.total_bytes == record['bundle_total_bytes'])
                                 else 'POSSIBLE_RENAME_PRECOMMIT_BYTES_CHANGED_NOT_RECOVERED')
                     except (OSError, ValueError, TypeError):
-
-
                         pass
             except UnsafeLedger:
                 pass
@@ -676,12 +631,6 @@ def inspect_selected_precommit_inventory_observation(
 def record_selected_publication_observation(
         *, evidence_directory, output_final, original_stage,
         job_nonce, expected_private_stage_file_id, committed_tree_sha256):
-    """Append only a post-rename identity observation in the selected evidence run.
-
-    Caller must have independently completed compiler/Verify and exact bundle
-    validation. This is NOT a durable commit marker or restored READY. A write
-    refusal after namespace exposure must leave that public directory intact.
-    """
     evidence = _approved_evidence_directory(evidence_directory)
     evidence_info = bundle_atomic._guard_stat(evidence, directory=True)
     final, _parent, parent_info = _final_and_parent(output_final)
@@ -757,7 +706,6 @@ def record_selected_publication_observation(
 
 def inspect_selected_publication_observation(
         receipt, *, expected_evidence_directory, expected_output_final):
-    """Inspect post-rename DPAPI bytes; ALWAYS forbid recovered READY."""
     evidence = _approved_evidence_directory(expected_evidence_directory)
     evidence_info = bundle_atomic._guard_stat(evidence, directory=True)
     final, _parent, parent_info = _final_and_parent(expected_output_final)
@@ -840,8 +788,6 @@ def inspect_selected_publication_observation(
                     record['committed_ctime_ns']):
                 status = 'COMMITTED_NAMESPACE_IDENTITY_UNPROVEN_NOT_RECOVERED'
             else:
-
-
                 try:
                     measured = bundle_atomic.scan_bundle_tree(final)
                     status = ('COMMITTED_NAMESPACE_FILEID_MATCH_NOT_RECOVERED'
@@ -865,12 +811,6 @@ def inspect_selected_publication_observation(
 def record_selected_retained_stage(*, evidence_directory, output_final,
                                    selected_stage, kind, job_nonce,
                                    created_file_id, require_intent=False):
-    """Write one no-overwrite DPAPI CurrentUser stage observation, no READY.
-
-    `created_file_id` must be supplied by the trusted synchronous creation
-    callback. Even so, the observation is not atomic FileID custody: the stage
-    might be substituted between mkdir and the creator's first pathname stat.
-    """
     evidence = _approved_evidence_directory(evidence_directory)
     evidence_info = bundle_atomic._guard_stat(evidence, directory=True)
     final, _parent, parent_info = _final_and_parent(output_final)
@@ -942,7 +882,6 @@ def record_selected_retained_stage(*, evidence_directory, output_final,
 def inspect_selected_retained_stage(receipt, *, expected_evidence_directory,
                                     expected_output_final,
                                     _include_recorded_identity=False):
-    """Inspect a known DPAPI receipt after restart; never infer READY or cleanup."""
     evidence = _approved_evidence_directory(expected_evidence_directory)
     evidence_info = bundle_atomic._guard_stat(evidence, directory=True)
     final, _parent, parent_info = _final_and_parent(expected_output_final)
@@ -1036,15 +975,12 @@ def inspect_selected_retained_stage(receipt, *, expected_evidence_directory,
         'power_loss_durable': False,
     }
     if _include_recorded_identity is True:
-
-
         result['_recorded_stage_identity'] = (
             record['stage_dev'], record['stage_ino'], record['stage_ctime_ns'])
     return result
 
 
 def _global_lease_name(evidence_directory, job_nonce, output_final):
-    """A job-specific Win32 kernel name, not a persisted lock file."""
     evidence = _approved_evidence_directory(evidence_directory)
     final, _parent, _info = _final_and_parent(output_final)
     if type(job_nonce) is not str or not _TOKEN.fullmatch(job_nonce):
@@ -1065,13 +1001,6 @@ def _thread_owned_lease_names():
 
 @contextmanager
 def hold_active_stage_lease(evidence_directory, job_nonce, output_final):
-    """Own a fresh Global mutex for the current worker thread's lifetime.
-
-    A collision is refused rather than joined, even when created by this same
-    SID. Exiting releases kernel ownership and ALWAYS attempts CloseHandle.
-    Mutex lifetime is observational; it does not authenticate an application,
-    prevent another process from using the same SID, or authorize recovery.
-    """
     if os.name != 'nt':
         raise UnsafeLedger('Global Win32 active lease requires native Windows')
     name = _global_lease_name(evidence_directory, job_nonce, output_final)
@@ -1108,13 +1037,6 @@ def hold_active_stage_lease(evidence_directory, job_nonce, output_final):
 
 def inspect_active_stage_lease(receipt, *, expected_evidence_directory,
                                expected_output_final):
-    """Observe a named Global kernel mutex, no disk edits and no recovery.
-
-    WAIT_TIMEOUT shows only that the named mutex is held *at this instant*,
-    not who holds it. WAIT_OBJECT_0/ABANDONED temporarily takes ownership and
-    releases it immediately; inaccessible/malformed kernel state is UNKNOWN.
-    This does not claim same-SID application authentication or cleanup rights.
-    """
     result = inspect_selected_retained_stage(
         receipt, expected_evidence_directory=expected_evidence_directory,
         expected_output_final=expected_output_final)

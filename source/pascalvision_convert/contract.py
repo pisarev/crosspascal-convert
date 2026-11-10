@@ -1,39 +1,5 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Build the model contract that :mod:`manifest` emits.
-
-The manifest emitter (:func:`pascalvision_convert.manifest.emit_manifest_text`)
-turns a "model contract" into the flat ``manifest.txt`` the Pascal facade reads.
-This module builds that contract from the handful of facts a build settles once it
-finishes, with one builder per model family the zoo holds:
-:func:`build_vision_contract` for a converted VISION model - the task it serves,
-the adapter that pre/post-processes it, the artifact it produced and the single
-input tensor it takes - and :func:`build_text_contract` for a converted LLM, whose
-contract carries text and tokenizer sections in place of that tensor.
-
-WHY A BUILDER RATHER THAN A HAND-WRITTEN DICT. Some parts of a vision contract
-are the same for every model, and retyping them per call is where a typo goes
-unnoticed: a vision artifact's logical format is ``so`` and its entry point is
-``main``; its input tensor is ``float32``. Baking those in here means a caller
-supplies only what actually varies, and the fixed parts cannot drift.
-
-WHICH TASK CARRIES WHICH SECTION - read off the shipped bundles, not invented:
-
-    object_detection    a ``default`` line, ONLY when thresholds are given -
-                        yolo11 carries scoreThreshold/nmsThreshold, rtdetr none;
-    classification      a ``vision`` line, ONLY when mean/std are given - an
-                        ImageNet net carries them, a YOLO head does not;
-    pose                a ``pose`` line with the keypoint count;
-    the rest            instance / semantic / foreground segmentation and
-                        oriented detection carry no task-specific line, exactly
-                        as their bundles carry none.
-
-That the line's presence is a property of the model, not of the task, is why the
-threshold and normalisation facts are optional rather than tied to the kind.
-
-Only the standard library is used; the contract is plain dict / list / str / int
-/ float, so it maps straight onto JSON and back through the emitter's companion.
-"""
 
 
 VISION_ARTIFACT_FORMAT = "so"
@@ -82,12 +48,6 @@ _PASCAL_FACADE_ADAPTERS = {
 
 
 def validate_vision_adapter(task_kind, adapter):
-    """Refuse fictional Pascal facade promises before expensive compilation.
-
-    PaddleOCR's two independently verifiable raw stages are a distinct scope:
-    their individual passports are NOT an end-to-end native composite facade.
-    Returning the scope makes that limitation explicit to the pipeline/report.
-    """
     task = str(task_kind).strip().lower()
     requested = str(adapter).strip().lower()
     if task in _PADDLE_OCR_ROLES:
@@ -109,18 +69,10 @@ def validate_vision_adapter(task_kind, adapter):
 
 
 def requires_paddleocr_output_check(task_kind, adapter):
-    """Two separately verifiable PaddleOCR stages, not the composite facade."""
     return str(task_kind).lower() in _PADDLE_OCR_ROLES
 
 
 def validate_paddleocr_outputs(task_kind, adapter, outputs, *, input_shape=None):
-    """Fail-closed structural gate for native PaddleOCR output tensors.
-
-    Det outputs a single [N,1,H,W] map; Rec a [N,T,C] CTC tensor. Symbolic
-    ONNX dimensions are allowed only where the real independent numerical
-    verifier will later check runtime shapes. This gate alone is NOT a native
-    Det->Rec->CTC composite accuracy check.
-    """
     role = str(task_kind).lower()
     if role not in _PADDLE_OCR_ROLES:
         return None
@@ -168,45 +120,17 @@ def validate_paddleocr_outputs(task_kind, adapter, outputs, *, input_shape=None)
 
 
 def requires_adapter_output_check(task_kind, adapter):
-    """The Pascal detector whose outputs have a specific, mandatory signature.
-
-    CrossVision.ML.Facade.BuildDetector selects TRtDetrDetector for this pair.
-    TVM.RtDetr.Detect accepts either two legacy logits [B,Q,C] and fractional
-    boxes [B,Q,4], or one fused [1,N,6] output decoded as normalised
-    [center_x,center_y,width,height,confidence,class_id]. The fused decoder is
-    native-tested on the real RT-DETR-L graph; raw ONNX numeric verification
-    still has to pass independently before a verified manifest may be issued.
-    """
     return (str(task_kind).lower() == _OBJECT_DETECTION
             and str(adapter).lower() == "rtdetr")
 
 
 def _matching_output_dimension(left, right):
-    """Prove two dimensions match, without treating two unknowns as equal."""
     if isinstance(left, int) and not isinstance(left, bool):
         return left > 0 and left == right
     return isinstance(left, str) and bool(left) and left == right
 
 
 def validate_adapter_outputs(task_kind, adapter, outputs, *, input_batch=None):
-    """Check the source output signature before promising a Pascal RT-DETR bundle.
-
-    *outputs* is a sequence of dicts with name, shape and dtype, read from the
-    actual ONNX/TFLite graph. A dimension is a positive int, an ONNX symbolic
-    dimension name, or None when it cannot be determined. Unrelated adapters
-    remain unrestricted: their own Pascal decoders have different contracts.
-
-    Returns 'rtdetr_fused' or 'rtdetr_legacy' for a valid RT-DETR graph; other
-    adapters return None. The caller uses the fused mode to select the stricter
-    semantic, permutation-aware independent numerical oracle, not to claim
-    verification solely from a compatible shape.
-
-    In the legacy case, ONNX symbolic batch/query dimensions are accepted only
-    when both outputs name the SAME symbol. The fused Pascal decoder requires
-    batch=1, a positive finite query count, six scalar float values per row and
-    [cx,cy,w,h,confidence,class_id] semantics. Source graph shape cannot itself
-    establish those value semantics; the independent verifier must do that.
-    """
     if not requires_adapter_output_check(task_kind, adapter):
         return
 
@@ -241,8 +165,6 @@ def validate_adapter_outputs(task_kind, adapter, outputs, *, input_batch=None):
                                  % (expected, name, dimension))
 
     if len(outputs) == 1:
-
-
         shape = outputs[0]["shape"]
         if type(shape[0]) is not int or shape[0] != 1:
             raise ValueError("%s; fused batch must be statically 1, got %r"
@@ -299,27 +221,6 @@ def build_vision_contract(task_kind, adapter, layout, artifact_file, io_name,
                           io_shape, *, adapter_api_version=1, os_, arch, device,
                           dtype, score_threshold=None, nms_threshold=None,
                           mean=None, std=None, keypoint_count=None):
-    """Assemble the contract for one converted vision model.
-
-    Positional - what every vision model has:
-        task_kind      the discriminator, e.g. ``object_detection``
-        adapter        the pre/post-processor, e.g. ``yolo11``
-        layout         the input layout, ``NCHW`` or ``NHWC``
-        artifact_file  the module's file name, e.g. ``yolo11n.cpu.dll``
-        io_name        the input tensor's name
-        io_shape       the input tensor's shape, a sequence of ints
-
-    Keyword-only - the target the artifact was built for, then the optional
-    task-specific facts:
-        os_, arch, device, dtype   the artifact's target quad (all required)
-        score_threshold, nms_threshold   detection defaults (object_detection)
-        mean, std                        per-channel normalisation (classification)
-        keypoint_count                   number of keypoints (pose)
-
-    Returns a plain ``dict`` ready for :func:`manifest.emit_manifest_text` and
-    :func:`manifest.emit_manifest_json`. A task_kind that is not a vision task is
-    refused rather than built into a wrong contract.
-    """
     if task_kind not in VISION_TASK_KINDS:
         raise ValueError(
             "%r is not a vision task this builder knows (%s). An LLM contract "
@@ -355,12 +256,6 @@ def build_vision_contract(task_kind, adapter, layout, artifact_file, io_name,
 
 def _task_section(task_kind, score_threshold, nms_threshold, mean, std,
                   keypoint_count):
-    """The task-specific section for *task_kind*, or an empty dict.
-
-    Each branch adds its section only when the facts it needs are present, which
-    is what lets one object_detection carry a default line (yolo11) while another
-    carries none (rtdetr) from the same code path.
-    """
     if task_kind == _OBJECT_DETECTION:
         if score_threshold is not None:
             defaults = {"score_threshold": score_threshold}
@@ -390,40 +285,6 @@ TEXT_ADAPTERS = frozenset(("qwen2", "gemma2"))
 def build_text_contract(adapter, artifact_file, context_window, bos, eos,
                         tokenizer_style, *, adapter_api_version=1, os_, arch,
                         device, dtype, device_arch=None):
-    """Assemble the contract for one converted LLM (task ``text_generation``).
-
-    Positional - what every LLM the zoo builds carries:
-        adapter          the runtime adapter, ``qwen2`` or ``gemma2``
-        artifact_file    the module's file name, e.g. ``qwen2-cpu.dll``
-        context_window   the context length the module was built for
-        bos, eos         the begin/end-of-sequence token ids
-        tokenizer_style  the tokenizer family, ``byte_bpe`` or ``sentencepiece``
-
-    Keyword-only - the target the artifact was built for:
-        os_, arch, device, dtype   the artifact's target quad (all required)
-        device_arch                the GPU architecture the module was compiled
-                                   for, ``sm_75``; optional, and written only for
-                                   a build that has one
-
-    WHY device_arch IS NOT arch. ``arch`` is the PROCESSOR the bundle runs on -
-    ``x86_64`` - and it stays that whatever the module was compiled for. A CUDA
-    module additionally carries the architecture of the card it was compiled for,
-    and the two are different facts about different hardware: a bundle built for
-    sm_89 on an x86_64 machine has both. Without the second one a cross-built
-    bundle cannot be told from any other: it loads, then fails on a card of the
-    wrong generation, with nothing in the bundle to point at the cause.
-
-    An LLM contract differs from a vision one in three ways, each read off the
-    shipped bundles rather than invented: the artifact's logical format is ``dll``
-    and it names no entry point; there is no ``io`` section, because an LLM's input
-    is a token stream rather than a tensor of a fixed shape; and it carries
-    ``text`` and ``tokenizer`` sections in place of any vision line.
-
-    Returns a plain ``dict`` ready for :func:`manifest.emit_manifest_text` and
-    :func:`manifest.emit_manifest_json`. An adapter or a tokenizer style outside
-    the known pairs is refused rather than built into a contract the facade would
-    reject.
-    """
     if adapter not in TEXT_ADAPTERS:
         raise ValueError(
             "%r is not an LLM adapter this builder knows (%s). The facade's "
@@ -466,12 +327,6 @@ def build_text_contract(adapter, artifact_file, context_window, bos, eos,
 
 
 def parse_float_csv(text):
-    """Parse "0.485,0.456,0.406" into [0.485, 0.456, 0.406], or None when empty.
-
-    Empty pieces are dropped, so a stray comma adds no spurious value; a blank
-    string (or None) yields None, which is what lets an omitted mean/std leave
-    the vision line out of the manifest altogether.
-    """
     if not text:
         return None
     return [float(piece) for piece in text.split(',') if piece.strip()]
@@ -480,21 +335,6 @@ def parse_float_csv(text):
 def build_contract_input(task, adapter, *, adapter_api_version=1, layout="NCHW",
                          score_threshold=None, nms_threshold=None, mean=None,
                          std=None, keypoint_count=None, labels=None):
-    """Assemble the Model contract dict handed to :func:`pipeline.run`, or None.
-
-    task, adapter    the task the model serves and its pre/post-processor. A task
-                     turns the whole thing on; an empty task returns None, and the
-                     run then behaves exactly as it did before a contract existed -
-                     no manifest is written.
-    the rest         the optional facts a manifest may carry, already parsed into
-                     their own types: thresholds as floats, mean/std as lists (see
-                     :func:`parse_float_csv`), keypoint_count as an int.
-
-    Returns a plain dict carrying the keys :func:`pipeline.run` reads, or None when
-    no task is named. A task named without an adapter is refused HERE rather than
-    carried into the build: the manifest needs both, and the two faces of the core
-    must refuse the same input in the same way.
-    """
     task = (task or "").strip()
     if not task:
         return None

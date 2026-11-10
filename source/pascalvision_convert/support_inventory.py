@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Read-only inventory of the documented CrossPascal Converter Early Access scope."""
+
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ SCHEMA = "crosspascal.pascalvision.support-inventory.v2"
 
 
 def build_inventory() -> dict:
-    """Describe the documented routes without inspecting the local machine."""
     cpu_profiles = (
         ("squeezenet", "SqueezeNet 1.1", "image_classification"),
         ("resnet50", "ResNet50", "image_classification"),

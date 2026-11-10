@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Local Preview/Build gate for the experimental native Gemma family route."""
+
 
 from contextlib import ExitStack, contextmanager
 import ctypes
@@ -151,7 +151,6 @@ def preview(data):
         _preview = None
         source, raw, context, cpu, total, files = _inspect(data)
         with _held_pins(source, files) as pins:
-                                                                               
             fresh = _inspect(data)
             if fresh != (source, raw, context, cpu, total, files):
                 raise ValueError("Checkpoint changed while taking the Preview")

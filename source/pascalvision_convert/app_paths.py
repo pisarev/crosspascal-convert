@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Writable per-user paths, separate from installed source and model inputs."""
+
 
 import os
 from pathlib import Path
@@ -25,7 +25,6 @@ def data_path(name):
 
 
 def consumer_kit():
-    """Locate the flat consumer kit supplied beside the converter repository."""
     selected = os.environ.get('CROSSPASCAL_CONSUMER_KIT')
     if selected:
         path = Path(selected).expanduser()

@@ -1,15 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Prepare one *real PNG* as a bounded, advisory original-ORT OCR input.
 
-This executes image decoding, OpenCV interpolation and the explicit OCR DRAFT
-preprocessing formula. It does NOT run ONNX Runtime, Pascal, Det->crop->Rec,
-CTC or a human oracle. A source-image SHA and a generated float32 tensor are
-file-integrity observations, NOT proof of producer independence or native UAT.
-
-No existing input or destination is overwritten, moved or cleaned up. Failed
-attempts retain their newly created private evidence directory for inspection.
-"""
 
 from __future__ import annotations
 
@@ -41,7 +32,7 @@ _REPORT = 'input-source.json'
 
 
 class PreprocessRefused(ValueError):
-    """The original RGB8 PNG cannot safely produce this draft tensor."""
+    pass
 
 
 def _require(condition, reason):
@@ -50,7 +41,6 @@ def _require(condition, reason):
 
 
 def _checked_source(png):
-    """Read one bounded PNG and validate its *actual* bytes, not its suffix."""
     path = raw_producer._absolute(png, 'source RGB8 PNG')
     _require(path.suffix.lower() == '.png', 'source image must be an 8-bit truecolor (RGB) PNG')
     info = raw_producer._regular(path, 'source RGB8 PNG',
@@ -84,11 +74,6 @@ def _checked_source(png):
 
 
 def _preprocess_bgr(png_bytes, shape, stage):
-    """Perform OpenCV bilinear resizing with exact DRAFT math and bounded RAM.
-
-    The same Python implementation is NOT an independent witness of Pascal's
-    internal floating-point rounding or original Paddle vendor preprocessing.
-    """
     try:
         import cv2
         import numpy as np
@@ -104,8 +89,6 @@ def _preprocess_bgr(png_bytes, shape, stage):
     _require(height * width * 3 <= raw_producer.MAX_INPUT_ELEMENTS,
              'preprocessing destination tensor exceeds float32 byte quota')
     if stage == 'det':
-
-
         bgr = cv2.resize(decoded, (width, height),
                          interpolation=cv2.INTER_LINEAR)
         mean, std = (0.406, 0.456, 0.485), (0.225, 0.224, 0.229)
@@ -116,7 +99,6 @@ def _preprocess_bgr(png_bytes, shape, stage):
                  - mean[channel]) / std[channel]).astype(np.float32)
         resized_width = width
     else:
-
         ratio = decoded.shape[1] / max(1, decoded.shape[0])
         resized_width = min(width, int(math.ceil(height * ratio)))
         resized_width = max(1, resized_width - resized_width % 8)
@@ -142,12 +124,6 @@ def _preprocess_bgr(png_bytes, shape, stage):
 
 
 def prepare_png_input(bundle, stage, source_png, destination) -> dict:
-    """Create-only one PNG-derived ORT input; no model or GT is executed.
-
-    Output directory and all selected files are exclusively created; the
-    Win32 branch holds every destination NTFS ancestor against reparse swaps.
-    An advisory receipt is issued only after bounded source and output SHAs.
-    """
     _require(type(stage) is str and stage in ('det', 'rec'),
              'stage must be det or rec')
     try:
@@ -166,8 +142,6 @@ def prepare_png_input(bundle, stage, source_png, destination) -> dict:
                  target not in bundle_root.parents and target != source,
                  'PNG destination overlaps selected source/bundle tree')
         with raw_producer._held_files([(source, source_sha, len(png_bytes))]):
-
-
             _require(raw_producer._sha_file(
                 source, 'held source PNG', limit=MAX_IMAGE_BYTES) ==
                 (source_sha, len(png_bytes)), 'source PNG changed before decoding')
@@ -241,7 +215,6 @@ def prepare_png_input(bundle, stage, source_png, destination) -> dict:
 
 
 def main(argv=None) -> int:
-    """Standalone public opt-in PNG preprocessing, never model acceptance."""
     parser = argparse.ArgumentParser(
         prog='pascalvision-convert ocr-png-input',
         description=('Prepare an 8-bit truecolor (RGB) PNG as one OCR Det/Rec '

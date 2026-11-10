@@ -1,16 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Run selected PaddleOCR Server detection and recognition with a Pascal CPU application.
 
-This is separate from the VERIFIED_LOCAL-only OCR composite assembler. It
-binds two individually selected compiler outputs, their approved original
-Paddle closure, the Rec dictionary, real runtime files, a selected native
-Pascal executable, and a bounded RGB8 PNG. Successful execution is advisory:
-no independent original Paddle/ORT or human ground truth is established.
-
-The run stage is exclusively created and always retained. Selected owner
-files and private runnable copies are held with Win32 read/share-only handles
-throughout the real subprocess. There is no unlocked or mock native fallback.
-"""
 
 from __future__ import annotations
 
@@ -66,7 +55,7 @@ _CTC_ENV = {
 
 
 class SelectedNativePaddleError(ValueError):
-    """An approved source or actual native consumer condition is unsatisfied."""
+    pass
 
 
 def _deny(message):
@@ -162,7 +151,6 @@ def _compiled_bundle(directory, role, api):
     recipe = _json(root / 'recipe.json')
     provenance = _json(root / 'import-provenance.json')
     try:
-
         validated = recipe_file.read_recipe(root / 'recipe.json')
     except (ValueError, TypeError, OSError, KeyError) as exc:
         raise SelectedNativePaddleError(
@@ -295,7 +283,6 @@ def _png(path):
 
 
 def scan_selected_native(det_bundle, rec_bundle, runner, crosscv, image):
-    """Read-only exact source selection; NOT a native execution result."""
     if not source_lock._is_windows():
         _deny('Win32 local NTFS required, no WSL/unlocked fallback')
     api = source_lock._Kernel32()
@@ -345,7 +332,6 @@ def scan_selected_native(det_bundle, rec_bundle, runner, crosscv, image):
 
 
 def _native_resource_gate():
-    """Actual free physical memory and external-process admission, not RAM guess."""
     if not source_lock._is_windows():
         _deny('native Pascal requires Win32, no WSL/substitute CPU process')
 
@@ -396,7 +382,6 @@ def _native_resource_gate():
 
 
 def _copy_member(source, destination, *, size, digest):
-    """Exclusive retained child file, without ever modifying the owner source."""
     got = hashlib.sha256()
     count = 0
     with Path(source).open('rb') as owner, Path(destination).open('xb') as target:
@@ -452,13 +437,6 @@ def _parse_ctc_result(output, *, width, height):
 
 
 def _run_native_bounded(command, *, stage, environment, result_path, native_log):
-    """Run one real child with finite wall-time and actively checked disk output.
-
-    The Python parent never buffers native stdout/stderr in RAM. A child that
-    floods its log or result is stopped; a failed stage is deliberately retained
-    for owner inspection, and no positive receipt is published on this path.
-    The native binary is caller-selected; this is not first-party code signing.
-    """
     deadline_seconds = 900
     with native_log.open('xb') as log:
         child = subprocess.Popen(
@@ -480,8 +458,6 @@ def _run_native_bounded(command, *, stage, environment, result_path, native_log)
                     _deny('selected native Pascal process exceeded 900-second cap')
                 time.sleep(0.10)
         finally:
-
-
             if child.poll() is None:
                 try:
                     child.kill()
@@ -494,7 +470,6 @@ def _run_native_bounded(command, *, stage, environment, result_path, native_log)
 
 def run_selected_native(det_bundle, rec_bundle, runner, crosscv, image,
                         *, approved_tree_sha256, into):
-    """Run the REAL selected Pascal binary while native handles protect inputs."""
     if type(approved_tree_sha256) is not str or not _HEX.fullmatch(
             approved_tree_sha256):
         _deny('explicit prior lowercase Preview tree SHA-256 required')

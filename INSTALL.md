@@ -114,7 +114,7 @@ The source folder contains the original Hugging Face files. The output folder wi
 
 | Control or setting | Value |
 | --- | --- |
-| Language model profile | `Qwen 0.5B · CUDA · FP32 · 64 tokens` or `Qwen 1.5B · CUDA · FP32 · 64 tokens`, matching the recognized source |
+| Language model profile | `Qwen 0.5B | CUDA | FP32 | 64 tokens` or `Qwen 1.5B | CUDA | FP32 | 64 tokens`, matching the recognized source |
 | Device button | **GPU** |
 | CUDA architecture | Detected architecture for this computer, or the manually entered destination architecture |
 | Target OS | **Windows** |

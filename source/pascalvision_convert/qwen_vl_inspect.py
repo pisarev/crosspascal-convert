@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Inspect every Qwen2.5-VL tensor against the source architecture without loading weights."""
+
 import argparse
 import json
 import math

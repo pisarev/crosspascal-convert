@@ -1,14 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Bounded Windows NTFS complete-directory publication primitive.
 
-This primitive is used by converter routes that require a complete bundle.
-It proves
-a same-parent, no-overwrite namespace rename after an exact SHA inventory.
-It does NOT assert a durable power-loss transaction, a lock against
-previously-open writers, a compiler verdict, or release-grade immutable bytes.
-The caller must independently establish the REQUIRED product-specific members
-and must publish READY only after a separately validated commit receipt.
-"""
 
 from __future__ import annotations
 
@@ -39,7 +30,7 @@ _RESERVED = {'CON', 'PRN', 'AUX', 'NUL'} | {
 
 
 class UnsafeAtomicBundle(ValueError):
-    """No READY may be published following this refusal."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -68,7 +59,6 @@ class CommitReceipt:
 
 
 def validate_member_name(relative: str) -> str:
-    """A single canonical POSIX-style relative name, without Windows aliases."""
     if not isinstance(relative, str) or not relative or '\\' in relative:
         raise UnsafeAtomicBundle('member path is not canonical relative POSIX')
     if relative.startswith('/') or ':' in relative or '\x00' in relative:
@@ -147,7 +137,6 @@ def _require_ntfs(parent):
 
 
 def _stamp(info):
-
     return (info.st_dev, info.st_ino, info.st_size,
             info.st_mtime_ns, info.st_nlink)
 
@@ -180,7 +169,6 @@ def _file_sha(path, first):
 
 
 def scan_bundle_tree(root, *, max_members=MAX_MEMBERS, max_bytes=MAX_BYTES):
-    """Measure exact files + directories; reject unenumerated/unsafe entries."""
     root = _local_absolute(root)
     if not isinstance(max_members, int) or not 1 <= max_members <= MAX_MEMBERS:
         raise UnsafeAtomicBundle('unsupported member quota')
@@ -197,7 +185,6 @@ def scan_bundle_tree(root, *, max_members=MAX_MEMBERS, max_bytes=MAX_BYTES):
         _guard_stat(directory, directory=True)
         try:
             with os.scandir(directory) as stream:
-
                 listing = []
                 for item in stream:
                     if len(members) + len(listing) + 1 > max_members:
@@ -263,14 +250,6 @@ def _same_volume_private_stage(stage, destination):
 def commit_staged_bundle(stage, destination, approved: Inventory, *,
                          required_files=('recipe.json', 'report.txt'),
                          max_members=MAX_MEMBERS, max_bytes=MAX_BYTES):
-    """Atomically expose a complete NTFS directory name or return no READY.
-
-    A successful result covers namespace publication, not crash durability or
-    malicious concurrent writers. No product caller may infer VERIFIED from it.
-    If the post-rename audit fails, READY is refused, but the now-public path
-    must be left untouched: it may already contain bytes written by another
-    actor. The caller must not treat that path as an owned private stage.
-    """
     stage, destination = _same_volume_private_stage(stage, destination)
     if not isinstance(approved, Inventory) or approved.schema != SCHEMA or approved.version != SCHEMA_VERSION:
         raise UnsafeAtomicBundle('unrecognised preapproved bundle inventory')
@@ -295,7 +274,6 @@ def commit_staged_bundle(stage, destination, approved: Inventory, *,
                                     max_bytes=max_bytes) != approved):
             raise UnsafeAtomicBundle('committed bytes or directory identity changed')
     except Exception as exc:
-
         raise UnsafeAtomicBundle(
             'post-commit audit failed; no READY; exposed destination preserved '
             '(no rollback of potentially user-modified contents)') from exc

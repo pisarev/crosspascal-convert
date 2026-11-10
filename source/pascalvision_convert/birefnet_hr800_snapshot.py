@@ -1,14 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Snapshot the ONNX model, configuration, and processor for BiRefNet HR800 SwinL.
-
-The snapshot verifies the three selected files by hash. The configuration
-does not establish the origin of the trained weights. Models with ONNX
-external data require a separate method that includes and verifies sidecars.
-
-On Windows, the context manager holds private copies on local NTFS while the
-caller uses them. It leaves the original files and staged copies in place.
-"""
 
 
 from __future__ import annotations
@@ -40,7 +31,7 @@ _SHA = re.compile(r"[a-f0-9]{64}\Z")
 
 
 class BiRefNetSnapshotError(ValueError):
-    """Cannot prove exact, supported selected HR800 source custody."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -84,7 +75,6 @@ def _members(model, config, processor):
 
 
 def _digest_regular(path, limit):
-    """Stream exactly one regular, non-reparse, single-hardlink local source."""
     source_freeze._safe_ancestors(path)
     before = source_freeze._lstat(path)
     if (not stat.S_ISREG(before.st_mode) or
@@ -147,11 +137,6 @@ def _json_record(path, expected_sha, cap):
 def scan_selected_hr800(
         model, config, processor, *, expected_model_sha256=None,
         expected_config_sha256=None, expected_processor_sha256=None):
-    """Read the three selected files without modifying them.
-
-    The caller's hashes identify the files. Checkpoint provenance requires
-    separate evidence.
-    """
     paths = _members(model, config, processor)
     explicit = (expected_model_sha256, expected_config_sha256,
                 expected_processor_sha256)
@@ -270,15 +255,6 @@ def _copy_member(src, dest, entry):
 
 
 def _require_held_hr800_pascal_graph(path):
-    """Validate the input and output tensors used by the Pascal runtime.
-
-    The model accepts a float32 RGB tensor of shape 1 × 3 × 800 × 800 named
-    `x` or `input`. It returns a single mask of shape 1 × 1 × 800 × 800.
-    This check validates the interface. Weight provenance and prediction
-    quality require separate verification.
-    """
-
-
     from . import detect
     detect._admit_onnx_preparse(str(path))
     try:
@@ -323,12 +299,6 @@ def _require_held_hr800_pascal_graph(path):
 @contextmanager
 def hold_selected_hr800(model, config, processor, *, stage_parent,
                         approved_tree_sha256):
-    """Hold the staged HR800 files open for the caller.
-
-    This operation requires Windows and a local NTFS volume. It checks the
-    original and staged files before and after use and retains the staged
-    directory even if the caller raises an exception.
-    """
     approved = _sha(approved_tree_sha256, "approved HR800 tree")
     if not source_lock._is_windows():
         raise BiRefNetSnapshotError("native Win32 local NTFS required; no unheld fallback")
@@ -362,8 +332,6 @@ def hold_selected_hr800(model, config, processor, *, stage_parent,
         raise BiRefNetSnapshotError(
             "HR800 ONNX external_data requires independently selected held sidecars")
     with ExitStack() as handles:
-
-
         parent_info = source_freeze._lstat(parent)
         parent_handle = api.kernel.CreateFileW(
             str(parent), source_lock.GENERIC_READ, source_lock.FILE_SHARE_READ,

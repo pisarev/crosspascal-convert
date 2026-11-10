@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Compile configuration-derived Qwen2.5-VL graphs for an explicit CPU target."""
+
 import argparse
 import hashlib
 import json

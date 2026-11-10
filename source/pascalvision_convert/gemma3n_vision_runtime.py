@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Image embeddings from a separately converted Gemma 3n vision bundle."""
+
 import gc
 import hashlib
 import json

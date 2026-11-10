@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Schedule FP32 row-major dot products without gathering across rows."""
+
 
 from tvm import s_tir, tirx
 from tvm.s_tir import dlight

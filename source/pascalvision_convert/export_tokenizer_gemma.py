@@ -50,20 +50,20 @@ def main():
 
     raw = [meaning_bytes(w) for w in words]
 
-                                                    
+
     chars = []
     for word, number in vocab.items():
         if len(word) == 1:
             chars.append((ord(word), number))
     chars.sort()
 
-                                          
+
     byte_id = [-1] * 256
     for word, number in vocab.items():
         if len(word) == 6 and word.startswith('<0x') and word.endswith('>'):
             byte_id[int(word[3:5], 16)] = number
 
-                                                          
+
     triples = []
     unknown = 0
     for item in merges:
@@ -104,7 +104,7 @@ def main():
         for i in byte_id:
             f.write(struct.pack('<i', i))
 
-                                                                         
+
     specials = spec.get('added_tokens', [])
     with open(os.path.join(out_dir, 'tokenizer-specials.txt'), 'w',
               encoding='utf-8', newline='\n') as f:
@@ -113,7 +113,7 @@ def main():
             one = item['content'].replace('\n', '\\n')
             f.write('%d %d %s\n' % (item['id'], 1 if item.get('special') else 0, one))
 
-                                                        
+
     bos = -1
     pp = spec.get('post_processor') or {}
     for name, info in (pp.get('special_tokens') or {}).items():

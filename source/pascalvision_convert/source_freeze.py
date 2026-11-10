@@ -1,14 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Copy local model sources into a new directory for conversion.
 
-The converter can pin a content inventory at preview time and verify the copy
-again before compilation. A ready marker records a successful byte check.
-The marker does not lock the files or include dependencies outside the copy.
-
-The helper never replaces an existing destination. Interrupted copies may
-leave a new partial directory without a ready marker.
-"""
 
 from __future__ import annotations
 
@@ -38,15 +30,15 @@ _HEX = re.compile(r'[0-9a-fA-F]{64}\Z')
 
 
 class SourceFreezeError(ValueError):
-    """This source or destination cannot be captured under the given contract."""
+    pass
 
 
 class SourceChanged(SourceFreezeError):
-    """Original contents or directory members changed during snapshot creation."""
+    pass
 
 
 class SnapshotNotReady(SourceFreezeError):
-    """This snapshot is absent, incomplete or was modified since capture."""
+    pass
 
 
 def _fail(message):
@@ -85,7 +77,6 @@ def _sibling_names(entries):
 
 
 def _lstat(path):
-    """Refuse symlinks and NTFS junction/reparse points, never follow them."""
     info = path.lstat()
     attrs = getattr(info, 'st_file_attributes', 0)
     junction = getattr(os.path, 'isjunction', None)
@@ -115,14 +106,11 @@ def _safe_ancestors(path, *, leaf_may_be_missing=False):
 
 
 def _identity(info):
-
     return (info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns,
             info.st_dev, info.st_ino)
 
 
 def _descriptor_identity(info):
-
-
     return (info.st_mode, info.st_size, info.st_mtime_ns,
             info.st_dev, info.st_ino)
 
@@ -141,7 +129,6 @@ def _limits(max_entries, max_bytes, block_bytes, min_disk_headroom):
 
 
 def _hash_file(path, expected, block_bytes):
-    """Hash exact bytes on a file descriptor and verify its path identity."""
     sha = hashlib.sha256()
     count = 0
     with path.open('rb') as stream:
@@ -162,7 +149,6 @@ def _hash_file(path, expected, block_bytes):
 
 
 def _scan_source(source, *, max_entries, max_bytes, block_bytes):
-    """Complete regular-file tree inventory, with deterministic relative names."""
     _safe_ancestors(source)
     root = _lstat(source)
     if stat.S_ISREG(root.st_mode):
@@ -213,8 +199,6 @@ def _scan_source(source, *, max_entries, max_bytes, block_bytes):
     inventory_bytes = 0
     inventory = []
     for path, relative, kind in sorted(paths, key=lambda p: p[1]):
-
-
         path_bytes = len(relative.encode('utf-8', 'surrogatepass'))
         if len(relative.split('/')) > 64 or path_bytes > MAX_RELATIVE_PATH_BYTES:
             _fail('relative source model path exceeds safe depth/length bound')
@@ -254,11 +238,6 @@ def _tree_sha(inventory):
 def fingerprint_content(source, *, max_entries=DEFAULT_MAX_ENTRIES,
                         max_bytes=DEFAULT_MAX_BYTES,
                         block_bytes=DEFAULT_BLOCK_BYTES):
-    """Compute the source content pin used by Preview.
-
-    This does not replace master._source_fingerprint; that value also hashes
-    provenance/NTFS metadata and is a separate, independently checked gate.
-    """
     _limits(max_entries, max_bytes, block_bytes, 0)
     origin = _absolute_path(source, 'source')
     listing = _scan_source(origin, max_entries=max_entries, max_bytes=max_bytes,
@@ -274,7 +253,6 @@ def _free_bytes(path):
 
 
 def _copy_stream(source, target, expected_sha, expected_bytes, block_bytes):
-    """Exclusive copied file, checked against the first full source SHA."""
     _safe_ancestors(source)
     before = _lstat(source)
     copied = hashlib.sha256()
@@ -306,7 +284,6 @@ def _copy_stream(source, target, expected_sha, expected_bytes, block_bytes):
 
 
 def _publish_marker(destination, content):
-    """Only AFTER verification, exclusive atomic marker link; no old overwrite."""
     path = destination / READY_MARKER
     payload = (json.dumps(content, sort_keys=True, indent=2,
                           ensure_ascii=False, allow_nan=False) + '\n').encode('utf-8')
@@ -332,7 +309,6 @@ def _compare_sources(before, after, *, prefix):
 
 
 def _assert_owned_stage(target, identity):
-    """Verify the exclusive new staging root has not become a junction/link."""
     _safe_ancestors(target)
     now = _lstat(target)
     if not stat.S_ISDIR(now.st_mode) or (
@@ -347,13 +323,6 @@ def freeze_source(source, destination, *, expected_tree_sha256=None,
                   block_bytes=DEFAULT_BLOCK_BYTES,
                   min_disk_headroom=DEFAULT_MIN_DISK_HEADROOM,
                   on_created=None):
-    """Create a new no-clobber directory; return its copied compiler input.
-
-    expected_tree_sha256 and expected_source_kind are OPTIONAL preview-time
-    content-tree/kind pins, never substitutes for a Preview token or master's
-    metadata-sensitive source fingerprint. Keep both facts bound to the
-    conversion request.
-    """
     _limits(max_entries, max_bytes, block_bytes, min_disk_headroom)
     origin = _absolute_path(source, 'source')
     target = _absolute_path(destination, 'destination')
@@ -458,11 +427,6 @@ def freeze_source(source, destination, *, expected_tree_sha256=None,
 
 
 def audit_frozen_source(destination, *, block_bytes=DEFAULT_BLOCK_BYTES):
-    """Read-only per-byte revalidation just BEFORE an isolated compiler call.
-
-    It cannot lock the stage through the compiler: a further writer can still
-    mutate staged bytes after this audit, which remains a named TOCTOU gap.
-    """
     if type(block_bytes) is not int or not 0 < block_bytes <= DEFAULT_BLOCK_BYTES:
         _fail('block_bytes must be within 1..1MiB')
     target = _absolute_path(destination, 'snapshot')
@@ -515,7 +479,6 @@ def audit_frozen_source(destination, *, block_bytes=DEFAULT_BLOCK_BYTES):
 
 
 def _scan_snapshot_without_marker(target, block_bytes):
-
     root_names = [p.name for p in target.iterdir()]
     if READY_MARKER not in root_names:
         raise SnapshotNotReady('ready marker vanished')

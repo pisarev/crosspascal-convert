@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Compile the vision add-on for the explicitly selected text backend."""
+
 import hashlib
 import json
 from pathlib import Path

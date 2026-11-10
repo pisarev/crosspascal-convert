@@ -1,16 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""REAL selected PP-OCRv5 Server Rec source-profile input -> actual ORT CPU.
 
-The pinned selected Rec PIR/params/YAML/18383-token dictionary tree is NOT
-the extra model.onnx itself. Require separate caller SHA approval of that
-local original ONNX export and rehash before/after running the existing held,
-bounded genuine ONNX Runtime child. No fake/model-mock success route exists.
-The input is a retained SHA/NTFS-checked PNG->BGR float32 RecResizeImg receipt.
-
-The full parent-document Det ROI, original Paddle/ONNX export equivalence,
-native Pascal, CTC, human GT and release remain NOT_ATTESTED or NOT_RUN.
-Positive real ORT produces advisory exit2, never verified/READY.
-"""
 
 from __future__ import annotations
 
@@ -40,7 +29,7 @@ _HEX = re.compile(r'[0-9a-f]{64}\Z')
 
 
 class SelectedRecOracleRefused(ValueError):
-    """Exact original PP-OCRv5 Rec ORT source/PNG/byte binding refused."""
+    pass
 
 
 def _require(condition, message):
@@ -58,7 +47,6 @@ def _read_pinned(path, label, *, limit, expected_size=None):
 
 
 def _snapshot(stage):
-    """Admit actual two-file selected Rec profile and original PNG bytes."""
     raw._safe_path(stage)
     original = source_freeze._lstat(stage)
     _require(stat.S_ISDIR(original.st_mode), 'Rec input stage is not a directory')
@@ -158,7 +146,6 @@ def _snapshot(stage):
 
 def run(source_dir, dictionary, approved_tree_sha256,
         approved_extra_onnx_sha256, input_stage, into):
-    """Actual CPU ORT execution on selected Rec source-profile bytes, advisory."""
     _require(type(approved_tree_sha256) is str
              and approved_tree_sha256 == _PINNED_TREE_SHA
              and type(approved_extra_onnx_sha256) is str

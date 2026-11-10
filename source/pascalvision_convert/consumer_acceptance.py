@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Aggregate declared LLM checks without turning missing evidence into success."""
+
 
 from .llm_build_profile import QWEN_CUDA_PROFILE, QWEN_15_CUDA_PROFILE, QWEN_GENERIC_CUDA_PROFILE
 

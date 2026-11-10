@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Optional installation diagnostics for local sample models."""
+
 
 import os
 
@@ -42,7 +42,6 @@ NOTEWORTHY_RATIO = 100
 
 
 def check_installation(directory=None, work_dir=None, on_step=None):
-    """Build the samples and compare. Returns a report, prints nothing."""
     directory = samples_directory(directory)
     work_dir = work_dir or os.path.join(directory, 'installation-check')
     report = Report('Installation check on known-good models')

@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""CUDA execution with persistent compact weights and host embedding rows."""
+
 import atexit
 import ctypes
 import gc
@@ -49,7 +49,7 @@ class _CudaSession(Session):
         self.device=tvm.cuda(device_id)
         if not self.device.exist:
             raise RuntimeError('The selected CUDA device is unavailable; no CPU fallback is enabled')
-                                                                                    
+
         context_probe=tvm.runtime.tensor(np.zeros(1,dtype='float32'),self.device)
         self.device.sync()
         del context_probe
@@ -145,8 +145,6 @@ class _CudaSession(Session):
                 raise ValueError('Token is outside the source embedding tables')
             rows=[np.array(table[token],copy=True) for table in self.host_tables]
         else:
-                                                                            
-                                                                         
             rows=[np.asarray(embedding,dtype='float32')/math.sqrt(self.host_tables[0].shape[1]),
                   np.array(self.host_tables[1][token if 0<=token<len(self.host_tables[1]) else 0],copy=True)]
         embeddings=[tvm.runtime.tensor(row.reshape(1,1,-1),self.device) for row in rows]
@@ -216,12 +214,6 @@ class _CudaSession(Session):
 
 
 class GpuSession:
-    """One persistent CUDA worker with deterministic thread-local cleanup.
-
-    Calls run on one thread so the CUDA context and session-owned workspace
-    have a consistent lifetime. Closing explicitly releases device storage,
-    restores the bundle's context slots and joins the worker. Errors propagate.
-    """
     def __init__(self,folder,device_id=0):
         self._queue=queue.Queue()
         self._state=None
@@ -246,7 +238,6 @@ class GpuSession:
             except BaseException as exc:
                 future.set_exception(exc)
             finally:
-                                                                                  
                 del item,future,func,args,kwargs
 
     def _call(self,func,*args,**kwargs):

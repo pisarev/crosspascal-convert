@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Pinned public model sources used by the wizard's named profiles."""
+
 
 import hashlib
 import json
@@ -27,7 +27,6 @@ def catalog_model(model_key):
 
 
 def match_source(scan, model_key):
-    """Compare an already measured HF closure; do not rehash large weights."""
     expected = catalog_model(model_key)
     wanted = {
         item["path"]: (item["bytes"], item["sha256"])
@@ -71,7 +70,6 @@ def _hash(path, size):
 
 
 def download(model_key, *, progress=None, opener=urlopen):
-    """Download one immutable revision with bounded I/O and no file replacement."""
     selected = catalog_model(model_key)
     files = selected["files"] + [selected["license_file"]]
     root = app_paths.data_path("models")

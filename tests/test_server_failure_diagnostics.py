@@ -1,4 +1,3 @@
-"""Synthetic checks for private build diagnostics; no HTTP/model/compiler imports."""
 import ast
 import builtins
 import copy

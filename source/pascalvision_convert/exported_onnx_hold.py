@@ -1,22 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Experimental staging of exported Paddle ONNX with Win32-held handles.
 
-This is separate from the 64 MiB RAW/ONNX-external-data freeze contract.
-The source Paddle exporter may emit an >84 MiB server-recognition ONNX.
-The caller MUST use the ticket.compiler_input only within this context and
-MUST run the compiler/Verify before leaving it. External data is refused,
-not silently loaded from files whose bytes have not been held.
-
-The source output ONNX is never rewritten; a create-only sibling private copy
-remains after success or failure, including foreign files added by a child.
-No READY, runtime identity, native numerical UAT or release-grade claim.
-
-The 512 MiB protobuf cap is a disk-content limit, not an assertion that
-onnx.load_model streams in O(1 MiB) memory. Before parsing a model larger
-than 64 MiB, a separate native Windows free-physical-RAM gate (>=5 GiB)
-must pass; the caller's compiler/native runtime has an independent gate.
-"""
 
 from __future__ import annotations
 
@@ -42,15 +26,15 @@ _PREFIX = '.crosspascal-exported-onnx-held-'
 
 
 class ExportedOnnxHoldError(ValueError):
-    """Cannot prove the selected exported ONNX compiler-input custody."""
+    pass
 
 
 class ExportedOnnxHoldUnavailable(ExportedOnnxHoldError):
-    """Win32, local NTFS, sufficient disk or compatible handles unavailable."""
+    pass
 
 
 class ExportedOnnxHoldChanged(ExportedOnnxHoldError):
-    """Approved exported bytes or identities changed before/during compiler."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -101,7 +85,6 @@ def _single_hardlink(api, handle):
 
 
 def _format_check(path, *, expected_bytes):
-    """Recheck RAM before each full protobuf parse; prohibit sidecar reads."""
     _admit_protobuf_ram(expected_bytes)
     try:
         import onnx
@@ -135,8 +118,6 @@ def _format_check(path, *, expected_bytes):
                     'plugins and is not supported by the exported holder')
         for field, value in message.ListFields():
             if field.type == field.TYPE_MESSAGE:
-
-
                 repeated = getattr(field, 'is_repeated', None)
                 if repeated is None:
                     repeated = field.label == field.LABEL_REPEATED
@@ -155,7 +136,6 @@ def _format_check(path, *, expected_bytes):
 
 
 def _copy_handle_exact(api, handle, dest, size, block_bytes):
-    """Create-only, fstat-pinned amount plus a single exact EOF probe."""
     if not api.kernel.SetFilePointerEx(
             handle, 0, None, source_lock.FILE_BEGIN):
         raise ExportedOnnxHoldChanged('cannot seek exported Win32 input')
@@ -197,7 +177,6 @@ def _exact_stage(root, root_identity, leaf):
 
 
 def _admit_protobuf_ram(model_bytes):
-    """Fail closed before materializing a large ONNX protobuf in Python RAM."""
     if model_bytes <= 64 * 1024 * 1024:
         return
 
@@ -229,12 +208,6 @@ def _admit_protobuf_ram(model_bytes):
 
 
 def await_post_wsl_ram_admission(model_bytes, *, attempts=13, interval=5):
-    """Allow WSL's post-export memory reclaim before the held CPU compiler.
-
-    A bounded selected-only inter-phase admission, NOT a lower memory gate.
-    The actual private holder checks physical RAM again before every protobuf
-    materialization, including after copying the Win32-held source bytes.
-    """
     if type(model_bytes) is not int or not 0 < model_bytes <= MAX_EXPORTED_ONNX_BYTES:
         raise ExportedOnnxHoldError('invalid selected exported ONNX byte count')
     if type(attempts) is not int or not 1 <= attempts <= 13:
@@ -246,8 +219,6 @@ def await_post_wsl_ram_admission(model_bytes, *, attempts=13, interval=5):
             _admit_protobuf_ram(model_bytes)
             return
         except ExportedOnnxHoldUnavailable as exc:
-
-
             if ('requires >=5 GiB free physical RAM' not in str(exc) or
                     index + 1 == attempts):
                 raise
@@ -258,12 +229,6 @@ def await_post_wsl_ram_admission(model_bytes, *, attempts=13, interval=5):
 def hold_private_exported_onnx(exported_path, *, stage_parent,
                                expected_sha256, expected_output_directory,
                                block_bytes=MAX_BLOCK_BYTES):
-    """Hold exact exported and private model handles through the caller's job.
-
-    Successful context exit proves only source/stage Win32 identity, selected
-    bytes and private-file membership during its lifetime. Caller must not
-    promote the receipt before the scope has completed its post-audit.
-    """
     if not source_lock._is_windows():
         raise ExportedOnnxHoldUnavailable('native Win32 required; no unlocked fallback')
     if type(block_bytes) is not int or not 1 <= block_bytes <= MAX_BLOCK_BYTES:

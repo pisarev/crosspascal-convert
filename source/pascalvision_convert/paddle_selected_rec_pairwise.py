@@ -1,16 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Compare selected PP-OCRv5 Server Rec scores from two supplied captures.
 
-Both captures must use the same SHA-pinned BGR input and RGB8 crop.
-The check binds the approved ONNX and native model files, dictionary,
-compiler recipe, runtime files and capture receipts. Its optional Python
-CTC decoder checks the supplied probabilities against the full dictionary.
-
-The result describes file integrity and numerical agreement for the
-supplied data. It does not establish the origin of the model, authenticate
-the capture processes or verify the complete detection and recognition
-pipeline. A completed diagnostic exits with code 2.
-"""
 
 from __future__ import annotations
 
@@ -34,7 +23,7 @@ from . import source_lock
 
 
 class SelectedRecPairwiseRefused(ValueError):
-    """The selected Rec original/native raw pair cannot be relied upon."""
+    pass
 
 
 _MODEL_MAX = 512 * 1024 * 1024
@@ -208,12 +197,6 @@ def _score_file(root, row, *, native: bool, input_sha=None):
 
 
 def _selected_ctc_alphabet(dictionary_path, dictionary_sha, dictionary_bytes):
-    """Read only the independently SHA-pinned full vendor Rec CTC alphabet.
-
-    The 18,383 ordered characters are already bound to inference.yml by the
-    source-tree audit. Paddle CTCLabelDecode uses blank class 0 and appends an
-    additional *ASCII* space class even if a space was already in the dictionary.
-    """
     _require(dictionary_sha == rec._PINNED_DICT_SHA
              and type(dictionary_bytes) is int
              and 0 < dictionary_bytes <= 1024 * 1024,
@@ -236,13 +219,6 @@ def _selected_ctc_alphabet(dictionary_path, dictionary_sha, dictionary_bytes):
 
 
 def _probability_contract(tensor, *, ctc_alphabet=None):
-    """Float32 NTC post-softmax rows, finite with 0.02 vendor sum tolerance.
-
-    An optional selected-only reference additionally applies original
-    CTCLabelDecode blank-0 greedy deduplication to *these same checked rows*.
-    This never executes the actual Pascal/native/vendor decoder. The original
-    no-alphabet call retains its historical raw-score inspection contract.
-    """
     _require(tensor['shape'][0] == 1
              and tensor['shape'][2] == 18385
              and 2 <= tensor['shape'][1] <= 108,
@@ -291,8 +267,6 @@ def _probability_contract(tensor, *, ctc_alphabet=None):
         'actual_ctc_decode_executed': False,
     }
     if ctc_alphabet is not None:
-
-
         previous, emitted, emitted_scores = -1, [], []
         for index, probability in zip(winners, winner_probs):
             if index != 0 and index != previous:
@@ -327,8 +301,6 @@ def _native_compiler_recipe(model, input_name, *, expected_native_sha256,
     recipe2_audit = []
     recipe2_runtime = {}
     if expected_native_sha256 == _EXPECTED_SELECTED_RECIPE2_SHA:
-
-
         approved, validated, members, compiled_runtime = selected_native._compiled_bundle(
             str(model.parent), 'rec', source_lock._Kernel32())
         _require(validated == receipt and approved == chosen,

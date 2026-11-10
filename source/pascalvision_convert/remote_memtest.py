@@ -1,10 +1,3 @@
-"""Fixed Windows CPU BuildPlan contract smoke over pinned SSH, memory only.
-
-This executes exact SHA-pinned first-party Python sources inside a remote
-Python 3.12 process. It does not transfer models or execute native inference.
-The result is CONTRACT_CHECK_ONLY / NOT_CHECKED, never VERIFIED.
-"""
-
 import argparse
 import base64
 import hashlib
@@ -19,9 +12,9 @@ from threading import Lock, Thread
 from . import app_paths
 
 SOURCE_HASHES = {
-    "targets.py": "a1ad54622864de6db31f0e3fab90e77f83878a7ec0545d2fddcda04298632ab8",
-    "llm_build_profile.py": "deae1e348c42fe41db1a9dee33d178d08d144f29d7019de110fbda3d4476ec8d",
-    "build_plan.py": "7b622ff4475a0a024712a49fb9f8beced20ac3aa0a393f361b9a00cbbac99892",
+    "targets.py": "0e2aac358c7865f0f1f0fef13efba1e895d2a1c1d86f7c71dad0ca3b13c93455",
+    "llm_build_profile.py": "1ab55541ad5ccadc401acebe091b70c715d6b67b339738efc2874e8955e0c2c6",
+    "build_plan.py": "8f0f79b5492e515b3ca60ceeead8e1a58346bfc7eeb8e219bdcf86abd883189f",
 }
 ROOT = Path(__file__).resolve().parent
 EVIDENCE_ROOT = app_paths.data_path("evidence")
@@ -108,7 +101,6 @@ def _sources():
 
 def run(*, host, user, known_hosts, local_evidence_dir, port=22,
         timeout_seconds=30, popen=None):
-    """Write evidence only into a preexisting empty evidence folder; fail closed."""
     if (type(host) is not str or not _NAME.fullmatch(host) or
             type(user) is not str or not _USER.fullmatch(user) or
             type(port) is not int or not 1 <= port <= 65535 or
@@ -235,7 +227,6 @@ def run(*, host, user, known_hosts, local_evidence_dir, port=22,
 
 
 def main(argv=None):
-    """Installed, fixed-purpose SSH contract command, never a model UAT."""
     parser = argparse.ArgumentParser(
         prog='pascalvision-convert remote-cpu-contract',
         description=('Run a fixed SHA-pinned CPU BuildPlan contract in remote '

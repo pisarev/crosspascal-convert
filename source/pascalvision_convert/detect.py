@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Recognise a model file by its bytes.
 
-The TFLite identifier sits at offset four, after the FlatBuffer root-table
-offset. PyTorch weights need an ONNX export before they can be compiled.
-Unrecognised files are reported with their leading bytes for diagnosis.
-"""
 
 import os
 import posixpath
@@ -62,14 +57,6 @@ ONNX_PREPARSE_RAM_HEADROOM_BYTES = 512 * 1024 ** 2
 
 def _linux_onnx_available_bytes(*, read_text=None, rlimit_as=None,
                                  page_bytes=None):
-    """Conservative Linux process headroom, not host MemFree or a RAM promise.
-
-    Use reclaimable-cache-aware MemAvailable, the visible cgroup v2/v1 memory
-    hierarchy (including finite ancestors), and finite RLIMIT_AS minus actual
-    virtual memory size. This read-only admission is intentionally NOT an
-    immutable-source lock, guaranteed RSS bound or numerical model test.
-    Tests may supply a synthetic /proc/cgroup reader on non-Linux hosts.
-    """
     if read_text is None:
         def read_text(path):
             with open(path, 'r', encoding='ascii', errors='strict') as source:
@@ -111,7 +98,6 @@ def _linux_onnx_available_bytes(*, read_text=None, rlimit_as=None,
 
     if mode is not None:
         def mount_path(value):
-
             value = re.sub(r'\\([0-7]{3})',
                            lambda m: chr(int(m.group(1), 8)), value)
             if (not value.startswith('/') or '\x00' in value or
@@ -212,7 +198,6 @@ def _linux_onnx_available_bytes(*, read_text=None, rlimit_as=None,
 
 
 def _available_physical_memory_bytes():
-    """Best-effort portable *physical* availability; None is not approval."""
     if os.name == 'nt':
         import ctypes
 
@@ -263,15 +248,10 @@ def _available_physical_memory_bytes():
 
 
 class OnnxAdmissionError(ValueError):
-    """Inspection was deferred by a capacity guard; no graph was parsed."""
+    pass
 
 
 def _admit_onnx_preparse(path):
-    """Refuse unsupported size/RAM BEFORE any full ONNX protobuf allocation.
-
-    This check estimates capacity before parsing. The converter validates the
-    selected source and any external data separately.
-    """
     source = os.stat(path)
     if not stat.S_ISREG(source.st_mode) or source.st_size <= 0:
         raise ValueError('ONNX pre-parse needs a nonempty regular source file')
@@ -294,8 +274,6 @@ def _admit_onnx_preparse(path):
 
 
 class Recognised(object):
-    """What the file is, and - when we cannot use it - what to do about it."""
-
     def __init__(self, kind, detail='', advice=(), family='', status=''):
         self.kind = kind
         self.detail = detail
@@ -321,7 +299,6 @@ class Recognised(object):
 
 
 def _paddle_answer(where):
-    """PaddlePaddle: a real road, but it goes through ONNX and not from here."""
     advice = [
         'PaddlePaddle inference models are converted through an intermediate ONNX.',
         'The export command is:',
@@ -336,7 +313,6 @@ def _paddle_answer(where):
 
 
 def _paddle_directory(path):
-    """Is this directory a Paddle inference model? Returns the graph file or None."""
     if not os.path.isdir(path):
         return None
     if not os.path.isfile(os.path.join(path, PADDLE_WEIGHTS)):
@@ -348,7 +324,6 @@ def _paddle_directory(path):
 
 
 def _looks_like_safetensors(head):
-    """An 8-byte little-endian header length, then JSON starting with '{'."""
     if len(head) < 9:
         return False
     length = struct.unpack('<Q', head[:8])[0]
@@ -356,15 +331,6 @@ def _looks_like_safetensors(head):
 
 
 def _admit_pytorch_zip_directory(stream):
-    """Bound ZIP (including ZIP64) metadata BEFORE ZipFile creates ZipInfo.
-
-    zipfile.ZipFile() eagerly reads the complete central directory and creates
-    one Python object per real entry; its later `len(infolist())` limit is too
-    late. Reuse Python's bounded EOCD/ZIP64 parser, then walk actual variable-
-    length central-directory headers without materializing metadata or weights.
-    Both metadata *bytes* and actual entries must fit separate generous quotas.
-    Multi-GiB tensor storage payloads remain untouched by this preflight.
-    """
     eocd = getattr(zipfile, '_EndRecData', None)
     if eocd is None:
         raise ValueError('ZIP central-directory preflight is unavailable; '
@@ -423,7 +389,6 @@ def _admit_pytorch_zip_directory(stream):
 
 
 def _pytorch_family(path):
-    """Which family the weights come from, with bounded ZIP metadata first."""
     try:
         with open(path, 'rb') as source:
             _admit_pytorch_zip_directory(source)
@@ -477,7 +442,6 @@ def _pytorch_answer(family, command):
 
 
 def _onnx_answer(path):
-    """ONNX is confirmed by parsing, not by elimination."""
     try:
         _admit_onnx_preparse(path)
     except OnnxAdmissionError as why:
@@ -513,11 +477,6 @@ def _onnx_answer(path):
 
 
 def recognise(path):
-    """Recognise a model. Reads bytes, never names - with one exception.
-
-    The exception is PaddlePaddle, whose inference model is a DIRECTORY rather
-    than a file. There the layout itself is the marker: weights beside a graph.
-    """
     graph = _paddle_directory(path)
     if graph:
         return _paddle_answer('this directory (%s)' % graph)
@@ -573,7 +532,6 @@ def recognise(path):
 
 
 def first_bytes(path, count=16):
-    """First bytes as hex - printed whenever we could not recognise a file."""
     with open(path, 'rb') as handle:
         head = handle.read(count)
     return ' '.join('%02x' % b for b in head)

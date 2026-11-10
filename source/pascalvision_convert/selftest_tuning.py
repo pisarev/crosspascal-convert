@@ -1,19 +1,3 @@
-"""Negative controls for the tuning gate.
-
-A gate exists only once a known fault has turned it red. This module builds a
-synthetic tuning database, corrupts it in the ways that matter, and checks that
-the coverage gate answers correctly each time.
-
-These synthetic records let the check run without tuning a model.
-The records use the TVM database format.
-A workload line is
-``["<hash>", "<payload>"]`` and a record line is ``[<workload index>, ...]``.
-
-Run it directly::
-
-    python -m pascalvision_convert.selftest_tuning
-"""
-
 from __future__ import annotations
 
 import json
@@ -59,7 +43,6 @@ def _case(name: str, work_dir: str, expected: int,
 
 
 def _refusal_cases(root: str) -> Tuple[int, int]:
-    """A refused build must leave nothing behind that looks usable."""
     from . import convert
 
     good = bad = 0
@@ -108,7 +91,6 @@ def _refusal_cases(root: str) -> Tuple[int, int]:
 
 
 def _platform_cases() -> Tuple[int, int]:
-    """The Windows refusal must fire, and the escape hatch must lift it."""
     import platform
 
     good = bad = 0
@@ -142,11 +124,6 @@ def _platform_cases() -> Tuple[int, int]:
 
 
 def _input_name_cases(root: str) -> Tuple[int, int]:
-    """A shape given for an input the model does not have must be refused.
-
-    Both sides: a wrong name refused, a right name let through. Without the
-    second case the check could simply refuse everything and still look green.
-    """
     from . import convert
 
     try:
@@ -199,12 +176,6 @@ def _input_name_cases(root: str) -> Tuple[int, int]:
 
 
 def _free_dimension_cases(root):
-    """A free dimension must be refused when unnamed and accepted when named.
-
-    Three cases, because two of them would let a check that always refuses look
-    green: refuse the unnamed free axis, accept the same model once the shape is
-    given, and accept a model that had no free axis to begin with.
-    """
     from . import convert
 
     try:
@@ -289,7 +260,6 @@ def _free_dimension_cases(root):
 
 
 def _budget_cases() -> Tuple[int, int]:
-    """The budget must refuse what the measurement showed to be harmful."""
     good = bad = 0
     checks = [
         ('53 tasks x 32 = 1696', lambda: tuning.budget_for(53, 32), 1696),

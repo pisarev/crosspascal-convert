@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Copy the runtime libraries and redistribution records for a compiled module."""
+
 
 import hashlib
 import json
@@ -30,7 +30,6 @@ _CUDA_DEPENDENCY = re.compile(
 
 
 def _file_info(path):
-    """One file's byte count and SHA-256, read without loading it into RAM."""
     digest = hashlib.sha256()
     count = 0
     with open(path, 'rb') as stream:
@@ -45,7 +44,6 @@ def _source_record(path, filename):
 
 
 def _matching_libraries(directory, name, suffix):
-    """Find both known filename spellings; aliases must be byte-identical."""
     if not directory:
         return [], None
     matches = []
@@ -61,12 +59,6 @@ def _matching_libraries(directory, name, suffix):
 
 
 def _wheel_licences(tvm_dir):
-    """Flatten wheel licence filenames only when doing so is unambiguous.
-
-    The established bundle format is LICENSE-tvm-<basename>. A nested licence
-    sharing a basename with different contents cannot be represented by that
-    format. Refusing avoids silently dropping a legally required notice.
-    """
     if os.environ.get(_ACCEPTED_RUNTIME_LOCK_ENV):
         lock = _accepted_cpu_runtime_lock()
         if not Path(tvm_dir).resolve(strict=True).samefile(
@@ -118,7 +110,6 @@ def _wheel_licences(tvm_dir):
 
 
 def _ffi_wheel_licences(ffi_dir):
-    """Read the installed TVM FFI wheel's two redistribution records."""
     if not ffi_dir:
         return [], ['licences from the installed TVM FFI wheel']
     site = Path(ffi_dir).parent.parent
@@ -141,16 +132,10 @@ def _ffi_wheel_licences(ffi_dir):
 
 
 def _public_record(record):
-    """Omit the build machine's internal source path from an inventory preview."""
     return {field: record[field] for field in ('file', 'bytes', 'sha256')}
 
 
 def _destination_status(destination, expected):
-    """Return reason if a destination is unsafe, otherwise None.
-
-    lexists catches broken symlinks that exists() would let us follow into a
-    different location; exclusive create is also used at the actual write.
-    """
     if not os.path.lexists(destination):
         return None
     if os.path.islink(destination):
@@ -173,15 +158,6 @@ def _destination_status(destination, expected):
 
 
 def _copy_exclusive(source, destination, expected_hash):
-    """Copy fully attested wheel bytes, then publish them atomically no-replace.
-
-    Opening the FINAL filename with ``xb`` prevents clobbering but exposes a
-    partially copied DLL/licence while the copy is still running. A disk-full
-    or interrupted process could leave that trusted filename truncated. Stage
-    under our own unique sibling name, verify SHA of both copied and reread
-    bytes, then publish one hardlink (same filesystem, exclusive name).
-    Failure to hardlink is a refusal; never fall back to an overwriting move.
-    """
     parent = Path(destination).absolute().parent
     if not parent.is_dir():
         raise OSError('runtime target folder is missing: %s' % parent)
@@ -212,8 +188,6 @@ def _copy_exclusive(source, destination, expected_hash):
                           % os.path.basename(source))
         os.link(scratch, destination)
     finally:
-
-
         if scratch is not None:
             scratch.unlink(missing_ok=True)
 
@@ -226,12 +200,6 @@ _ACCEPTED_RUNTIME_LOCK_ENV = 'PASCALVISION_TVM_RUNTIME_LOCK'
 
 
 def _accepted_cpu_runtime_lock():
-    """Validate the explicitly configured accepted Win64 CPU source layout.
-
-    This pinned CPU route is separate from the ordinary installed wheel
-    and the selected CUDA kit. Its external lock pins the package, DLLs, and
-    source distribution license files.
-    """
     source = os.environ.get(_ACCEPTED_RUNTIME_LOCK_ENV)
     if not source:
         return None
@@ -276,12 +244,6 @@ def _accepted_cpu_runtime_lock():
 
 
 def package_lib_dir(package_name):
-    """The lib directory of an installed package, or None.
-
-    The package is asked by import rather than searched for on disk: what
-    matters is the one that will actually be used, not a namesake sitting in a
-    neighbouring environment.
-    """
     if package_name in ('tvm', 'tvm_ffi') and os.environ.get(
             _ACCEPTED_RUNTIME_LOCK_ENV):
         return _accepted_cpu_runtime_lock()['build_lib_directory']
@@ -295,7 +257,6 @@ def package_lib_dir(package_name):
 
 
 def _inspect_destination(target_dir, libraries, licences, tvm_dir, ffi_dir):
-    """Report every preexisting conflict before writing the first bundle byte."""
     blocked = []
     unmanaged = []
     reused = []
@@ -354,7 +315,6 @@ def _inspect_destination(target_dir, libraries, licences, tvm_dir, ffi_dir):
 
 
 def _plan_runtime_files(target='cpu', target_dir=None, *, include_ffi_licences=False):
-    """Return the public inventory and private source records for exact copying."""
     device = str(target).strip().lower()
     if device not in ('cpu', 'cuda'):
         raise ValueError('runtime target must be cpu or cuda')
@@ -417,23 +377,12 @@ def _plan_runtime_files(target='cpu', target_dir=None, *, include_ffi_licences=F
 
 
 def plan_runtime_files(target='cpu', target_dir=None, *, include_ffi_licences=False):
-    """Read-only SHA-256 inventory of the selected wheel and optional output.
-
-    The target_dir check also reports *unmanaged* libraries left by older
-    bundles. A ready inventory verifies source bytes and copy suitability, NOT
-    that the model is correct or portable to a foreign GPU/operating system.
-    """
     inventory, _, _ = _plan_runtime_files(
         target, target_dir, include_ffi_licences=include_ffi_licences)
     return inventory
 
 
 def copy_license(target_dir):
-    """Copy licence files only if ALL are present and prechecked.
-
-    Kept as a callable for existing integrations; runtime.place uses the same
-    exclusive copy mechanism after it has preflighted libraries AND licences.
-    """
     if not os.path.isdir(target_dir):
         raise OSError('no such output directory: %s' % target_dir)
     tvm_dir = package_lib_dir('tvm')
@@ -458,12 +407,6 @@ def copy_license(target_dir):
 
 
 def place(target_dir, target='cpu', *, include_ffi_licences=False):
-    """Put an exactly inventoried TVM runtime beside a module, without clobber.
-
-    The preflight checks both libraries and licences before the first copy.
-    This step reports matching wheel bytes only; CUDA driver/runtime viability
-    and numerical model correctness remain separate verification gates.
-    """
     step = Step('Runtime beside the module')
     if not os.path.isdir(target_dir):
         return step.refuse('no such output directory: %s' % target_dir)

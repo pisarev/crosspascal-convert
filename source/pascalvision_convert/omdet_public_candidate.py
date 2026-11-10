@@ -172,8 +172,6 @@ def _strict_object(body: bytes, label: str) -> dict:
 
 
 def _paths(candidate_dir, destination):
-
-
     root = Path(bundle_atomic._local_absolute(candidate_dir))
     final = Path(bundle_atomic._local_absolute(destination))
 
@@ -209,7 +207,6 @@ def _member(root: Path, relative: str) -> tuple[Path, os.stat_result]:
 
 
 def _pin(record, label):
-
     feature_role = next((name for name, file in FEATURE_FILES.items()
                          if label in (name, "features/" + file)), None)
     keys = {"file", "bytes", "sha256"}
@@ -598,7 +595,6 @@ def publish(candidate_dir, destination, *, expected_pins=None) -> dict:
     parent_holds = ExitStack()
     stage_holds = ExitStack()
     try:
-
         for ancestor in reversed((final.parent, *final.parent.parents)):
             parent_holds.enter_context(_hold_plain_ntfs_directory(ancestor))
         stage.mkdir(mode=0o700)
@@ -716,7 +712,6 @@ def main(argv=None) -> int:
     try:
         expected = None
         if args.expected_pins:
-
             file = Path(bundle_atomic._local_absolute(args.expected_pins))
             root, final = _paths(args.candidate_dir, args.into)
             bundle_atomic._guard_existing_ancestors(str(file.parent))

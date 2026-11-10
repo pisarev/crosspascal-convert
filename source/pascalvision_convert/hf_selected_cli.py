@@ -1,7 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Preview the files and SHA-256 of a local Hugging Face model selection.
 
-The scan does not hold source files open or validate model execution."""
 
 from __future__ import annotations
 
@@ -25,8 +23,6 @@ def preview_main(argv=None):
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:
-
-
         return 0 if exc.code == 0 else 1
     try:
         if not os.path.isabs(args.source_dir):

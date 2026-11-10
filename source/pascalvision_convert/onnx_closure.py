@@ -1,12 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Inventory and copy one ONNX model and its referenced external data files.
 
-The inventory covers the graph and the regular files named by its tensors.
-The snapshot copies those files into a separate directory and checks them
-against the approved digest. The caller must hold or recheck the staged files
-when it needs a stable input for compilation.
-"""
 
 from __future__ import annotations
 
@@ -48,15 +42,15 @@ _INLINE_FIELDS = (
 
 
 class OnnxClosureError(ValueError):
-    """A selected source, external reference or private snapshot is unsafe."""
+    pass
 
 
 class OnnxClosureChanged(OnnxClosureError):
-    """The approved selected files differ from the current actual bytes."""
+    pass
 
 
 class OnnxClosureNotReady(OnnxClosureError):
-    """A private stage has an invalid marker, member or byte fingerprint."""
+    pass
 
 
 def _limits(max_total_bytes, max_files):
@@ -81,7 +75,6 @@ def _absolute(path, label):
 
 
 def _relative(raw, label='ONNX external_data location'):
-    """Accept only lexical, unambiguous relative POSIX-style path components."""
     if not isinstance(raw, str) or not raw or '\x00' in raw:
         raise OnnxClosureError('%s must be a nonempty relative string' % label)
     if ('\\' in raw or ':' in raw or raw.startswith('/') or
@@ -162,7 +155,6 @@ def _expected_bytes(tensor):
 
 
 def _external_tensors(model):
-    """Discover external weights in graphs, nested attributes and sparse data."""
     import onnx
 
     if model.training_info or model.functions:
@@ -305,11 +297,6 @@ def _forbidden_file(root, relative, forbidden_roots):
 
 def scan_selected_closure(model_path, *, max_total_bytes=MAX_TOTAL_BYTES,
                           max_files=MAX_FILES, forbidden_roots=()):
-    """Fingerprint only a local ONNX and referenced sidecar files, never siblings.
-
-    The resulting SHA covers relative member names/types/sizes/whole bytes.
-    It is a deterministic COPY input, not a lock on original source files.
-    """
     _limits(max_total_bytes, max_files)
     model_file = _absolute(model_path, 'ONNX model')
     if model_file.suffix.lower() != '.onnx':
@@ -380,7 +367,6 @@ def _unique_pairs(pairs):
 
 
 def audit_selected_closure(snapshot_directory, *, expected_tree_sha256):
-    """Independently reparse staged ONNX and verify ALL private stage members."""
     approved = _sha(expected_tree_sha256)
     stage = _absolute(snapshot_directory, 'selected snapshot')
     marker_path = stage / source_freeze.READY_MARKER
@@ -431,12 +417,6 @@ def freeze_selected_closure(model_path, destination, *,
                             max_total_bytes=MAX_TOTAL_BYTES,
                             max_files=MAX_FILES, forbidden_roots=(),
                             on_created=None):
-    """Copy ONLY approved graph/sidecars into an exclusive private directory.
-
-    Does not lock either source or staged paths through compilation. On failure
-    after exclusive mkdir an OWNED incomplete stage is left without a valid
-    ready marker; no pre-existing path is removed or overwritten.
-    """
     _limits(max_total_bytes, max_files)
     approved = _sha(expected_tree_sha256)
     first = scan_selected_closure(

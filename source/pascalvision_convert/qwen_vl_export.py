@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Export Qwen2.5-VL as separate native vision and cached token graphs."""
+
 import argparse
 import hashlib
 import json

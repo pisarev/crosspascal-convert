@@ -1,12 +1,7 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Hold the eight selected OmDet source files during Windows TVM compilation.
 
-The caller supplies the approved source hashes and checks the eight-class
-profile before calling this API. The private stage is retained for inspection.
-This hold covers source identity during the compiler run. Model provenance,
-license, native inference and numerical acceptance have separate checks.
-"""
+
 from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager
@@ -50,11 +45,6 @@ OPTIMIZED_PRODUCER_REPORT = "99c1a4d9e1c5a7a4d45ce26bc62a4da84673f7c99bb916e6614
 
 
 def inspect_exact_optimized_source(onnx_path, receipt_path, original_pins):
-    """Read-only preflight primitive; DOES NOT authorize an unheld compiler input.
-
-    The caller must still implement native Windows private copy, FileID holds,
-    POST audit, sidecar rejection and compiler-window ownership before use.
-    """
     if (not isinstance(original_pins, dict) or
             set(original_pins) != {row[0] for row in STAGED_ROLES} or
             original_pins["source_onnx"].get("sha256") != OPTIMIZED_ORIGINAL_SOURCE or
@@ -108,7 +98,7 @@ def inspect_exact_optimized_source(onnx_path, receipt_path, original_pins):
 
 
 class OmDetCompilerHoldRefused(ValueError):
-    """An exact approved OmDet source cannot be kept through TVM compilation."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -173,11 +163,6 @@ def _bounded_digest(path, max_bytes, expected_size=None):
 
 
 def scan_selected_omdet(root, pins):
-    """Point-in-time exact eight-member SHA tree from independently approved pins.
-
-    A full fixed-profile validator belongs to the caller. This scanner accepts
-    no unselected ninth member and never inherits a v1 candidate VERIFIED status.
-    """
     if not isinstance(pins, dict) or set(pins) != {
             item[0] for item in STAGED_ROLES}:
         raise OmDetCompilerHoldRefused("OmDet requires exactly eight selected source roles")
@@ -249,8 +234,6 @@ def _stage_inventory(stage, base_identity, chosen, optimized=None):
 
 
 def _copy_exact(src, dst, row):
-
-
     with src.open("rb") as source, dst.open("xb") as target:
         first = os.fstat(source.fileno())
         if (first.st_size != row["bytes"] or
@@ -275,12 +258,6 @@ def _copy_exact(src, dst, row):
 
 
 def _require_held_omdet_four_input_graph(path, *, original_symbolic=False):
-    """Parse actual held ONNX dtypes/shapes; selected JSON is not graph ABI.
-
-    The converter's .inputs TSV records NAMES/SHAPES but never DTYPE, so a
-    FLOAT task_mask could otherwise get a four-input INT64 Pascal declaration.
-    No numerical, model-origin or train-weight attestation is implied.
-    """
     from . import detect
     detect._admit_onnx_preparse(str(path))
     try:
@@ -340,14 +317,6 @@ def _require_held_omdet_four_input_graph(path, *, original_symbolic=False):
 
 
 def _require_held_omdet_semantic_resources(stage, chosen):
-    """Validate contract/feature meaning on approved HELD source bytes.
-
-    Checking a caller's original contract before source copy is insufficient:
-    a concurrent A->valid-B->A swap can pass early JSON checks yet compile A.
-    Here every staged member is already held by native Win32 read/share-only
-    handles. The v1 contract's feature paths are relative to the selected
-    manifest and work in the deliberately flat private compiler stage.
-    """
     from . import omdet_bundle_profile
     rows = {row["role"]: row for row in chosen["members"]}
 
@@ -392,7 +361,6 @@ def _require_held_omdet_semantic_resources(stage, chosen):
 @contextmanager
 def hold_selected_omdet(root, pins, *, stage_parent, approved_tree_sha256,
                         optimized_onnx=None, optimization_receipt=None):
-    """Yield a private compiler ONNX with ALL eight selected files held read-only."""
     approved = _approved_sha(approved_tree_sha256)
     if not source_lock._is_windows():
         raise OmDetCompilerHoldRefused("Win32 local NTFS required; no unheld fallback")

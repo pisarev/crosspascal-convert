@@ -1,10 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Adapt framework-native models to the converter or a family-specific builder.
 
-Export adapters produce ONNX and record source and graph provenance.
-Full-build adapters produce their native bundle with the family builder.
-"""
 
 import ctypes
 from contextlib import ExitStack, contextmanager
@@ -28,7 +24,6 @@ LLM_HELPERS = os.path.join(HERE, 'pascalvision_convert', 'llm_helpers')
 
 
 def verify_installed_llm_helpers():
-    """Require the exact four packaged helper sources before a native build."""
     locked = os.path.join(LLM_HELPERS, 'HELPER-SHA256.json')
     if not os.path.isfile(locked):
         raise RuntimeError('LLM helper lock is missing from installed converter: ' + locked)
@@ -46,8 +41,6 @@ def verify_installed_llm_helpers():
 
 
 def sha256_of(path):
-    """SHA-256 of a file, read a megabyte at a time so a large model is never
-    held whole in memory."""
     digest = hashlib.sha256()
     with open(path, 'rb') as handle:
         for block in iter(lambda: handle.read(1048576), b''):
@@ -61,13 +54,6 @@ MIN_YOLO_OUTPUT_HEADROOM = 256 * 1024 ** 2
 
 @contextmanager
 def _hold_yolo_directory_identity(directory, creation_info, *, label):
-    """Keep a selected directory's Win32 FileID/namespace pinned until exit.
-
-    This deliberately does NOT freeze directory members: Ultralytics needs to
-    CREATE its output next to staged .pt and the destination needs its new
-    .onnx. Directory ChangeTime/mtime therefore cannot be a custody criterion.
-    On POSIX only a pre/post path audit is offered, never a Win32 claim.
-    """
     from pascalvision_convert import source_freeze, source_lock
 
     def path_audit():
@@ -123,11 +109,6 @@ def _hold_yolo_directory_identity(directory, creation_info, *, label):
 @contextmanager
 def _hold_yolo_private_child_source(stage, root_info, model, model_size, sha,
                                     *, copied_identity=None):
-    """Protect one staged YOLO source while the exporter runs.
-
-    Windows holds the selected file and stage directory by handle. POSIX
-    checks the path and bytes before and after the exporter.
-    """
     from pascalvision_convert import source_freeze, source_lock
 
     def stat_root():
@@ -169,8 +150,6 @@ def _hold_yolo_private_child_source(stage, root_info, model, model_size, sha,
     api = source_lock._Kernel32()
     api.assert_local_ntfs(stage)
     with ExitStack() as handles:
-
-
         directory_handle = api.kernel.CreateFileW(
             str(stage), source_lock.GENERIC_READ, source_lock.FILE_SHARE_READ,
             None, source_lock.OPEN_EXISTING,
@@ -228,37 +207,17 @@ def _hold_yolo_private_child_source(stage, root_info, model, model_size, sha,
 
 
 class ImportAdapter(object):
-    """One family's original-format -> canonical bundle step. Subclasses fill in
-    the methods; everything else about a build is the core's job, unchanged.
-
-    kind tells the wizard how to build after a match:
-      'export'     - export() returns a canonical ONNX; the strict core compiles it.
-      'full_build' - build() produces the whole native bundle itself. An LLM is not
-                     an ONNX graph the core can compile - it needs a paged KV-cache
-                     and prefill/decode built in - so the family's own builder runs
-                     in place of the ONNX core."""
-
     name = ''
     kind = 'export'
 
     def matches(self, path, recognised):
-        """True if this adapter handles the model at path. `recognised` is the
-        core's detect result (family, detail, convertible)."""
         raise NotImplementedError
 
     def export(self, path, out_dir):
-        """Export the model to an ONNX inside out_dir. Return a dict with 'onnx'
-        (the path) and 'provenance' (the audit record). Raise on failure - a
-        silent half-export is worse than a named refusal."""
         raise NotImplementedError
 
 
 class YoloImportAdapter(ImportAdapter):
-    """Export Ultralytics YOLO weights to ONNX with the configured toolchain.
-
-    The Early Access catalog lists the supported model and task combinations.
-    """
-
     name = 'yolo'
     OPSET = 17
 
@@ -524,7 +483,6 @@ class YoloImportAdapter(ImportAdapter):
         return {'onnx': onnx_path, 'provenance': provenance}
 
     def _provenance(self, source, onnx_path):
-        """The audit record: what produced this ONNX, and from what."""
         lock = os.path.join(self.VENV, 'requirements.lock.txt')
         return {
             'adapter': self.name,
@@ -550,18 +508,10 @@ class YoloImportAdapter(ImportAdapter):
 
 
 class LLMImportAdapter(ImportAdapter):
-    """Build a native TVM LLM bundle with the packaged family builder.
-
-    The builder receives the selected device, architecture and precision.
-    It packages the compiled module, weights and tokenizer for inference.
-    """
-
     name = 'llm'
     kind = 'full_build'
 
 
-    
-    
     BUILDER = os.path.join(LLM_HELPERS, 'build_llm.py')
 
 
@@ -593,15 +543,6 @@ class LLMImportAdapter(ImportAdapter):
         return os.path.isdir(path) and self._key_for(path) is not None
 
     def _cuda_visible(self, python_executable=None):
-        """True/False if the BUILD environment sees a CUDA device, None if the
-        question could not be put at all.
-
-        Asked of the interpreter that will RUN the builder, not of this one. The
-        wizard's environment carries no TVM, and a card the host driver lists is
-        a different fact from a card this TVM build can open - reporting one as
-        the other would name a false cause. 'Could not ask' is kept apart from
-        'no card' for the same reason: a check that reads its own failure as a
-        negative answer refuses for the wrong reason."""
         code = ('import sys, tvm; '
                 'sys.stdout.write("yes" if tvm.cuda(0).exist else "no")')
         try:
@@ -620,7 +561,6 @@ class LLMImportAdapter(ImportAdapter):
         return None
 
     def refuse_unusable_dtype(self, dtype):
-        """Require a weight precision supported by the native builder."""
         if dtype not in self.DTYPES:
             raise RuntimeError(
                 'unknown weight precision %r. build_llm.py converts to %s and to '
@@ -630,11 +570,6 @@ class LLMImportAdapter(ImportAdapter):
                 % (dtype, ' or '.join(self.DTYPES)))
 
     def refuse_unusable_device(self, target, arch, python_executable=None):
-        """Check that the requested device and architecture can shape the build.
-
-        CUDA with an explicit architecture can build without the target GPU.
-        Without one, the compiler environment must see a CUDA device.
-        """
         selected_python = python_executable or self.PYTHON
         if target not in self.TARGETS:
             raise RuntimeError(
@@ -671,8 +606,6 @@ class LLMImportAdapter(ImportAdapter):
                 'toolkit, or build for the processor. Set %s=1 to try anyway.'
                 % self.CUDA_ESCAPE)
         if arch:
-
-
             return
         visible = self._cuda_visible(selected_python)
         if visible is None:
@@ -763,16 +696,12 @@ class LLMImportAdapter(ImportAdapter):
         if os.name == 'nt' and (
                 str(out_dir).replace('/', '\\').startswith('\\') or
                 str(path).replace('/', '\\').startswith('\\')):
-
-
             raise RuntimeError('native LLM device/UNC namespace for source or '
                                'output is unsupported; use canonical local paths')
         output_root = os.path.abspath(out_dir)
         owner_root = os.path.normcase(os.path.realpath(os.path.abspath(path)))
         actual_output = os.path.normcase(os.path.realpath(output_root))
         try:
-
-
             shared_root = os.path.commonpath((owner_root, actual_output))
             overlaps_owner = shared_root in (owner_root, actual_output)
         except ValueError:
@@ -812,8 +741,6 @@ class LLMImportAdapter(ImportAdapter):
             source_identity = model_sources.match_source(source_scan, key)
         if (approved_hf_source_tree_sha256 is not None and
                 source_tree_sha256 != approved_hf_source_tree_sha256):
-
-
             raise hf_closure.HfClosureChanged(
                 'selected HF weights/tokenizer differ from Preview-approved '
                 'tree SHA; refusing before any native held stage or subprocess')
@@ -846,8 +773,6 @@ class LLMImportAdapter(ImportAdapter):
                 path, expected_tree_sha256=source_tree_sha256,
                 expected_model_key=key)
             if build_plan is not None:
-
-
                 from pascalvision_convert.llm_bundle_contract import validate_llm_output
                 validate_llm_output(out_dir, build_plan, key,
                                     require_consumer=selected_consumer is not None)
@@ -882,8 +807,6 @@ class LLMImportAdapter(ImportAdapter):
                     raise RuntimeError('private HF Win32 source-stage ticket '
                                        'does not match selected owner bytes')
                 if selected_consumer is not None:
-
-
                     from pascalvision_convert import hf_tokenizer_consumer_binding
                     tokenizer_consumer_binding = (
                         hf_tokenizer_consumer_binding.bind_held_native_pascal_tokenizer(
@@ -916,8 +839,6 @@ class LLMImportAdapter(ImportAdapter):
                     'plan_transfer_storage': 'RETAINED_PRIVATE_NO_AUTOMATIC_CLEANUP',
                 }
         else:
-
-
             done = run_and_validate(cmd)
         return {'bundle_dir': out_dir, 'key': key,
                 'target': target, 'arch': arch, 'dtype': dtype,
@@ -956,11 +877,6 @@ class LLMImportAdapter(ImportAdapter):
 
 
 class PaddleOcrImportAdapter(ImportAdapter):
-    """Export PaddleOCR inference files to ONNX in the configured WSL environment.
-
-    The export runs paddle2onnx and then simplifies the graph with onnxslim.
-    """
-
     name = 'paddleocr'
     kind = 'export'
     OPSET = 11
@@ -974,7 +890,6 @@ class PaddleOcrImportAdapter(ImportAdapter):
         '"~/"*) venv="$HOME/${venv:2}" ;; esac; ')
 
     def _wsl_path(self, win_path):
-        """Translate a Windows drive path into its WSL mount path."""
         full = os.path.abspath(win_path)
         drive, rest = os.path.splitdrive(full)
         return '/mnt/%s%s' % (drive.rstrip(':').lower(), rest.replace('\\', '/'))
@@ -1003,8 +918,6 @@ class PaddleOcrImportAdapter(ImportAdapter):
         selected_scanner = None
         if any(value is not None for value in (
                 role, dictionary, approved_tree_sha256)):
-
-
             if role not in ('det', 'rec'):
                 raise ValueError('Paddle selected source requires explicit '
                                  'role det/rec before exporter access')
@@ -1026,8 +939,6 @@ class PaddleOcrImportAdapter(ImportAdapter):
             output_in_source = (
                 os.path.commonpath((source_root, output_root)) == source_root)
         except ValueError:
-
-
             output_in_source = False
         if output_in_source:
             raise ValueError('Paddle export output cannot be inside the owner '
@@ -1038,8 +949,6 @@ class PaddleOcrImportAdapter(ImportAdapter):
                              'directory redirecting native model artifacts')
         stem = os.path.basename(path.rstrip('\\/')) or 'paddle_model'
         if output_stem is not None:
-
-
             from pascalvision_convert import source_freeze
             if type(output_stem) is not str:
                 raise ValueError('Paddle held output stem must be a filename')
@@ -1080,8 +989,6 @@ class PaddleOcrImportAdapter(ImportAdapter):
                 'paddle export reported success but no ONNX at %s' % onnx_path)
         provenance = self._provenance(path, onnx_path, graph)
         if selected is not None:
-
-
             observed = selected_scanner.audit_selected_paddle_source(
                 path, role=role, dictionary=dictionary,
                 expected_tree_sha256=approved_tree_sha256)
@@ -1101,14 +1008,6 @@ class PaddleOcrImportAdapter(ImportAdapter):
 
     def export_held(self, path, out_dir, *, stage_parent, role,
                     dictionary=None, approved_tree_sha256):
-        """Opt-in native Win32-held PRIVATE Paddle input for a WSL exporter.
-
-        Refuses if local NTFS staging or native handles cannot be established;
-        never retries against the mutable original. This deliberately remains
-        an independent candidate API until real WSL/DrvFs consumption has been
-        tested and the held context encloses wizard compilation/verification.
-        Neither child exit0 nor SHA receipt means trained OCR is VERIFIED.
-        """
         from pascalvision_convert import paddle_closure, paddle_held_stage
 
         try:
@@ -1175,8 +1074,6 @@ class PaddleOcrImportAdapter(ImportAdapter):
         }
 
     def _versions(self):
-
-
         script = ('set -eo pipefail; venv="$1"; ' +
                   self._WSL_VENV_EXPANSION +
                   '"$venv/bin/paddle2onnx" --version 2>&1 | tail -1')
@@ -1194,8 +1091,6 @@ ADAPTERS = [
 
 
 def find_adapter(path, recognised):
-    """The first adapter that handles this model, or None. A matches() that
-    raises is treated as 'does not handle', never as a crash of recognise."""
     for adapter in ADAPTERS:
         try:
             if adapter.matches(path, recognised):

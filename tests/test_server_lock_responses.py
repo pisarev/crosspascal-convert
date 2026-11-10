@@ -67,8 +67,6 @@ class FakeBase:
         self.headers_finished += 1
 
     def send_error(self, code, message):
-
-
         self.send_response(code)
         self.end_headers()
         self.wfile.write(message.encode("utf-8"))

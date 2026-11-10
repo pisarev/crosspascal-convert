@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Prepare file-backed FP32 Gemma 3n parameters from an architecture-tagged GGUF."""
+
 import argparse
 import hashlib
 import json
@@ -106,12 +106,12 @@ def stage(source, output):
         path = output / f"weight-{number:04d}.bin"
         if cached is not None:
             spec = cached["weights"][name]
-                                                                                         
+
             os.link(cached_root / spec["file"], path)
             records[name] = {**spec, "file": path.name}
             continue
         target = np.memmap(path, mode="w+", dtype="float32", shape=shape)
-                                                                         
+
         source_rows = t.data.reshape((-1, t.data.shape[-1]))
         dest_rows = target.reshape((-1, shape[-1]))
         for start in range(0, len(dest_rows), 128):

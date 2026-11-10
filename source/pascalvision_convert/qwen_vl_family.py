@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Configuration-derived Qwen2.5-VL image/text profile (no checkpoint allowlist)."""
+
 import json
 import math
 from pathlib import Path

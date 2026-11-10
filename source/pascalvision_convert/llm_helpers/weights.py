@@ -1,13 +1,7 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Convert Hugging Face weights to the model's native parameter layout.
 
-BF16 values are widened exactly to FP32 by shifting their uint16 bits into the
-high half of a uint32 value. Q/K/V and gate/up projections are fused to match
-the exported model. Tensors are read and serialized one at a time, retaining
-only the current fusion inputs and output. Pascal reads the flat binary file
-with the accompanying JSON offsets and plain-text parameter index.
-"""
+
 import hashlib
 import json
 import math
@@ -72,8 +66,6 @@ def _file_identity(info):
 
 
 def _open_binary_regular(path):
-
-
     flags = (os.O_RDONLY | getattr(os, 'O_BINARY', 0) |
              getattr(os, 'O_CLOEXEC', 0) | getattr(os, 'O_NOFOLLOW', 0) |
              getattr(os, 'O_NONBLOCK', 0))
@@ -86,7 +78,6 @@ def _open_binary_regular(path):
 
 
 def _checked_entry(path, *, directory=False, min_size=1, max_size=None):
-    """lstat every path component, including NTFS reparse points above the leaf."""
     current = os.path.abspath(os.fspath(path))
     leaf = True
     while True:
@@ -115,7 +106,6 @@ def _checked_entry(path, *, directory=False, min_size=1, max_size=None):
 
 
 def _safe_shard_name(name):
-    """Relative POSIX-style paths are allowed, including nested shard folders."""
     if (type(name) is not str or not name or len(name) > _MAX_SHARD_PATH_CHARS or
             unicodedata.normalize('NFC', name) != name or
             name.startswith('/') or '\\' in name or ':' in name or
@@ -140,12 +130,6 @@ def _valid_tensor_name(name):
 
 
 class SafeTensors(object):
-    """Read .safetensors without a separate safetensors dependency.
-
-    The first eight bytes give the JSON header length. Tensor offsets are
-    relative to the contiguous data region immediately after that header.
-    """
-
     def __init__(self, path, guard=None):
         self.path = os.path.abspath(os.fspath(path))
         self._guard = guard or (lambda: _checked_entry(self.path, min_size=9))
@@ -241,7 +225,6 @@ class SafeTensors(object):
         return tuple(self.header[name]['shape'])
 
     def read(self, name):
-        """Return the tensor as float32 regardless of its source precision."""
         entry = self.header[name]
         begin, end = entry['data_offsets']
         shape = tuple(entry['shape'])
@@ -273,12 +256,6 @@ class SafeTensors(object):
 
 
 class ShardedSafeTensors(object):
-    """Read indexed .safetensors shards through the same interface as one file.
-
-    model.safetensors.index.json maps each tensor name to its shard. The
-    conversion plan can use this reader without retaining all shard data.
-    """
-
     def __init__(self, hf_dir):
         self.dir = os.path.abspath(os.fspath(hf_dir))
         root_stat = _checked_entry(self.dir, directory=True)
@@ -370,7 +347,6 @@ class ShardedSafeTensors(object):
 
 
 def open_source(hf_path):
-    """Open one .safetensors file or a directory with indexed shards."""
     if os.path.isdir(hf_path):
         if os.path.lexists(os.path.join(hf_path, 'model.safetensors.index.json')):
             return ShardedSafeTensors(hf_path)
@@ -383,11 +359,6 @@ def open_source(hf_path):
 
 
 def _fuse_one_at_a_time(source, names, axis=0):
-    """Concatenate selected trained weights without retaining all inputs.
-
-    The source reader materializes float32 arrays. Keep only the destination
-    and current input live, which matters for full Qwen/Gemma checkpoint builds.
-    """
     first = source.read(names[0])
     shape = list(first.shape)
     widths = [shape[axis]]
@@ -417,10 +388,6 @@ def _fuse_one_at_a_time(source, names, axis=0):
 
 
 def plan(source, num_layers):
-    """Map native parameter names to lazy Hugging Face weight readers.
-
-    Each zero-argument callable produces only the array currently needed.
-    """
     take = source.read
     joined = {}
 
@@ -429,8 +396,8 @@ def plan(source, num_layers):
 
     joined['model.embed_tokens.weight'] = lambda: take('model.embed_tokens.weight')
     joined['model.norm.weight'] = lambda: take('model.norm.weight')
-                                                                           
-                                                                           
+
+
     if 'lm_head.weight' in source.names:
         joined['lm_head.weight'] = lambda: take('lm_head.weight')
 
@@ -460,18 +427,12 @@ def plan(source, num_layers):
 
 
 def plan_gemma2(source, num_layers):
-    """Build the Gemma2 weight plan.
-
-    Q/K/V have no bias. Each layer has four normalization weights, and each
-    Gemma RMSNorm weight gains one in float32 to match ordinary RMSNorm.
-    """
     take = source.read
 
     def fuse(names, axis=0):
         return lambda: _fuse_one_at_a_time(source, names, axis=axis)
 
     def norm(n):
-
         return lambda name=n: take(name) + np.float32(1.0)
 
     joined = {}
@@ -504,10 +465,6 @@ def plan_gemma2(source, num_layers):
 
 def convert(hf_path, out_dir, order, expected_shapes, num_layers, dtype='float32',
             target='cpu', plan_fn=None):
-    """Serialize trained weights in the order declared by the exported module.
-
-    The provided names and shapes must match the conversion plan exactly.
-    """
     source = open_source(hf_path)
     recipe = (plan_fn or plan)(source, num_layers)
 

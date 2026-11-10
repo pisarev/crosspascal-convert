@@ -1,10 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Explicit trained HR800 ONNX ORT BASIC reference on one pinned float32 sample.
 
-Creates a new retained directory with optimized ONNX and a SHA receipt. This
-checks only the exact supplied sample; it is not native TVM/Pascal acceptance,
-independent model provenance or a general numerical equivalence guarantee.
-"""
 
 from __future__ import annotations
 
@@ -57,14 +52,6 @@ def build_basic_reference(original_onnx, original_sha256, sample_npy,
                           sample_sha256, output_directory, *, max_abs=1e-6,
                           expected_optimized_sha256=None,
                           expected_optimized_bytes=None):
-    """Produce ORT BASIC optimized graph and sample comparison receipt.
-
-    `sample_npy` is the *exact already preprocessed* float32 RGB NCHW input,
-    not a source image; this helper never silently substitutes random data.
-    Caller pins both input SHA hashes. Outputs are retained even on failure.
-    Optional optimized artifact pins allow verifying a known ORT BASIC build;
-    other ORT versions may legitimately serialize different model bytes.
-    """
     if expected_optimized_sha256 is not None and (
             not isinstance(expected_optimized_sha256, str) or
             not _SHA.fullmatch(expected_optimized_sha256)):

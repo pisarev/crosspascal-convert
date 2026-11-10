@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Read and write the inputs and provenance of a model build.
 
-The recipe records the source, target, shape, tuning settings and model
-contract for replay. The separate runtime manifest describes the inputs
-and outputs that a consumer uses when a build supplies a task contract.
-"""
 
 import json
 import os
@@ -24,12 +19,6 @@ RECIPE_FAMILY_LICENSE_CLAIM_VERSION = 3
 
 
 def _checked_declared_model_license(value):
-    """A caller label is input data, never an attested model licence.
-
-    Keep the recipe bound to the same single-line length/control rules as the
-    Pascal manifest emitter; otherwise a native LLM recipe could preserve a
-    misleading multi-record label without ever visiting that emitter.
-    """
     if value is None:
         return None
     if (type(value) is not str or not value.strip() or len(value) > 1024 or
@@ -40,7 +29,6 @@ def _checked_declared_model_license(value):
 
 
 def _checked_model_license_claim(claim, value):
-    """Validate a caller-only licence marker, never legal clearance."""
     if (not isinstance(claim, dict) or set(claim) != {
             'schema', 'version', 'license', 'basis',
             'redistribution_clearance'} or
@@ -55,11 +43,6 @@ def _checked_model_license_claim(claim, value):
 
 
 def validate_family_license_receipt(recipe):
-    """Preserve legacy recipes; require the caller-only marker in new family v3.
-
-    This is schema completeness, not model-license or redistribution attestation.
-    An unsigned legacy-version downgrade is not authenticated by this check.
-    """
     value = _checked_declared_model_license(recipe.get('license'))
     version = recipe.get('recipe_version')
     if type(version) is not int:
@@ -81,11 +64,6 @@ def validate_family_license_receipt(recipe):
 
 
 def validate_paddle_selected_source(closure, *, source=None):
-    """Check exact versioned Paddle scan receipt, without trusting its SHA label.
-
-    This structural check is safe for detached recipe inspection. Callers must
-    independently rescan original model AND dictionary before child execution.
-    """
     keys = {'schema', 'schema_version', 'source_root', 'role',
             'graph_file', 'entries', 'file_count', 'total_bytes',
             'dictionary', 'tree_sha256', 'status', 'verification_status',
@@ -175,7 +153,6 @@ def validate_paddle_selected_source(closure, *, source=None):
 
 
 def validate_selected_source_closure(closure):
-    """Pure structural review of an ONNX+external_data recipe pin (not an OS lock)."""
     keys = frozenset((
         'source_kind', 'format', 'status', 'closure_schema',
         'source_closure_version', 'source_model', 'source_root', 'model_rel',
@@ -299,7 +276,6 @@ def validate_selected_source_closure(closure):
 
 
 def validate_cpu_codegen_receipt(receipt, plan):
-    """Validate a compiler-attribute observation, never a destination oracle."""
     if (not isinstance(plan, dict) or plan.get('route') != 'raw'
             or not isinstance(plan.get('cpu_codegen'), dict)):
         raise ValueError('CPU codegen receipt requires a selected RAW BuildPlan')
@@ -332,36 +308,6 @@ def build_recipe(source, target, shape, name, tune, trials_per_task, sm,
                  contract_input, provenance=None, license=None,
                  target_profile=None, build_plan=None,
                  effective_cpu_codegen=None):
-    """Assemble the recipe dict from the inputs of one build.
-
-    source           the model as the user named it - a URL or a path on disk.
-                     The recipe records what was ASKED for, not the local file a
-                     URL was downloaded to, so a repeat fetches the model afresh.
-    target           cpu or cuda
-    shape            the input-shape hint, e.g. "images:1,3,640,640", or None
-    name             the module's base name
-    tune             whether tuning was on (a bool; the tuning work directory is
-                     an output location, not a build input, so it is not recorded
-                     - a repeat places its own database)
-    trials_per_task  trials each tuning task got, or None
-    sm               the selected CUDA compute capability, or None
-    contract_input   the model-contract dict build_contract_input produced, or
-                     None when no task was given
-    provenance       the audit facts _gather_provenance built (source_hash,
-                     toolchain, built_at, ...), or None. The recipe is the input
-                     for a CI repeat, and recording the source's own hash, the
-                     toolchain that produced the module and the moment lets that
-                     repeat verify it fetched the SAME model and know what made the
-                     first one. These are provenance, not build knobs, so a repeat
-                     does not feed them back in - it takes fresh ones of its own.
-    license          the source model's licence, or None
-
-    Returns a plain dict of JSON-native types, ready for write_recipe. The audit
-    fields sit at the top level beside source (they describe the build as a whole,
-    like source does), never inside the contract section, so contract_from_recipe
-    is untouched and the recipe/manifest separation holds: none of these are the
-    manifest's built-contract keys (task_kind, artifact, io, format_version).
-    """
     sm = validate_target_sm(target, sm)
     if target_profile is not None:
         validate_recorded_profile(target_profile, target=target, req_sm=sm)
@@ -399,16 +345,12 @@ def build_recipe(source, target, shape, name, tune, trials_per_task, sm,
     if target_profile is not None:
         recipe['target_profile'] = target_profile
     if build_plan is not None:
-
-
         recipe['build_plan'] = build_plan
     if effective_cpu_codegen is not None:
         recipe['cpu_codegen_receipt_version'] = 1
         recipe['effective_cpu_codegen'] = validate_cpu_codegen_receipt(
             effective_cpu_codegen, build_plan)
     if facts.get('source_closure') is not None:
-
-
         recipe['source_closure'] = validate_selected_source_closure(
             facts['source_closure'])
     if facts.get('paddle_selected_source') is not None:
@@ -428,19 +370,11 @@ def build_recipe(source, target, shape, name, tune, trials_per_task, sm,
 
 
 def write_recipe(recipe, path):
-    """Write *recipe* to *path* as recipe.json - indented, UTF-8, LF endings.
-
-    newline='' keeps the newline characters json emits from being doubled into
-    CRLF on Windows, so the file is LF on every platform - the converter's own
-    convention, shared with its report and manifest writers. A trailing newline
-    terminates the last line.
-    """
     with open(path, "w", encoding="utf-8", newline="") as handle:
         handle.write(json.dumps(recipe, indent=2, ensure_ascii=False) + "\n")
 
 
 def _unique_recipe_pairs(pairs):
-    """Reject ambiguous JSON objects at any nesting depth on CLI replay."""
     result = {}
     for key, value in pairs:
         if key in result:
@@ -454,15 +388,6 @@ def _reject_nonstandard_recipe_constant(value):
 
 
 def read_recipe(path):
-    """Read a recipe.json back into a dict, with a soft version check.
-
-    Soft means: the file must declare a recipe_version - that is what tells a
-    recipe from any other JSON - but a version the reader does not recognise is
-    accepted rather than refused. The fields this reader needs may well still be
-    present, and turning a newer recipe away outright would help no one. A file
-    that is not a JSON object, or that carries no recipe_version, is not a recipe
-    and is refused by name rather than left to fail deep in a caller.
-    """
     with open(path, encoding="utf-8") as handle:
         recipe = json.load(handle, object_pairs_hook=_unique_recipe_pairs,
                            parse_constant=_reject_nonstandard_recipe_constant)
@@ -542,11 +467,6 @@ def read_recipe(path):
 
 def write_family_receipt(plan, output_directory, *, model_key, provenance,
                          license=None):
-    """Persist a native LLM build request without forging a numeric passport.
-
-    Shared by wizard and CLI. All four files use exclusive creation; there is
-    no atomic commit for the directory as a whole.
-    """
     validate_build_plan(plan)
     if plan['route'] != 'family_full_build':
         raise ValueError('family receipt needs a family_full_build BuildPlan')
@@ -608,14 +528,6 @@ def write_family_receipt(plan, output_directory, *, model_key, provenance,
 
 
 def contract_from_recipe(recipe):
-    """Rebuild the pipeline.run contract from a recipe's saved contract section.
-
-    A recipe stores the very dict build_contract_input produced. Feeding its
-    fields back through that same builder returns an equal dict AND re-applies the
-    builder's own gate - a task needs an adapter - so a hand-edited recipe cannot
-    smuggle a half-contract into a repeat. A recipe with no contract (no task was
-    given at build time) rebuilds to None, which is the no-manifest build.
-    """
     saved = recipe.get("contract")
     if not saved:
         return None

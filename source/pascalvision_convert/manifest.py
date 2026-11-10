@@ -1,79 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Write a model bundle manifest from a converter contract.
 
-The Pascal runtime reads the line-oriented ``manifest.txt``. Each structural
-line starts with its record type followed by ``field=value`` tokens. The JSON
-companion preserves the contract structure for tools. The writer uses the
-Python standard library.
-
-
-Contract schema
----------------
-A contract is a plain ``dict`` built from ``dict`` / ``list`` / ``str`` / ``int``
-/ ``float`` only, so it maps straight onto JSON and back. This one shape can
-express vision detectors, classifiers, segmenters, oriented boxes, pose, and
-text generation::
-
-    {
-        "format_version": 1,               # int, optional (defaults to 1)
-        "task_kind": "object_detection",   # str, required (the discriminator)
-        "adapter": "yolo11",               # str, required
-        "adapter_api_version": 1,          # int, required
-        "artifact": {                      # dict, required
-            "os": "windows",
-            "arch": "x86_64",
-            "device": "cpu",
-            "dtype": "float32",
-            "file": "yolo11n.cpu.dll",
-            "entry": "main",               # str, optional (LLM artifacts omit it)
-            "format": "so",
-        },
-        "io": {                            # dict, optional (an LLM's input is tokens)
-            "name": "images",
-            "shape": [1, 3, 640, 640],     # list[int]
-            "layout": "NCHW",              # NCHW | NHWC
-            "dtype": "float32",
-        },
-        # at most one task-specific vision section, where the task carries one:
-        "defaults": {                      # detection thresholds
-            "score_threshold": 0.25,
-            "nms_threshold": 0.45,         # optional (RT-DETR has no suppression)
-        },
-        "vision": {                        # per-channel normalisation (ImageNet nets)
-            "mean": [0.485, 0.456, 0.406],
-            "std": [0.229, 0.224, 0.225],
-        },
-        "pose": {"keypoint_count": 17},
-        # text generation carries text + tokenizer instead of io:
-        "text": {"context_window": 2048, "bos": 151643, "eos": 151645},
-        "tokenizer": {"style": "byte_bpe"},  # byte_bpe | sentencepiece
-    }
-
-The converter can record artifact hashes, source provenance, toolchain versions,
-and source licenses. The writer emits these fields when the contract supplies
-them::
-
-    "artifact": {..., "hash": "<sha256 hex of the built module>"},  # rides the
-                                    # artifact line as an extra token after format
-    "provenance": {                 # where the model came from and when
-        "source": "yolo11n.onnx",   # the source as recorded (a path or a URL)
-        "source_hash": "<sha256 hex>",       # optional: the source file's own hash
-        "built_at": "2026-09-06T12:00:00Z",  # optional: ISO 8601 UTC build time
-    },
-    "toolchain": {                  # what produced the module
-        "tvm": "0.26.0", "onnx": "1.22.0",
-        "tvm_runtime": "0.26.0",    # optional, only when it advertises a version
-    },
-    "license": "Apache-2.0",        # optional: the source model's licence
-
-The internal contract keys stay snake_case (source_hash, built_at, tvm_runtime),
-as score_threshold and adapter_api_version already are; the flat text renders them
-camelCase (sourceHash, builtAt, tvmRuntime), as scoreThreshold already is.
-
-The Pascal runtime accepts CRLF and LF. ``emit_manifest_text`` defaults to LF.
-Pass a CRLF string as the newline argument to write CRLF.
-"""
 
 import json
 import re
@@ -105,12 +32,6 @@ _OMDET_ASSETS = {
 
 
 def emit_manifest_text(contract, newline="\n"):
-    """Render *contract* as the flat ``manifest.txt`` the facade reads.
-
-    The result is byte-for-byte identical to a shipped bundle manifest when given
-    that file's *newline*. Every line, the last one included, is terminated by
-    *newline*.
-    """
     data = _validated(contract)
 
     lines = [
@@ -121,8 +42,6 @@ def emit_manifest_text(contract, newline="\n"):
         _artifact_line(data["artifact"]),
     ]
     if data["adapter"] == "omdet":
-
-
         lines.extend(_io_line(item) for item in data["io"])
         lines.extend(_omdet_output_line(item) for item in data["omdet_outputs"])
         lines.append(_omdet_line(data["omdet"]))
@@ -157,7 +76,6 @@ def emit_manifest_text(contract, newline="\n"):
 
 
 def emit_manifest_json(contract, indent=2):
-    """Render the validated model contract as JSON for external tools."""
     return json.dumps(_validated(contract), indent=indent, ensure_ascii=False)
 
 
@@ -199,7 +117,6 @@ def _io_line(io):
 
 
 def _output_line(output):
-    """One precisely checked fused output; no guessed dynamic tensor metadata."""
     return " ".join([
         "output",
         "name=%s" % output["name"],
@@ -263,11 +180,6 @@ def _tokenizer_line(tokenizer):
 
 
 def _provenance_line(provenance):
-    """Where the model came from and when. The source is always written; its own
-    hash and the build time follow only when the pipeline could take them (a
-    directory model has no file hash; both are best-effort). Values are rendered
-    verbatim, as file names already are - a URL, a path, a hex digest and an ISO
-    8601 timestamp carry no whitespace to break the token stream."""
     parts = ["provenance", "source=%s" % provenance["source"]]
     if provenance.get("source_hash") is not None:
         parts.append("sourceHash=%s" % provenance["source_hash"])
@@ -285,9 +197,6 @@ def _provenance_line(provenance):
 
 
 def _toolchain_line(toolchain):
-    """What produced the module. tvm and onnx are always written (the pipeline
-    records ``unknown`` when a package will not import rather than dropping the
-    field); tvm.runtime is written only when it advertises its own version."""
     parts = [
         "toolchain",
         "tvm=%s" % toolchain["tvm"],
@@ -299,24 +208,16 @@ def _toolchain_line(toolchain):
 
 
 def _license_line(license_value):
-    """The source model's licence, written as the bare rest of the line - like
-    the labels line - so a value with spaces (a full licence name) survives. The
-    facade skips the unknown ``license`` key, so this is informational."""
     return "license %s" % license_value
 
 
 def _integer(value):
-    """An integer field, rendered bare. ``bool`` is refused: it is an ``int``
-    subclass, and letting True through as ``1`` would hide a contract mistake."""
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError("expected an int, got %r" % (value,))
     return str(value)
 
 
 def _number(value):
-    """A numeric field: an ``int`` bare, a ``float`` as the shortest decimal that
-    round-trips. ``repr`` gives that shortest form, always with a dot separator -
-    which is what the facade's invariant-locale parser expects."""
     if isinstance(value, bool):
         raise TypeError("expected a number, got a bool")
     if isinstance(value, int):
@@ -335,9 +236,6 @@ def _number_csv(values):
 
 
 def _validated(contract):
-    """Check that *contract* carries the fields every manifest needs, then return
-    it unchanged. A missing field is a caller error, reported by name rather than
-    left to surface as a cryptic ``KeyError`` deep in a line writer."""
     if not isinstance(contract, dict):
         raise TypeError("contract must be a dict, not %s" % type(contract).__name__)
     _require(contract, _REQUIRED_FIELDS, "contract")
@@ -401,15 +299,12 @@ def _validated(contract):
             any(ord(char) < 32 or ord(char) == 127 or
                 char in '\u0085\u2028\u2029'
                 for char in license_value)):
-
-
         raise ValueError("contract['license'] must be one bounded text line")
 
     return contract
 
 
 def _validate_omdet(contract):
-    """Validate the four-input OmDet Tiny manifest used by Pascal."""
     optional = {"provenance", "toolchain", "license"}
     required = {"format_version", "task_kind", "adapter", "adapter_api_version",
                 "artifact", "io", "omdet_outputs", "omdet"}

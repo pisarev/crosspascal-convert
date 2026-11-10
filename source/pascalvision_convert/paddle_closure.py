@@ -1,27 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Read-only, bounded selected Paddle inference resource inventory.
 
-Exactly one local inference.json (PIR) OR inference.pdmodel (opaque legacy
-graph), plus inference.pdiparams, is mandatory. Only known, present optional
-inference.pdiparams.info, config.yml/.yaml and inference.yml/.yaml are selected.
-Recognition (role='rec') additionally REQUIRES a caller-selected, absolute
-dictionary reference; neither a guessed filename nor an inference.yml path
-can select it implicitly. Detection (role='det') has no dictionary.
-
-This stdlib-only pilot hashes these *selected* files in <=1MiB chunks and
-includes the exact dictionary provenance in a deterministic versioned tree
-SHA. It inspects supported JSON/YAML reference names conservatively and
-refuses unclosed/ambiguous resources. It CANNOT parse all Paddle operators,
-Paddle legacy binary graphs, opaque .pdiparams.info or general YAML semantics;
-an unrecognised, independently referenced external asset is NOT proven closed.
-No file is copied, locked, opened for writing, modified or removed here.
-
-SCANNED_NOT_LOCKED is NOT a Preview source pin, pinned model revision,
-compiler-held Win32 stage, WSL exporter compatibility proof, immutable byte
-snapshot, target execution, trained-model oracle, human OCR ground truth, CTC
-dictionary/class count validation, VERIFIED receipt, or release approval.
-"""
 
 from __future__ import annotations
 
@@ -71,11 +50,11 @@ _REPARSE = getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400)
 
 
 class PaddleClosureError(ValueError):
-    """Unsafe/unknown Paddle resources cannot be represented by this scanner."""
+    pass
 
 
 class PaddleClosureChanged(PaddleClosureError):
-    """Selected Paddle source or dictionary bytes differ from an approved SHA."""
+    pass
 
 
 def _deny(reason):
@@ -200,25 +179,21 @@ def _checked_file(path, *, limit):
 
 
 def _identity(info):
-
     return (info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns,
             info.st_dev, info.st_ino, info.st_nlink)
 
 
 def _descriptor_identity(info):
-
     return (info.st_mode, info.st_size, info.st_mtime_ns,
             info.st_dev, info.st_ino, info.st_nlink)
 
 
 def _root_identity(info):
-
     return info.st_mode, info.st_dev, info.st_ino
 
 
 def _hash_file(path, *, info=None, max_bytes=MAX_TOTAL_BYTES,
                block_bytes=MAX_BLOCK_BYTES):
-    """Full-stream SHA of one selected regular inode; never buffer the tensor."""
     first = info if info is not None else _checked_file(path, limit=max_bytes)
     if first.st_size > max_bytes:
         _deny('Paddle selected source quota exceeded before streaming SHA')
@@ -323,7 +298,6 @@ def _json_scalar_safe(value):
 
 def _reference_allowed(field, value, *, graph_file, role, dictionary_name,
                        dictionary_local, selected):
-    """A path-bearing metadata key MUST refer to a known selected resource."""
     if value is None or value == '':
         return
     if type(value) is not str:
@@ -422,14 +396,6 @@ def _inspect_json_graph(raw, *, graph_file, role, dictionary_name,
 def _inspect_server_export_yaml(source, *, role, dictionary_tokens,
                                 graph_file, dictionary_name,
                                 dictionary_local, selected):
-    """Strict subset used by genuine PP-OCRv5 Server Det/Rec inference.yml.
-
-    Only a single local TensorRT shape anchor+matching alias is permitted;
-    arbitrary YAML tags/aliases still fail closed. Rec's large embedded
-    character_dict must have exactly the *same ordered Unicode characters*
-    as the separately chosen SHA-pinned external Pascal CTC dictionary.
-    No broad YAML interpreter, implicit dictionary or network dependency.
-    """
     lines = source.splitlines()
     model_name = '  model_name: PP-OCRv5_server_' + role
     if (lines[:2] != ['Global:', model_name] or
@@ -463,7 +429,6 @@ def _inspect_server_export_yaml(source, *, role, dictionary_tokens,
                     _deny('Rec YAML has noncanonical quoted dictionary character')
                 scalar = scalar[1:-1].replace("''", "'")
             elif not scalar or scalar.startswith((' ', '\t')):
-
                 _deny('Rec YAML has ambiguous ASCII-spaced character scalar')
             if scalar != dictionary_tokens[index]:
                 _deny('Rec YAML embedded character differs from selected dictionary')
@@ -507,7 +472,6 @@ def _inspect_server_export_yaml(source, *, role, dictionary_tokens,
 
 def _inspect_yaml(raw, *, graph_file, role, dictionary_name,
                   dictionary_local, selected, dictionary_tokens=None):
-    """Conservative reference check, NOT a general-purpose YAML parser."""
     try:
         source = raw.decode('utf-8-sig')
     except UnicodeError as error:
@@ -541,8 +505,6 @@ def _inspect_yaml(raw, *, graph_file, role, dictionary_name,
             _deny('unsafe YAML anchors/tags/flow collection or ambiguous syntax')
         match = _YAML_KEY_VALUE.match(stripped)
         if match is None:
-
-
             if _resource_key(stripped):
                 _deny('unparseable Paddle YAML resource reference')
             continue
@@ -624,13 +586,6 @@ def scan_selected_paddle_source(directory, *, role, dictionary=None,
                                 expected_dictionary_sha256=None,
                                 max_total_bytes=MAX_TOTAL_BYTES,
                                 block_bytes=MAX_BLOCK_BYTES):
-    """Deterministic strict allowlist of local Paddle assets, WITHOUT locking.
-
-    'role' is required det/rec; for rec 'dictionary' must be a full canonical
-    local file path explicitly chosen by the caller. For det it must be None.
-    A previous expected_dictionary_sha256 is optional for first inventory and
-    checked when supplied; the required full-tree pin belongs to audit().
-    """
     if type(role) is not str or role not in ('det', 'rec'):
         _deny('Paddle role must explicitly be det or rec')
     if role == 'det' and dictionary is not None:
@@ -670,7 +625,6 @@ def scan_selected_paddle_source(directory, *, role, dictionary=None,
             sizes[dictionary_relative] = _checked_file(
                 dictionary_path, limit=MAX_DICTIONARY_BYTES)
         except PaddleClosureError as error:
-
             raise PaddleClosureError(
                 'recognition dictionary path refused: %s' % error) from error
         total += sizes[dictionary_relative].st_size
@@ -693,8 +647,6 @@ def scan_selected_paddle_source(directory, *, role, dictionary=None,
 
     dictionary_tokens = None
     if dictionary_path is not None:
-
-
         raw_dictionary = _read_metadata(
             dictionary_path, size_limit=MAX_DICTIONARY_BYTES,
             approved_sha=hashed[dictionary_relative]['sha256'],
@@ -764,13 +716,6 @@ def scan_selected_paddle_source(directory, *, role, dictionary=None,
 
 def audit_selected_paddle_source(directory, *, role, expected_tree_sha256,
                                  dictionary=None):
-    """Read-only rescan; refuse a source different from an earlier approved tree.
-
-    A matching digest does not hold bytes stable between this audit and a
-    converter opening them. Private stage/held handles and WSL exact-path
-    replay, complete dependency analysis, model numerics and CTC verification
-    remain separate mandatory product tasks.
-    """
     approved = _sha(expected_tree_sha256)
     current = scan_selected_paddle_source(
         directory, role=role, dictionary=dictionary)

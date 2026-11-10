@@ -1,10 +1,9 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""CPU vision schedules for NCHW convolutions, normalization and dot products."""
+
 from tvm import s_tir, tirx
 
 
 def _schedule_channel_norm(func):
-    """Keep channel reductions ordered, but read adjacent image pixels together."""
     schedule = s_tir.Schedule(func)
     root = schedule.get_sblock("root", func_name="main")
     blocks = list(schedule.get_child_blocks(root))
@@ -23,8 +22,8 @@ def _schedule_channel_norm(func):
             reductions.append(block)
     if len(reductions) != 1:
         return None
-                                                                                 
-                                                                            
+
+
     for block in reversed(blocks[:-1]):
         if all(int(v.iter_type) == 0 for v in schedule.get(block).iter_vars):
             schedule.compute_inline(block)

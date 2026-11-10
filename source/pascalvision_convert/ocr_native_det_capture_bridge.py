@@ -1,10 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Read-only SHA/contract admission of a supplied Pascal Det raw capture.
 
-Even a matching receipt is untrusted, not executed/attested native evidence.
-This module never launches inference or issues root acceptance, manifest or READY.
-"""
 
 from __future__ import annotations
 
@@ -21,7 +17,7 @@ from . import ocr_ort_raw_capture as raw
 
 
 class NativeDetCaptureRefused(ValueError):
-    """The supplied Pascal Det capture cannot be bound to this OCR DRAFT."""
+    pass
 
 
 _STATUS = "NATIVE_DET_RAW_CAPTURE_ONLY"
@@ -430,7 +426,6 @@ def _inspect(bundle, capture_dir, stage):
 
 
 def inspect_native_det_capture(bundle, capture_dir, stage="det") -> dict:
-    """Inspect untrusted captured bytes, without writes or model execution."""
     try:
         return _inspect(bundle, capture_dir, stage)
     except NativeDetCaptureRefused:

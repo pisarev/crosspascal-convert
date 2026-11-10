@@ -1,16 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""READ-ONLY paired scalar check of supplied original ORT and Pascal Det tensors.
 
-This deliberately compares only ONE preexisting Det raw probability map.
-Matching files cannot independently attest ORT/Pascal process, runtime origin,
-image preprocessing or Det, Rec and CTC/human ground truth. No model is launched,
-no evidence is written, and neither Facade manifests nor READY can be issued.
-
-Both model SHA-256 pins must be selected outside either producer receipt.
-Original model copy + preprocessed input + complete ORT output inventory are
-checked by the existing strict original raw producer receipt verification.
-"""
 
 from __future__ import annotations
 
@@ -28,7 +18,7 @@ from . import ocr_ort_raw_capture as raw
 
 
 class DetPairwiseRefused(ValueError):
-    """Supplied Det-only capture pair is contradictory, missing or unsafe."""
+    pass
 
 
 _RECIPE_MAX_BYTES = 2 * 1024 * 1024
@@ -309,7 +299,6 @@ def inspect_det_pair(native_capture_dir, ort_capture_dir, *,
                      native_model, original_onnx,
                      expected_native_sha256, expected_original_sha256,
                      output_name) -> dict:
-    """Inspect existing capture bytes only; no process, output or READY writes."""
     try:
         return _inspect(
             native_capture_dir, ort_capture_dir,
@@ -329,7 +318,6 @@ def inspect_det_pair(native_capture_dir, ort_capture_dir, *,
 
 
 def main(argv=None) -> int:
-    """Public read-only supplied-capture checker; even scalar match exits 2."""
     parser = argparse.ArgumentParser(
         prog="pascalvision-convert ocr-det-pairwise",
         description=("SHA-pin and compare every supplied original ORT/native "

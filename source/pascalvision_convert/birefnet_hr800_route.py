@@ -1,12 +1,7 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Explicit full BiRefNet HR800 SwinL held-source CLI route.
 
-The route binds three selected caller-approved assets to the existing TVM
-pipeline. It makes no trained/full-checkpoint authenticity, native Pascal,
-original PyTorch numeric, human GT, READY or release claims. Exit2 is an
-advisory source/compile result rather than a success verification tier.
-"""
+
 from __future__ import annotations
 
 import argparse
@@ -49,7 +44,7 @@ TRAINED_HR800_WIN64_CPU_RUNTIME_PINS = {
 
 
 class HR800RouteRefused(ValueError):
-    """Selected HR800 resource receipt was not approved/kept under custody."""
+    pass
 
 
 def _positive_source(path, role):
@@ -90,15 +85,6 @@ def _private_stage_parent(source_root, requested_output):
 @contextmanager
 def _hold_output_directory(path, *, final_receipt=None,
                            final_receipt_name="birefnet-selected-source.json"):
-    """Create output under a Win32-held parent, then hold the output FileID.
-
-    The parent is pinned BEFORE the first create-only mkdir. No process may
-    swap it for a junction/ordinary directory while our output is acquired.
-    Keep both handles until after the final exclusive receipt. An optional
-    selected-only final receipt is written AFTER the last directory FileID
-    audit; a failed audit must never leave the positive public receipt name.
-    This is not a release-grade atomic/durable artifact publication contract.
-    """
     if not source_lock._is_windows():
         raise HR800RouteRefused("native Windows NTFS output directory custody required")
     api = source_lock._Kernel32()
@@ -168,7 +154,6 @@ def _hold_output_directory(path, *, final_receipt=None,
         yield api, locks
         audit()
         if final_receipt is not None:
-
             if len(final_receipt) != 1:
                 raise HR800RouteRefused("HR800 final receipt was not approved for publication")
             public_path, public_bytes = final_receipt[0]
@@ -217,11 +202,6 @@ def _copy_held_sidecar(stage_file, output_file, expected_sha, expected_size):
 
 
 def _pin_output_sidecar(api, locks, path, member):
-    """Keep the actual published JSON leaf immutable until receipt is written.
-
-    A held output directory protects its own name, not arbitrary child files.
-    The selected source handles must already be held by the caller.
-    """
     source_freeze._safe_ancestors(path)
     handle = api.open(path)
     locks.callback(api.close, handle)
@@ -244,11 +224,6 @@ def _audit_pinned_output_sidecars(api, leaves):
 
 
 def _write_receipt_bytes_exclusive(path, body):
-    """Create-only selected receipt bytes; never replace a prior owner file.
-
-    This file write is intentionally not described as atomic publication.
-    Validation of an *unissued* candidate happens before the public-name call.
-    """
     with path.open("xb") as handle:
         handle.write(body)
         handle.flush()
@@ -256,12 +231,6 @@ def _write_receipt_bytes_exclusive(path, body):
 
 
 def _pin_compiler_output(api, locks, path, *, max_bytes):
-    """Bind output leaf FileID+SHA to an actual held Win32 descriptor.
-
-    The directory handle holds its *own* name, not the module/DLL/inputs leaf.
-    This is a post-compiler output custody receipt, NOT cryptographic proof
-    of which native toolchain produced these bytes or their future retention.
-    """
     source_freeze._safe_ancestors(path)
     before = source_freeze._lstat(path)
     if (not stat.S_ISREG(before.st_mode) or
@@ -286,13 +255,6 @@ def _pin_compiler_output(api, locks, path, *, max_bytes):
 
 
 def _prestage_exact_trained_hr800_win64_cpu_runtime(output, api, locks):
-    """Hold a genuine, exact wheel closure before compiling official HR800.
-
-    Every source, right and destination member is checked before copying.
-    A partial failed copy stays in its unique output as diagnostic evidence;
-    no final selected receipt is issued. The unmodified runtime.place must
-    still read and independently verify the already-held destination bytes.
-    """
     if os.name != "nt":
         raise HR800RouteRefused("HR800 exact CPU wheel pre-stage requires Win32")
     inventory, libraries, licences = runtime._plan_runtime_files(
@@ -358,13 +320,6 @@ def _prestage_exact_trained_hr800_win64_cpu_runtime(output, api, locks):
 
 
 def _check_no_foreign_loadables(output, compiled_module, target, *, exact_wheel):
-    """Reject executable DLL-search sidecars outside this selected output set.
-
-    A Win32-held directory protects the directory FileID, not arbitrary newly
-    created children. Check before runtime/verify and again before the receipt.
-    This inspection narrows injection windows; it is NOT a release-grade
-    immutable ACL or an atomic namespace snapshot.
-    """
     expected = {compiled_module.name.casefold()}
     if exact_wheel:
         expected.update(name.casefold()
@@ -407,12 +362,6 @@ def _trusted_tasklist_path():
 
 
 def _admit_hr800_heavy_source_resources(model_bytes):
-    """Fail before parsing/compiling a large held ONNX on an unsafe host.
-
-    The caller's external watchdog must still enforce a wall-clock budget on
-    the native compiler subprocess. A synchronous Python CLI cannot safely
-    cancel an in-process TVM native call after a timeout.
-    """
     if model_bytes <= 64 * 1024 ** 2:
         return
     from . import detect
@@ -458,11 +407,6 @@ def _admit_hr800_heavy_source_resources(model_bytes):
 
 
 def preview_main(argv=None):
-    """Read-only user-visible three-member selection for explicit SHA approval.
-
-    A Preview is neither a Win32 lock nor model provenance/verification. Build
-    must rescan and match exactly the SHA that the user subsequently approves.
-    """
     parser = argparse.ArgumentParser(
         prog="pascalvision-convert birefnet-hr800-preview",
         description="Read-only selected HR800 SwinL resources and approval SHA")
@@ -472,7 +416,6 @@ def preview_main(argv=None):
     try:
         args = parser.parse_args(argv)
     except SystemExit as error:
-
         return 0 if error.code == 0 else 1
     try:
         selected = birefnet_hr800_snapshot.scan_selected_hr800(
@@ -502,8 +445,6 @@ def main(argv=None):
     try:
         args = parser.parse_args(argv)
     except SystemExit as error:
-
-
         return 0 if error.code == 0 else 1
 
     try:
@@ -547,13 +488,6 @@ def main(argv=None):
             expected_inputs = output / (expected_module.name + ".inputs")
 
             def hold_compiled_at_build_done(step):
-                """Pin the actual compiler leaves BEFORE runtime/verify use them.
-
-                pipeline invokes on_step synchronously at the completed build
-                boundary, before runtime.place, device verify or provenance.
-                Output-directory custody alone cannot prevent a child DLL
-                replacement; keep both leaf FileIDs/SHAs held through receipt.
-                """
                 if (getattr(step, "name", None) != "Building the module" or
                         getattr(step, "state", None) != "done"):
                     return

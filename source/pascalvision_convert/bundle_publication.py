@@ -1,12 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Publish a bounded, complete RAW kit on NTFS after validation.
 
-The worker compiles into a private sibling directory and calls this module only
-AFTER compiler/independent Verify and every selected-source Win32 post-lock audit.
-There is no persisted READY marker: an interrupted process cannot resurrect an
-unreviewed directory. A successful receipt proves a namespace commit, NOT power
-loss durability, release-grade immutable bytes or end-device acceptance.
-"""
 
 from __future__ import annotations
 
@@ -26,7 +19,7 @@ from .recipe_file import read_recipe
 
 
 class UnsafePublication(ValueError):
-    """The caller must not expose a ZIP or report download_ready after refusal."""
+    pass
 
 MAX_RETAINED_ATOMIC_STAGES_PER_PARENT = 16
 MAX_ATOMIC_PARENT_SCAN_ENTRIES = 16384
@@ -37,12 +30,6 @@ _RETAINED_SOURCE_SNAPSHOT = re.compile(r'.+\.source-freeze-[0-9a-f]{24}\Z')
 
 @contextmanager
 def _cross_process_atomic_admission(parent):
-    """Win32 named mutex: serialize per-parent scan+mkdir across processes.
-
-    No lockfile is created/reclaimed, and a crashed owner leaves no disk file
-    requiring unsafe deletion. An abandoned mutex is usable ONLY after the
-    admission scan executes again. Future compiler growth is not reserved.
-    """
     if os.name != 'nt':
         raise UnsafePublication('cross-process atomic stage admission requires Win32')
     import ctypes
@@ -82,20 +69,10 @@ def _cross_process_atomic_admission(parent):
                 raise UnsafePublication(
                     'Win32 atomic stage admission mutex release failed')
         finally:
-
-
             api.CloseHandle(handle)
 
 
 def _admit_private_atomic_stage(parent, *, capacity_profile='raw'):
-    """Reserve BOTH output and future source-snapshot slots for one RAW Build.
-
-    Every admitted atomic RAW Build creates a private output stage and may
-    later retain a separate source-freeze sibling. Count an existing output
-    stage as TWO occupied slots, including its not-yet-created snapshot; a
-    visible snapshot consumes one. Double counting when both already exist
-    is deliberately conservative and never confers deletion rights.
-    """
     if capacity_profile not in ('raw', 'native_family'):
         raise UnsafePublication('unsupported atomic stage capacity profile')
     occupied_slots = 0
@@ -145,12 +122,6 @@ def _admit_private_atomic_stage(parent, *, capacity_profile='raw'):
 
 
 def _validate_windows_pe_dll(path, *, target_arch):
-    """Bounded PE32+ structural/CPU-machine preflight, never an execution oracle.
-
-    This is a necessary gate before publishing an unchecked Windows DLL:
-    source-integrity hashes and a .dll basename alone cannot prove the compiler
-    produced a Windows binary for the approved destination architecture.
-    """
     machines = {'x86_64': 0x8664, 'arm64': 0xAA64}
     expected = machines.get(target_arch)
     if expected is None:
@@ -217,7 +188,6 @@ def _finite_json_float(token):
 
 
 def _strict_recipe(path):
-    """Review bounded unambiguous JSON *before* the legacy recipe validator."""
     with open(path, 'rb') as source:
         raw = source.read(1024 * 1024 + 1)
     if not 0 < len(raw) <= 1024 * 1024 or raw.startswith(b'\xef\xbb\xbf'):
@@ -235,7 +205,6 @@ def _strict_recipe(path):
 
 
 def _validate_native_inputs(path):
-    """Bounded RAW multi-input TSV check; do not imply a Pascal adapter exists."""
     with open(path, 'rb') as source:
         raw = source.read(65537)
     if not 0 < len(raw) <= 65536 or not raw.endswith(b'\n') or b'\r' in raw:
@@ -262,13 +231,6 @@ def _validate_native_inputs(path):
 
 
 def expected_native_inputs(model_path, model_format, shape=None):
-    """Pin the converter's native IO ABI to actual *selected compiler input*.
-
-    This is evaluated while the Preview-approved private model file is held by
-    Win32 source_lock, before the compiler runs. The output .inputs sidecar is
-    never trusted to describe itself. It is a structural IO check, NOT native
-    loader execution or independent numerical evidence.
-    """
     from . import convert, detect, pipeline
 
     if not isinstance(model_path, str) or not os.path.isfile(model_path):
@@ -318,7 +280,6 @@ def expected_native_inputs(model_path, model_format, shape=None):
 
 
 def _checked_source_entries(entries):
-    """Validate exact approved RAW source file/sidecar paths and full SHAs."""
     if not isinstance(entries, list) or not 1 <= len(entries) <= 64:
         raise UnsafePublication('approved RAW source file-set has invalid entry count')
     selected = []
@@ -363,14 +324,6 @@ def _checked_source_entries(entries):
 
 
 def stage_approved_sources(output_stage, locked_source_stage, source_entries):
-    """Copy every approved RAW model/sidecar under bundle/source while LOCKED.
-
-    Caller holds ALL native Win32 selected source file handles through this copy
-    and later post-lock audit. The copy has its own byte-exact SHA and fsync;
-    neither copy nor SHA means power-loss durable or release-grade immutable.
-    An exception leaves ONLY a private unpublished stage; no cleanup of owner
-    files, no fallback to references in the original model directory.
-    """
     entries = _checked_source_entries(source_entries)
     destination = Path(bundle_atomic._local_absolute(output_stage))
     origin = source_freeze._absolute_path(locked_source_stage, 'selected source stage')
@@ -413,7 +366,6 @@ def stage_approved_sources(output_stage, locked_source_stage, source_entries):
 
 def create_private_stage(destination, *, on_created=None, on_intent=None,
                          capacity_profile='raw'):
-    """Exclusively create a same-parent NTFS stage; never claim the final name."""
     final = bundle_atomic._local_absolute(destination)
     parent = os.path.dirname(final)
     bundle_atomic._guard_existing_ancestors(parent)
@@ -459,7 +411,6 @@ def create_private_stage(destination, *, on_created=None, on_intent=None,
 def _validate_kit(stage, report, target, approved_source, expected_model_sha256,
                   expected_input_manifest, expected_source_entries,
                   closure_sha, closure):
-    """Bind exact compiled bytes, wheel runtime, licence, plan and source receipt."""
     if target not in ('cpu', 'cuda') or not report.sound:
         raise UnsafePublication('failed or invalid compiler report cannot commit')
     if report.summary.get('verification_status') not in ('NOT_CHECKED', 'VERIFIED_LOCAL'):
@@ -524,7 +475,6 @@ def _validate_kit(stage, report, target, approved_source, expected_model_sha256,
 
     required = {module_name, module_name + '.inputs', 'recipe.json', 'report.txt'}
     if has_contract:
-
         if verification != 'VERIFIED_LOCAL':
             raise UnsafePublication('Pascal manifest needs independently '
                                     'VERIFIED_LOCAL native model acceptance')
@@ -696,11 +646,6 @@ def commit_verified_stage(stage, destination, report, target, approved_source,
                           expected_source_entries,
                           closure_sha=None, closure=None,
                           on_validated_precommit=None):
-    """Commit the complete stage after all validations, with no final replacement.
-
-    This function never removes a previous final path. The caller must have
-    reserved this output *in memory*, not by creating a directory on disk.
-    """
     if os.path.lexists(destination):
         raise UnsafePublication('final output already occupied; no replacement')
     inventory, required = _validate_kit(
@@ -708,7 +653,6 @@ def commit_verified_stage(stage, destination, report, target, approved_source,
         expected_input_manifest, expected_source_entries,
         closure_sha, closure)
     if on_validated_precommit is not None:
-
         on_validated_precommit(stage, destination, inventory)
     receipt = bundle_atomic.commit_staged_bundle(
         stage, destination, inventory, required_files=required)
@@ -717,12 +661,6 @@ def commit_verified_stage(stage, destination, report, target, approved_source,
 
 def inspect_selected_native_consumer_kit(directory, *, model_key, device,
                                          expected_tree_sha256=None):
-    """Bound a caller-selected tokenizer/runtime/licence input tree exactly.
-
-    A full SHA snapshot is a build input declaration, NOT an executable/native
-    provenance check or redistribution-rights attestation. Nothing is copied,
-    published or deleted by this read-only scanner.
-    """
     from . import llm_bundle_contract
     profiles = llm_bundle_contract._FAMILIES
     if model_key not in profiles or device not in ('cpu', 'cuda'):
@@ -742,8 +680,8 @@ def inspect_selected_native_consumer_kit(directory, *, model_key, device,
     qwen_licenses = {
         'qwen2.5-0.5b': 'LICENSE-Qwen2.5-0.5B-Instruct.txt',
         'qwen2.5-1.5b': 'LICENSE-Qwen2.5-1.5B-Instruct.txt',
-                                                                            
-                                                                        
+
+
         'qwen2-compatible-local': 'LICENSE-Qwen2.5-0.5B-Instruct.txt',
     }
     model_files = ({qwen_licenses[model_key], 'MODEL-SOURCE.json'}
@@ -756,9 +694,8 @@ def inspect_selected_native_consumer_kit(directory, *, model_key, device,
         raise UnsafePublication('unapproved or incomplete selected native consumer kit')
     if model_key == 'qwen2-compatible-local':
         from .model_sources import catalog_model
-                                                                      
-                                                                             
-                                                                             
+
+
         official_kit = catalog_model('qwen2.5-0.5b')
         pin = official_kit['license_file']
         name = qwen_licenses[model_key]
@@ -769,9 +706,6 @@ def inspect_selected_native_consumer_kit(directory, *, model_key, device,
             raise UnsafePublication('generic Qwen requires an intact selected '
                                     'Qwen tokenizer/runtime kit, not an unlicensed relabel')
     if model_key == 'qwen2.5-1.5b':
-        
-        
-        
         from .model_sources import catalog_model
         from pathlib import Path
         official = catalog_model(model_key)
@@ -812,11 +746,6 @@ def inspect_selected_native_consumer_kit(directory, *, model_key, device,
 
 def stage_selected_native_consumer_kit(source_directory, private_stage,
                                        approved_inventory, *, model_key, device):
-    """Exclusively copy a selected flat consumer kit into an EMPTY private stage.
-
-    The original stays untouched; partial errors retain the stage for inspection.
-    Full source/target SHA checks are point-in-time, not held Win32 custody.
-    """
     if not isinstance(approved_inventory, bundle_atomic.Inventory):
         raise UnsafePublication('selected native consumer kit lacks approved Inventory')
     origin = bundle_atomic._local_absolute(source_directory)
@@ -870,7 +799,6 @@ _QWEN_KIT_LOCK = threading.Lock()
 
 
 def select_installed_qwen15_kit(source, cache_directory):
-    """Use the installed runtime and shared Qwen tokenizer with 1.5B provenance."""
     try:
         inventory = inspect_selected_native_consumer_kit(
             source, model_key='qwen2.5-1.5b', device='cuda')
@@ -944,7 +872,6 @@ def select_installed_qwen15_kit(source, cache_directory):
 
 def commit_native_family_stage(stage, destination, plan, *, model_key,
                                approved_consumer_inventory=None):
-    """Validate the native family kit and atomically expose its entire tree."""
     if os.path.lexists(destination):
         raise UnsafePublication('native family final output already occupied')
     from .llm_bundle_contract import validate_llm_output
@@ -1004,8 +931,6 @@ def commit_native_family_stage(stage, destination, plan, *, model_key,
         stage, destination, inventory, required_files=required,
         max_bytes=bundle_atomic.MAX_NATIVE_FAMILY_BYTES)
     if approved_consumer_inventory is not None:
-
-
         final_inventory = bundle_atomic.scan_bundle_tree(
             destination, max_bytes=bundle_atomic.MAX_NATIVE_FAMILY_BYTES)
         final_files = {member.path: member for member in final_inventory.members

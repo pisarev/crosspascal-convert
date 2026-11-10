@@ -1,13 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Selected HF tokenizer.json -> exact Pascal native tokenizer byte closure.
 
-This compares the output of the EXISTING Qwen/Gemma tokenizer-export formats
-with the selected consumer kit while the caller holds both PRIVATE source
-and native kit through Win32 read/share-only descriptors. A matching byte
-closure is NOT model numeric/Pascal UAT, a signed checkpoint revision, or a
-redistribution licence. No owner source or consumer files are modified.
-"""
 
 from __future__ import annotations
 
@@ -27,7 +20,7 @@ MAX_TOKENIZER_MERGES = 1000000
 
 
 class HfTokenizerConsumerMismatch(ValueError):
-    """Native tokenizer kit does not match the approved HF tokenizer bytes."""
+    pass
 
 
 def _refuse(reason):
@@ -90,7 +83,6 @@ def _flatten_tokens(raw):
 
 
 def _gpt2_backmap():
-
     visible = (list(range(ord("!"), ord("~") + 1))
                + list(range(ord("\xa1"), ord("\xac") + 1))
                + list(range(ord("\xae"), ord("\xff") + 1)))
@@ -118,8 +110,6 @@ def _qwen_bytes(spec, vocab, ordered, merges):
         if len(piece) == 1:
             single.add(piece[0])
     if len(single) != 256:
-
-
         _refuse("Qwen BPE lacks complete 256-byte single-token alphabet")
     tokens, index = _flatten_tokens(raw)
     triples, count = _merges(vocab, merges)
@@ -223,7 +213,6 @@ def _gemma_bytes(spec, vocab, ordered, merges):
 
 
 def derive_pascal_tokenizer_bytes(model_key, spec):
-    """Reproduce the legacy exported Pascal bytes with zero file writes."""
     if model_key not in ("qwen2.5-0.5b", "qwen2.5-1.5b",
                          "qwen2-compatible-local", "gemma-2-2b"):
         _refuse("unsupported Pascal tokenizer model family")
@@ -255,12 +244,6 @@ def derive_pascal_tokenizer_bytes(model_key, spec):
 
 def bind_held_native_pascal_tokenizer(stage_hf, stage_native, selected_hf_entries,
                                       approved_consumer_inventory, *, model_key):
-    """Byte-bind selected held HF tokenizer to already-held selected native kit.
-
-    The invoking caller must hold EVERY private HF and consumer-kit file under
-    Win32 read/share-only handles from before this check through native child
-    exit. This verifies content identity now; it cannot verify Pascal runtime.
-    """
     if not isinstance(approved_consumer_inventory, bundle_atomic.Inventory):
         _refuse("independently selected consumer Inventory is required")
     if not isinstance(selected_hf_entries, list):

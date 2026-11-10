@@ -1,8 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Convert ONNX and TFLite models to compiled TVM Relax modules.
 
-TVM and model importers are loaded when conversion starts.
-"""
+
 from __future__ import annotations
 
 import contextlib
@@ -19,8 +17,6 @@ from . import targets, tuning
 
 
 class TuningRequest:
-    """Tuning tasks and their trial budget for one build."""
-
     __slots__ = ('tasks', 'per_task', 'total_trials', 'work_dir', 'reuse')
 
     def __init__(self, tasks: int, per_task: int, total_trials: int,
@@ -38,16 +34,11 @@ class TuningRequest:
 
 def plan_tuning(mod, tvm_target, work_dir: str,
                 per_task: int = tuning.DEFAULT_TRIALS_PER_TASK) -> TuningRequest:
-    """Count tuning tasks and derive the total trial budget."""
-
-
     tuning.refuse_on_windows()
     tuning.refuse_without_packages()
     tasks, _ = tuning.count_tasks(mod, tvm_target)
     ready = tuning.coverage(work_dir, tasks)
     if ready['complete'] and ready['workloads'] == tasks:
-
-
         return TuningRequest(tasks=tasks, per_task=per_task, total_trials=0,
                              work_dir=work_dir, reuse=True)
     return TuningRequest(
@@ -65,13 +56,6 @@ class Target(str, Enum):
 
 
 def _normalize_selected_rec_identity_nodes(onnx_model) -> int:
-    """Erase identity-only edges in the SHA-selected PP-OCRv5 Server Rec graph.
-
-    This is an in-memory, algebraically exact ONNX transformation: Identity
-    never changes its input tensor. Preserve public graph output names, refuse
-    nested subgraphs, and do not silently accept a different selected graph.
-    The original ONNX file and all trained weights remain unchanged.
-    """
     import onnx
 
     nodes = onnx_model.graph.node
@@ -108,10 +92,6 @@ def _normalize_selected_rec_identity_nodes(onnx_model) -> int:
 
 @contextlib.contextmanager
 def _selected_rec_safe_cuda_compiler(enabled: bool):
-    """Use NVCC without fast math for the selected recognition model.
-
-    Restore the caller environment when the build finishes or raises.
-    """
     if not enabled:
         yield
         return
@@ -141,12 +121,6 @@ def convert_onnx(
     cpu_codegen_target=None,
     cpu_codegen_receipt=None,
 ) -> str:
-    """Compile an ONNX model and return the exported library path.
-
-    Input shape overrides use ONNX graph input names.
-    """
-
-
     req_sm = targets.validate_target_sm(target, req_sm)
     if cpu_codegen_target is not None:
         if (target != Target.CPU or not tune_work_dir or
@@ -232,13 +206,6 @@ def convert_onnx(
 
 
 def _mcpu_for_this_machine() -> Optional[str]:
-    """The mcpu string for the CPU we are building on, or None.
-
-    None is a legitimate answer and not a failure: without a name we build for
-    the generic target, which is exactly what an untuned build wants anyway.
-    LLVM's own answer is used rather than a table of our own - a table would
-    rot, and a wrong mcpu is worse than none.
-    """
     try:
         import tvm
         from tvm.target import codegen
@@ -254,7 +221,6 @@ def _mcpu_for_this_machine() -> Optional[str]:
 
 
 def _refuse_incomplete_tuning(request: "TuningRequest", module_path: str) -> None:
-    """Reject incomplete task coverage and attempt to remove the artifacts."""
     report = tuning.coverage(request.work_dir, request.tasks)
     if report['complete']:
         return
@@ -273,7 +239,6 @@ def _refuse_incomplete_tuning(request: "TuningRequest", module_path: str) -> Non
 
 
 def _refuse_unknown_input_names(onnx_model, input_shapes) -> None:
-    """Reject shape overrides for unknown graph inputs."""
     if not input_shapes:
         return
     weights = {w.name for w in onnx_model.graph.initializer}
@@ -287,9 +252,6 @@ def _refuse_unknown_input_names(onnx_model, input_shapes) -> None:
 
 
 def _refuse_free_dimensions(onnx_model, input_shapes) -> None:
-    """Require positive sizes for unresolved ONNX dimensions."""
-
-
     for name, shape in (input_shapes or {}).items():
         bad = [index for index, dim in enumerate(shape) if int(dim) < 1]
         if bad:
@@ -326,20 +288,6 @@ def _refuse_free_dimensions(onnx_model, input_shapes) -> None:
 
 
 def _rewrite_cuda_float32_pow2(onnx_model, target):
-    """Normalize *only* exactly squared float32 tensors before TVM CUDA import.
-
-    This works on an ONNX model loaded in memory, never changes its source
-    weights or path, and deliberately leaves other exponents untouched.
-
-    The rule is precision-preserving: `Pow(x, scalar float32 2)` and `Mul(x,x)`
-    both square float32 values. The observed TVM CUDA `Pow` lowering yielded
-    NaNs on a genuine PaddleOCR Rec model; independent ONNX Runtime runs of
-    the unchanged and transformed graphs agreed (maxAbs <= 9.54e-7). The
-    transformed CUDA graph then passed the original numerical tolerance.
-
-    A model with unknown operand type or non-scalar exponent is not rewritten.
-    Its later mandatory reference comparison must refuse if it miscomputes.
-    """
     if target not in (Target.CUDA, Target.CUDNN):
         return []
 
@@ -353,8 +301,6 @@ def _rewrite_cuda_float32_pow2(onnx_model, target):
         inferred = onnx.shape_inference.infer_shapes(onnx_model,
                                                     strict_mode=False)
     except Exception:
-
-
         return []
     types = {v.name: v.type.tensor_type.elem_type for v in inferred.graph.value_info}
     types.update({v.name: v.type.tensor_type.elem_type for v in inferred.graph.input})
@@ -390,11 +336,6 @@ def _rewrite_cuda_float32_pow2(onnx_model, target):
 
 
 def _onnx_input_names(onnx_model, input_shapes):
-    """Name and shape of every graph input, in declaration order.
-
-    Initializers are excluded: ONNX lists weights among graph.input, and calling a
-    weight an input would make the manifest lie about what the caller must supply.
-    """
     weights = {w.name for w in onnx_model.graph.initializer}
     rows = []
     for entry in onnx_model.graph.input:
@@ -410,7 +351,6 @@ def _onnx_input_names(onnx_model, input_shapes):
 
 
 def _write_input_manifest(module_path: str, rows) -> str:
-    """Write the ordered input names and dimensions beside the module."""
     manifest = module_path + ".inputs"
     tab = chr(9)
     with open(manifest, "w", encoding="utf-8", newline=chr(10)) as handle:
@@ -428,10 +368,6 @@ def convert_tflite(
     input_shapes: Optional[Dict[str, Tuple[int, ...]]] = None,
     req_sm: Optional[str] = None,
 ) -> str:
-    """Compile a TFLite model and return the exported library path.
-
-    Input shape overrides use TFLite subgraph input names.
-    """
     req_sm = targets.validate_target_sm(target, req_sm)
 
     import tvm
@@ -465,12 +401,6 @@ def convert_tflite(
 
 
 def _tflite_dimensions(tensor):
-    """Dimensions of a TFLite tensor, with -1 for whatever the model left free.
-
-    The shape signature is preferred because that is where TFLite records free
-    dimensions; the plain shape substitutes a concrete number for them and would
-    make the manifest claim a size the model does not actually fix.
-    """
     signature = tensor.ShapeSignatureAsNumpy()
     if getattr(signature, "size", 0):
         return [int(d) for d in signature]
@@ -481,7 +411,6 @@ def _tflite_dimensions(tensor):
 
 
 def _tflite_input_names(model, input_shapes):
-    """Read subgraph input names and shapes in declaration order."""
     subgraph = model.Subgraphs(0)
     rows = []
     for index in range(subgraph.InputsLength()):
@@ -496,7 +425,6 @@ def _tflite_input_names(model, input_shapes):
 
 
 def _refuse_quantized_tflite(model, model_path: str) -> None:
-    """Reject integer TFLite inputs carrying a quantization scale."""
     subgraph = model.Subgraphs(0)
     for index in range(subgraph.InputsLength()):
         tensor = subgraph.Tensors(subgraph.Inputs(index))
@@ -516,7 +444,6 @@ def _refuse_quantized_tflite(model, model_path: str) -> None:
 
 @contextlib.contextmanager
 def _tflite_optional_attribute_defaults():
-    """Supply missing optional attributes expected by the TVM TFLite frontend."""
     from tvm.relax.frontend.tflite import tflite_frontend
 
     original = tflite_frontend.FlexBufferDecoder
@@ -536,20 +463,16 @@ def _tflite_optional_attribute_defaults():
 
 
 def _target_for(target: Target, req_sm: Optional[str] = None):
-    """TVM target for our choices, with an explicit GPU SM when requested."""
     import tvm
 
     sm = targets.validate_target_sm(target, req_sm)
     if sm:
-
-
         return tvm.target.Target({'kind': 'cuda', 'arch': sm})
     return tvm.target.Target(targets.tvm_target_spec(target))
 
 
 def _build_and_export(mod, tvm_target, opt_level: int, output_path: str,
                       tune: Optional["TuningRequest"] = None) -> str:
-    """Lower and export a Relax module for either input format."""
     import tvm
     from tvm import relax
 
@@ -594,12 +517,6 @@ def _build_and_export(mod, tvm_target, opt_level: int, output_path: str,
 
 
 def _cuda_default_schedule_failed(error, tvm_target):
-    """Recognise the actual TVM CUDA TIR schedule failure, not arbitrary errors.
-
-    A misconfigured toolkit, unsupported target, or linker failure must still
-    raise normally; DLight scheduling cannot fix them. CPU cannot be retried
-    here under any circumstances.
-    """
     kind = getattr(getattr(tvm_target, 'kind', None), 'name', '')
     message = str(error)
     return (kind == 'cuda' and 'ScheduleError' in message and
@@ -607,12 +524,6 @@ def _cuda_default_schedule_failed(error, tvm_target):
 
 
 def _build_cuda_dlight_fallback(source_mod, tvm_target, opt_level):
-    """Use TVM's own alternative GPU schedule for a failed CUDA reduction.
-
-    The pass list is from the TVM 0.27 CUDA compiler and requires this TVM
-    installation to provide it. It does not change the CUDA architecture,
-    binary format or target CPU. No separate model converter is introduced.
-    """
     import tvm
     from tvm import relax
     from tvm.s_tir import dlight as dl
@@ -633,12 +544,6 @@ def _build_cuda_dlight_fallback(source_mod, tvm_target, opt_level):
 
 
 def cccl_include_directory() -> Optional[str]:
-    """Directory that makes ``#include <cuda/std/...>`` resolve, or None.
-
-    CUDA 13 moved the CCCL headers from ``<CUDA>/include`` down into
-    ``<CUDA>/include/cccl``. Older toolkits keep them directly under
-    ``<CUDA>/include``, where NVRTC finds them without help.
-    """
     root = os.environ.get("CUDA_PATH") or os.environ.get("CUDA_HOME")
     if not root:
         return None
@@ -652,11 +557,6 @@ def cccl_include_directory() -> Optional[str]:
 
 
 def _teach_nvrtc_where_cccl_lives() -> None:
-    """Make the nested CCCL include layout visible to the TVM CUDA compiler.
-
-    Kernels that include <cuda/std/...> need the CCCL include directory
-    on toolkits that install those headers below include/cccl.
-    """
     include_dir = cccl_include_directory()
     if include_dir is None:
         return
@@ -686,7 +586,6 @@ MIN_CONVERTER_TVM = (0, 26, 0)
 
 
 def _refuse_known_bad_tvm(version: str) -> None:
-    """Enforce the minimum supported converter version."""
     parts = []
     for piece in version.split(".")[:3]:
         digits = "".join(c for c in piece if c.isdigit())
@@ -702,16 +601,10 @@ def _refuse_known_bad_tvm(version: str) -> None:
     )
 
 def default_library_suffix() -> str:
-    """Platform suffix for a loadable module: .dll on Windows, .so elsewhere."""
     return ".dll" if platform.system() == "Windows" else ".so"
 
 
 def _shared_library_builder():
-    """Use an explicit Windows x64 linker for TVM module export.
-
-    Try the lld-link bundled with clang, then initialize the MSVC tools.
-    On other platforms, use the default TVM export linker.
-    """
     if platform.system() != "Windows":
         return None
 
@@ -741,8 +634,6 @@ def _shared_library_builder():
             bundled_lld = os.path.join(
                 os.path.dirname(os.path.abspath(clang)), "lld-link.exe")
             if os.path.isfile(bundled_lld):
-
-
                 command = clang_command("lld")
                 failure = _run_windows_link(command)
                 if failure is None:
@@ -764,8 +655,6 @@ def _shared_library_builder():
         if clang:
             command = clang_command("link", os.path.dirname(msvc_link))
         else:
-
-
             native_options = []
             for flag in extra:
                 if flag.startswith("/"):
@@ -790,7 +679,6 @@ def _shared_library_builder():
 
 
 def _run_windows_link(command, env=None):
-    """Run an actual linker, returning an actionable failure or None on success."""
     try:
         kwargs = {"capture_output": True}
         if env is not None:
@@ -809,7 +697,6 @@ def _run_windows_link(command, env=None):
 
 
 def _installed_vswhere():
-    """Locate the official Visual Studio installation finder, without years."""
     candidate = shutil.which("vswhere.exe") or shutil.which("vswhere")
     if candidate and os.path.isfile(candidate):
         return candidate
@@ -825,12 +712,6 @@ def _installed_vswhere():
 
 
 def _vcvars64_candidates():
-    """Prefer the installed VS C++ toolset reported by vswhere.
-
-    An existing VSINSTALLDIR is useful when the finder was not installed (for
-    example in a tailored build environment), but a directory does not count
-    as a toolchain until vcvars64 and the native link.exe are both validated.
-    """
     roots = []
     finder = _installed_vswhere()
     if finder:
@@ -857,12 +738,6 @@ def _vcvars64_candidates():
 
 
 def _environment_value(environment, key):
-    """Read Windows environment names case-insensitively, even in plain dicts.
-
-    os.environ on Windows normalizes keys, while the captured output of 'set'
-    may use another spelling (Path vs PATH, VCToolsInstallDir vs uppercase).
-    A normal dict does NOT preserve Windows' case-insensitive lookup semantics.
-    """
     for candidate, value in environment.items():
         if candidate.casefold() == key.casefold():
             return value
@@ -870,7 +745,6 @@ def _environment_value(environment, key):
 
 
 def _validate_msvc_environment(environment):
-    """Return the x64 MSVC linker only for a complete, initialized toolchain."""
     arch = (_environment_value(environment, "VSCMD_ARG_TGT_ARCH")
             or "").strip().lower()
     if arch not in ("x64", "amd64"):
@@ -894,12 +768,6 @@ def _validate_msvc_environment(environment):
 
 
 def _initialized_msvc_linker():
-    """Return (environment, verified linker) for native x64 MSVC tools.
-
-    We cannot assume a VS Developer Prompt. Execute vcvars64 in a short-lived
-    cmd.exe child, capture its environment, then use that environment in the
-    separate linker child. No changes are made to the parent process or PATH.
-    """
     current = dict(os.environ)
     linker = _validate_msvc_environment(current)
     if linker:
@@ -928,8 +796,6 @@ def _initialized_msvc_linker():
         for line in result.stdout.splitlines():
             key, delimiter, value = line.partition("=")
             if delimiter and key and " " not in key:
-
-
                 duplicate = next(
                     (old for old in environment
                      if old.casefold() == key.casefold()), None)
@@ -954,9 +820,6 @@ def _initialized_msvc_linker():
 
 
 def _find_clang_executable() -> Optional[str]:
-    """Find clang via PATH or standard LLVM install locations."""
-
-
     from . import environment  # noqa: WPS433 (lazy: keeps the import graph flat)
 
     found, _on_path = environment.find_clang()
@@ -964,10 +827,6 @@ def _find_clang_executable() -> Optional[str]:
 
 
 def _tvm_import_libraries() -> List[str]:
-    """Find the TVM FFI import library used by Windows model modules.
-
-    Generated Relax objects can reference TVM FFI error-reporting symbols.
-    """
     wanted = "tvm_ffi.lib"
     for directory in _ffi_library_directories():
         candidate = os.path.join(directory, wanted)
@@ -977,7 +836,6 @@ def _tvm_import_libraries() -> List[str]:
 
 
 def _ffi_library_directories() -> List[str]:
-    """Prefer the imported TVM FFI package, then search PATH for source builds."""
     directories: List[str] = []
     try:
         import tvm_ffi  # noqa: WPS433 (lazy, optional)
@@ -993,11 +851,6 @@ def _ffi_library_directories() -> List[str]:
     return directories
 
 def _partition_for_cudnn_groups1(mod):
-    """Attempt experimental cuDNN offload using the stock TVM partitioner.
-
-    This helper does not enforce a groups==1 convolution constraint.
-    The supported Early Access routes use plain CUDA or CPU.
-    """
     try:
         from tvm.relax.backend.contrib.cudnn import partition_for_cudnn
     except Exception:

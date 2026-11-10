@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Conversion reports for the CLI and wizard. Each step can be done, refused or unchecked."""
+
 
 DONE = 'done'
 REFUSED = 'refused'
@@ -14,8 +14,6 @@ STATE_NAMES = {
 
 
 class Step(object):
-    """One step of the work: name, state, detail lines and numbers."""
-
     def __init__(self, name, state=UNCHECKED, lines=None, numbers=None):
         self.name = name
         self.state = state
@@ -45,8 +43,6 @@ class Step(object):
 
 
 class Report(object):
-    """A sequence of steps. Sound as long as none of them refused."""
-
     def __init__(self, title=''):
         self.title = title
         self.steps = []
@@ -75,7 +71,6 @@ class Report(object):
         }
 
     def as_text(self):
-        """Flat form for a build log. Exactly what the wizard shows."""
         out = []
         if self.title:
             out.append(self.title)

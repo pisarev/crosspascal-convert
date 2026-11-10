@@ -1,9 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Bounded, declared ONNX source packs for the manual Windows CPU route.
 
-The declaration is provenance, not independent legal clearance or an inference
-result. No recipe, URL or Python source in a pack is ever executed here.
-"""
 
 import hashlib
 import json
@@ -38,7 +34,6 @@ _GRAPH_CACHE = {}
 
 
 def normalize_selection(value):
-    """Accept Explorer Copy as path without treating quotes as a filename."""
     value = str(value or '').strip()
     if len(value) >= 2 and value[0] == value[-1] == '"':
         value = value[1:-1]
@@ -96,8 +91,6 @@ def _path_state(info):
 
 
 def _common_state(info):
-
-
     return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
 
 
@@ -159,7 +152,6 @@ def _reject_constant(value):
 
 
 def validate_document(data, model_name=None):
-    """Validate metadata without imports, execution, network or file reads."""
     if not isinstance(data, dict) or data.get('schema') != SCHEMA:
         raise ValueError('unsupported adjacent SOURCE.json schema')
     if not isinstance(data.get('profile_id'), str) or not _ID.fullmatch(data['profile_id']):
@@ -255,8 +247,6 @@ def validate_document(data, model_name=None):
 
 
 def _inspect_onnx(payload, conversion):
-
-
     import onnx
     from .onnx_closure import _external_tensors
 
@@ -280,7 +270,6 @@ def _inspect_onnx(payload, conversion):
 
 
 def discover(model_path):
-    """Pin all selected bytes; return None only when no adjacent pack exists."""
     model_path = normalize_selection(model_path)
     if not model_path.lower().endswith('.onnx') or not os.path.isabs(model_path):
         return None
@@ -296,8 +285,6 @@ def discover(model_path):
     graph_key = (model['sha256'], json.dumps(data['conversion'], sort_keys=True))
     needs_graph = graph_key not in _GRAPH_CACHE
     if needs_graph:
-
-
         detect._admit_onnx_preparse(model_path)
     actual_model, model_bytes = _read(model_path, MAX_MODEL, model, keep=needs_graph)
     if needs_graph:
@@ -331,7 +318,6 @@ def display(pack):
 
 
 def require_request(pack, request):
-    """Prevent a reviewed pack from becoming an unrelated manual conversion."""
     if request.get('onnx_source_pack') != selection(pack):
         raise ValueError('Source pack changed or is not recognized; press Recognise again')
     if (request.get('full_build') or request.get('target') != 'cpu'
@@ -400,7 +386,6 @@ def binding(pack):
 
 
 def install(pack, model_path, output_directory):
-    """Recheck the approval and copy only bounded declared ancillary bytes."""
     if discover(model_path) != pack:
         raise ValueError('Source pack changed since Preview')
     destination = os.path.join(output_directory, BUNDLE_FOLDER)
@@ -423,7 +408,6 @@ def install(pack, model_path, output_directory):
 
 
 def validate_collected(entries, pack, passport):
-    """Compare collected ZIP hashes with the job approval, without rereading."""
     expected = {BUNDLE_FOLDER + '/' + SOURCE_FILE: pack['source']}
     expected.update({BUNDLE_FOLDER + '/' + row['path']: row for row in pack['files']})
     observed = {row.name: row for row in entries

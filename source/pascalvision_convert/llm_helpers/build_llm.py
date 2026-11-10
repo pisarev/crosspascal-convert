@@ -106,15 +106,11 @@ def _refuse_native_source_output_overlap(source, out_dir):
     if os.name == 'nt' and (
             str(source).replace('/', '\\').startswith('\\') or
             str(out_dir).replace('/', '\\').startswith('\\')):
-
-
         raise ValueError('native LLM device/UNC namespace is not a safe '
                          'local HF source/output path')
     owner = os.path.normcase(os.path.realpath(os.path.abspath(source)))
     destination = os.path.normcase(os.path.realpath(os.path.abspath(out_dir)))
     try:
-
-
         shared_root = os.path.commonpath((owner, destination))
         overlaps = shared_root in (owner, destination)
     except ValueError:
@@ -193,8 +189,6 @@ def checked_native_held_hf_source(owner_source, stage_source, tree_sha, model_ke
                              + item['path'])
         error = ctypes.get_last_error()
         if error != 32:
-
-
             raise ValueError('private HF stage has no proven sharing violation '
                              'for member %s (winerror=%d)' % (item['path'], error))
     return str(stage)
@@ -311,8 +305,8 @@ def main():
         generic_config = qwen_universal.validate_config(raw)
         qwen_universal.verify_tokenizer(compiler_source)
         qwen_universal.inspect_local_headers(compiler_source, generic_config)
-                                                                        
-                                                                        
+
+
         import shutil
         qwen_universal.admit(
             generic_config, disk_free=shutil.disk_usage(
@@ -545,8 +539,6 @@ def main():
         print('native BuildPlan/model/weights/manifest consistency PASS; '
               'independent model inference NOT_CHECKED')
     if args.held_hf_source:
-
-
         hf_closure.audit_selected_hf_source(
             source, expected_tree_sha256=args.hf_source_tree_sha256,
             expected_model_key=args.model)

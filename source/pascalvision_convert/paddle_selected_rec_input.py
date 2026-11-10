@@ -1,12 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Prepare a float32 NCHW input for the pinned PP-OCRv5 Server Rec model.
 
-Decode an RGB8 PNG as BGR and apply the selected model's RecResizeImg
-profile with shape [3,48,320]. This NumPy and OpenCV implementation
-retains the input bytes and a receipt in a new local directory.
-The receipt records preprocessing only. It provides no inference
-or equivalence evidence for the vendor operator.
-"""
 
 from __future__ import annotations
 
@@ -47,7 +40,7 @@ _RECEIPT = 'input-source.json'
 
 
 class SelectedRecInputRefused(ValueError):
-    """The exact selected original source/input/namespace cannot be admitted."""
+    pass
 
 
 def _require(test, reason):
@@ -78,12 +71,6 @@ def _model(source_directory, dictionary, approved_tree_sha256):
 
 
 def _encode_source_rec_png(png_bytes):
-    """Separately reproduce RecResizeImg for a bounded real BGR8 PNG.
-
-    This profile uses BGR pixels and zero padding.
-    The source's static 320-wide profile clamps very long crops, matching
-    RecResizeImg(padding=True) rather than silently extending the VM input.
-    """
     try:
         import cv2
         import numpy as np
@@ -117,16 +104,6 @@ def _encode_source_rec_png(png_bytes):
 
 @contextmanager
 def _hold_retained_stage_for_final_receipt(target, original_id):
-    """Reacquire complete original output namespace BEFORE final receipt IO.
-
-    The selected PNG byte holder and the first create-only stage scope must
-    BOTH finish their post audits before a nonempty receipt is written. Their
-    exit leaves a small ordinary-path rename race: an attacker can replace the
-    stage before the receipt write. Reacquire every original NTFS ancestor and
-    the stage itself, then check its original FileID WHILE the holds are live.
-    The new receipt is still only advisory; this is not crash durability or
-    release-grade protection against previously mapped/privileged writers.
-    """
     def check_original():
         source_freeze._safe_ancestors(target)
         identity = source_freeze._lstat(target)
@@ -158,7 +135,6 @@ def _hold_retained_stage_for_final_receipt(target, original_id):
 
 def prepare(source_directory, dictionary, approved_tree_sha256,
             image_png, into):
-    """Write one retained, SHA-checked source-profile input, advisory only."""
     try:
         chosen = _model(source_directory, dictionary, approved_tree_sha256)
         image, image_sha, png_bytes, png_shape = ocr_png_preprocess._checked_source(
@@ -169,8 +145,6 @@ def prepare(source_directory, dictionary, approved_tree_sha256,
         _require(stat.S_ISDIR(source_freeze._lstat(target.parent).st_mode),
                  'existing local destination parent required')
         if os.name == 'nt':
-
-
             source_lock._Kernel32().assert_local_ntfs(target.parent)
         for owner in (Path(chosen['source_root']),
                       Path(chosen['dictionary']['reference']).parent):

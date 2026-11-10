@@ -1,23 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Stage TWO independently verified PaddleOCR modules and their dictionary.
 
-This is an assembly *draft*, not a CrossVision/Pascal facade manifest. The
-individual manifest.json and manifest.txt files remain under det/ and rec/;
-their verified artifact hashes and the original recipe/report are preserved.
-Only a future native Det+Rec+CTC independent execution gate could issue a
-verified composite runtime contract.
-
-The inputs are two output directories from pascalvision_convert.pipeline,
-each containing manifest.json, manifest.txt, recipe.json, report.txt, its
-compiled artifact, .inputs sidecar, exact TVM runtime DLLs, and wheel licences.
-The report and manifest provide the pipeline's VERIFIED_LOCAL evidence; this
-is recorded as source evidence, not a new comparison or cryptographic proof.
-
-All model and metadata bytes are copied into separate det/ and rec/ folders;
-files of the same name never overwrite each other. The only new description
-is composite-plan.json with composite_verification=NOT_CHECKED.
-"""
 
 from __future__ import annotations
 
@@ -71,7 +54,7 @@ _TASKS = {
 
 
 class CompositeContractError(ValueError):
-    """The requested bundle lacks evidence for an honest composite draft."""
+    pass
 
 
 def _reject(reason):
@@ -97,14 +80,12 @@ def _sha256_valid(value, label):
 
 
 def _not_link(path):
-    """Forbid symlinks and Windows junction/reparse points, at every ancestor."""
     current = path
     missing_leaf = False
     while True:
         try:
             metadata = current.lstat()
         except FileNotFoundError:
-
             if current != path or missing_leaf:
                 _reject('missing parent folder: %s' % current)
             missing_leaf = True
@@ -120,7 +101,6 @@ def _not_link(path):
 
 
 def _declared_path(value, label):
-    """Reject lexical '..' before OS path normalization hides traversal."""
     raw = os.fspath(value)
     if not isinstance(raw, str) or '\x00' in raw:
         _reject('%s path must be a nonempty string' % label)
@@ -138,7 +118,6 @@ def _existing_directory(directory):
 
 
 def _safe_name(name):
-    """Accept one portable filename, never an absolute/relative/drive path."""
     if (not isinstance(name, str) or not name or len(name) > 255
             or name in ('.', '..') or name.endswith(('.', ' '))
             or any(c in name for c in '/\\:\x00')
@@ -177,7 +156,6 @@ def _digest(file, *, max_bytes=_MAX_ASSET_BYTES):
             _reject('asset exceeds %d-byte limit before SHA: %s'
                     % (max_bytes, file))
         while True:
-
             block = stream.read(min(1 << 20, max_bytes - length + 1))
             if not block:
                 break
@@ -191,8 +169,6 @@ def _digest(file, *, max_bytes=_MAX_ASSET_BYTES):
 
 
 def _read_bytes(file, *, limit):
-
-
     with file.open('rb') as stream:
         if os.fstat(stream.fileno()).st_size > limit:
             _reject('metadata/dictionary file exceeds %d bytes: %s'
@@ -533,7 +509,6 @@ def _read_individual_bundle(path, role):
 
 
 def _exact_numeric(value, expected, label):
-    """Reject bool, NaN/Inf, non-numeric and any normalization coefficient drift."""
     if (type(value) not in (int, float) or not math.isfinite(value)
             or value != expected):
         _reject('%s must be %s as implemented by native TVM.PaddleOcr.pas'
@@ -549,16 +524,6 @@ def _exact_channels(value, expected, label):
 
 
 def _validate_preprocessing(value, sources):
-    """Describe the exact *current Pascal* preprocessing, not a generic OCR.
-
-    DET /255 then BGR channelwise mean/std (Detect:1045-1106).
-    REC right-pad a zero-valued RAW BGR image, convert BGR->RGB, /255*2-1;
-    the tensor padding is consequently -1 (PpocrPreprocess:474-594).
-
-    The pinned process environment is a separately required declaration;
-    there are NO guessed defaults for it. The future native runner must enforce
-    its values before first inference. This file stages a DRAFT only.
-    """
     value = _dict(value, 'preprocessing')
     if set(value) != {'det', 'rec', 'native_process_env'}:
         _reject('preprocessing needs det, rec and explicit native_process_env; '
@@ -636,13 +601,6 @@ def _validate_preprocessing(value, sources):
 
 
 def _validate_native_process_env(declared, ctc_record, dictionary_asset):
-    """Exact future native process pins; do not silently use host defaults.
-
-    We cannot know the destination's absolute dictionary path during a dry-run.
-    The future runner must resolve the *verified staged asset* and assign
-    PADDLE_OCR_DICT to that absolute path BEFORE loading/decoding either model;
-    PADDLE_OCR_INFER_YML must remain unset or could silently override it.
-    """
     declared = _dict(declared, 'preprocessing.native_process_env')
     if set(declared) != _PINNED_PROCESS_ENV:
         _reject('native_process_env must explicitly pin %s (and no aliases)'
@@ -760,12 +718,6 @@ def _validate_ctc(value, tokens):
 
 
 def _preflight_selected_byte_quota(det_bundle, rec_bundle, dictionary):
-    """Cheap, exact selected closure admission BEFORE any model/runtime SHA.
-
-    Neither a manifest declaration nor its preliminary size is trusted for
-    acceptance. Full individual validation, independent hashes and rechecked
-    copy bytes are still mandatory after this early I/O resource admission.
-    """
     selected = []
     roots = []
     for role, supplied in (('det', det_bundle), ('rec', rec_bundle)):
@@ -842,11 +794,6 @@ def _preflight_selected_byte_quota(det_bundle, rec_bundle, dictionary):
 
 def plan_composite(det_bundle, rec_bundle, dictionary, *,
                    preprocessing, ctc):
-    """Read-only contract construction; nothing is written or deleted.
-
-    Arguments are two independent pipeline bundle directories, one UTF-8
-    dictionary file, and fully explicit preprocessing/CTC settings.
-    """
     _preflight_selected_byte_quota(det_bundle, rec_bundle, dictionary)
     det = _read_individual_bundle(det_bundle, 'det')
     rec = _read_individual_bundle(rec_bundle, 'rec')
@@ -985,15 +932,6 @@ def plan_composite(det_bundle, rec_bundle, dictionary, *,
 
 @contextmanager
 def _held_draft_destination(target):
-    """Deny NTFS renames of the whole fresh draft namespace while writing.
-
-    `open('xb')` prevents replacement of an existing basename but NOT creation
-    through a stage/det directory that was swapped for a junction. On Windows,
-    hold every parent, root and role child using GENERIC_READ and share
-    READ|WRITE *without* SHARE_DELETE, with verified directory FileIDs. Reuse
-    the already independently exercised OmDet NTFS holder rather than relying
-    on FILE_READ_ATTRIBUTES (which does not prevent an NTFS directory rename).
-    """
     if os.name != 'nt':
         target.mkdir(exist_ok=False)
         for role in ('det', 'rec', 'dictionary'):
@@ -1045,13 +983,6 @@ def _held_draft_destination(target):
 
 def assemble_composite(det_bundle, rec_bundle, dictionary, destination, *,
                        preprocessing, ctc):
-    """Copy into a NEW namespace, then issue only composite-plan.json.
-
-    A pre-existing destination is always rejected. Every copied file uses
-    exclusive creation and is SHA-256 checked while copying. No source file,
-    prior output, or original manifest is modified or deleted. If a copy
-    fails, any new partial directory deliberately has no composite-plan.json.
-    """
     plan, assets = plan_composite(det_bundle, rec_bundle, dictionary,
                                   preprocessing=preprocessing, ctc=ctc)
     target = _declared_path(destination, 'destination')
@@ -1065,8 +996,6 @@ def assemble_composite(det_bundle, rec_bundle, dictionary, destination, *,
     roots = [_declared_path(root, 'source')
              for root in (det_bundle, rec_bundle)]
     if os.name == 'nt':
-
-
         for label, selected in (('det source', roots[0]),
                                 ('rec source', roots[1]),
                                 ('destination parent', target.parent)):

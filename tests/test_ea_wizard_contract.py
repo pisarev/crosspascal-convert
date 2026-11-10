@@ -1,5 +1,3 @@
-"""Small contract tests; no model, TVM/ORT import, server, or compiler run."""
-
 import copy
 import hashlib
 import importlib.abc
@@ -326,7 +324,6 @@ class WizardContractTests(unittest.TestCase):
             'qwen2.5-0.5b')), 24 * 7 + 2)
 
     def test_qwen15_native_output_index_sha_and_tensor_shape_custody(self):
-        """Validate a realistic 198-tensor index without allocating model bytes."""
         shapes = llm_bundle_contract._qwen_parameter_layout('qwen2.5-1.5b')
         tensors = []
         lines = ['# count dtype target, then: name offset nbytes ndim dims...',
@@ -472,8 +469,8 @@ class WizardContractTests(unittest.TestCase):
         with mock.patch.object(model_sources, 'catalog_model', return_value=catalog):
             bundle_publication.inspect_selected_native_consumer_kit(
                 str(kit), model_key='qwen2.5-1.5b', device='cuda')
-            
-            
+
+
             llm_bundle_contract._validate_qwen15_source_marker(kit)
             marker['repository'] = 'Qwen/Qwen2.5-0.5B-Instruct'
             marker_path.write_text(json.dumps(marker), encoding='utf-8')

@@ -1,17 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Selected REAL PP-OCRv5 Server Det input -> separately pinned original ORT.
 
-This executes the ORIGINAL-ONNX consumer of the actual selected Det input
-receipt, not another reimplementation of image preprocessing. The pinned
-inference.json/pdiparams/yml SHA closure does NOT include separately exported
-model.onnx: explicitly pin its independent SHA and byte length. The relation
-of that exported ONNX to the Paddle PIR weights remains unverified.
-
-Invokes the existing bounded, held, actual CPU ONNX Runtime child ONLY after
-RAM admission. The original source and selected input are checked before and
-after. No Delphi/Pascal, DBPostProcess, Rec/CTC, human GT or VERIFIED/READY.
-Even successful real ORT is advisory exit 2. All writes remain create-only.
-"""
 
 from __future__ import annotations
 
@@ -42,7 +30,7 @@ _SHA = re.compile(r'[0-9a-f]{64}\Z')
 
 
 class SelectedDetOracleRefused(ValueError):
-    """No original Det source-to-ORT identity was established."""
+    pass
 
 
 def _require(condition, message):
@@ -73,7 +61,6 @@ def _sha_regular(path, label, *, limit, expected_size=None):
 
 
 def _stage_snapshot(stage):
-    """Read exact two-file source-profile stage; no READY or foreign members."""
     raw._safe_path(stage)
     identity = source_freeze._lstat(stage)
     _require(stat.S_ISDIR(identity.st_mode),
@@ -158,7 +145,6 @@ def _stage_snapshot(stage):
 
 
 def run(source_dir, tree_sha, extra_onnx_sha, input_stage, into):
-    """Run independently SHA-pinned original Det ONNX on selected input bytes."""
     _require(type(tree_sha) is str and tree_sha == _TREE_SHA
              and type(extra_onnx_sha) is str
              and extra_onnx_sha == _EXTRA_ONNX_SHA,

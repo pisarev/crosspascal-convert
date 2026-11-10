@@ -1,18 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Selected PP-OCRv5 Server Det original-ORT versus native-Pascal raw comparator.
 
-The historical ocr-det-pairwise is for a different LEGACY normalization and
-receipt; it must not accept new selected vendor-bgr-v5 captures. This separate
-opt-in, READ-ONLY route checks selected original PNG->float32 input-stage
-receipts, independently approved ONNX SHA, native compiled model SHA/sidecar,
-actual native capture receipt+tensor, held CPU runtime, original ORT capture,
-and a nonvacuous float32 probability-map comparison. No inference or writes.
-
-The compiled DLL's training-weight provenance and the separately selected
-model-zoo ONNX's relationship to Paddle PIR remain NOT_INDEPENDENTLY_ATTESTED.
-Supplied files and nonvacuous comparisons do not attest producing processes.
-No DB boxes, Rec, CTC, human ground truth, READY or model acceptance.
-"""
 
 from __future__ import annotations
 
@@ -33,7 +20,7 @@ from . import paddle_selected_det_input as det
 
 
 class SelectedDetPairwiseRefused(ValueError):
-    """A trusted selected source-to-ORT/native input identity was not found."""
+    pass
 
 
 _EXPECTED = dict(native._EXPECTED_STATUS,
@@ -61,7 +48,6 @@ def _require(condition, message):
 
 
 def _selected_native_receipt(root):
-    """Require the selected BGR capture schema and reject legacy receipts."""
     raw._check_private_root(root)
     names = []
     with os.scandir(root) as iterator:
@@ -118,7 +104,6 @@ def _inspect_selected_det_pairwise(
         native_capture, ort_capture, selected_input_stage, *,
         source_dir, approved_tree_sha256, native_model, original_onnx,
         expected_native_sha256, expected_original_sha256, output_name):
-    """Read existing proven bytes, compare input+output; never create evidence."""
     _require(type(approved_tree_sha256) is str
              and approved_tree_sha256 == selected_ort._TREE_SHA
              and type(expected_original_sha256) is str
@@ -260,13 +245,6 @@ def inspect_selected_det_pairwise(
         native_capture, ort_capture, selected_input_stage, *,
         source_dir, approved_tree_sha256, native_model, original_onnx,
         expected_native_sha256, expected_original_sha256, output_name):
-    """Public contract: every nested invalid-evidence outcome is a refusal.
-
-    The shared numeric comparator intentionally raises InvalidEvidence or
-    MissingEvidence, which are NOT ValueError subclasses. Normalize them
-    here instead of exposing the raw exception/traceback through the public
-    selected-only CLI or misclassifying a failed scalar comparison as a pass.
-    """
     try:
         return _inspect_selected_det_pairwise(
             native_capture, ort_capture, selected_input_stage,

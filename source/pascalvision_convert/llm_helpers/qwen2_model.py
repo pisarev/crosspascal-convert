@@ -1,14 +1,7 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Qwen2 architecture using tvm.relax.frontend.nn.
 
-This first-party implementation uses the selected TVM compiler and its matching
-runtime. Runtime built-ins, object layouts, and type identifiers must agree.
 
-TIRPagedKVCache supplies the attention kernels and paged-cache ABI. Architecture
-dimensions come from the Hugging Face config and are checked against the
-trained weight shapes when the weights are serialized.
-"""
 from tvm import relax as rx
 from tvm.relax.frontend import nn
 from tvm.relax.frontend.nn import Tensor, op
@@ -17,8 +10,6 @@ from tvm.target import Target
 
 
 class Qwen2Config(object):
-    """Architecture parameters read from the Hugging Face config.json."""
-
     def __init__(self, raw, dtype='float32',
                  context_window_size=2048, prefill_chunk_size=512):
         self.hidden_size = raw['hidden_size']
@@ -48,12 +39,6 @@ class Qwen2Config(object):
 
 
 class Qwen2Attention(nn.Module):
-    """Grouped-query attention with fused Q, K, and V projections.
-
-    The paged cache accepts one fused QKV tensor. Q, K, and V have biases;
-    the output projection does not, following the Qwen2 architecture.
-    """
-
     def __init__(self, config):
         super().__init__()
         self.head_dim = config.head_dim
@@ -77,8 +62,6 @@ class Qwen2Attention(nn.Module):
 
 
 class Qwen2MLP(nn.Module):
-    """SwiGLU with fused gate/up projections, split after the linear layer."""
-
     def __init__(self, config):
         super().__init__()
         self.intermediate_size = config.intermediate_size
@@ -96,8 +79,6 @@ class Qwen2MLP(nn.Module):
 
 
 class Qwen2DecoderLayer(nn.Module):
-    """Normalization, attention, normalization, and SwiGLU with residual sums."""
-
     def __init__(self, config):
         super().__init__()
         self.self_attn = Qwen2Attention(config)
@@ -119,8 +100,6 @@ class Qwen2DecoderLayer(nn.Module):
 
 
 class Qwen2Model(nn.Module):
-    """Token embeddings, decoder layers, and final normalization."""
-
     def __init__(self, config):
         super().__init__()
         self.embed_tokens = nn.Embedding(config.vocab_size,
@@ -139,11 +118,6 @@ class Qwen2Model(nn.Module):
 
 
 def _take_last_position(hidden_states):
-    """Keep the last token's hidden state before projecting prefill logits.
-
-    This avoids allocating a vocabulary-sized logit row for every input token.
-    """
-
     def compute_last(x):
         from tvm import te
         b, s, d = x.shape
@@ -155,12 +129,6 @@ def _take_last_position(hidden_states):
 
 
 class Qwen2ForCausalLM(nn.Module):
-    """Causal language model and its four exported runtime methods.
-
-    When tie_word_embeddings is true, reuse the transposed embedding table for
-    the output projection. No separate copy of the trained head is allocated.
-    """
-
     def __init__(self, config):
         super().__init__()
         self.model = Qwen2Model(config)
@@ -224,7 +192,6 @@ class Qwen2ForCausalLM(nn.Module):
         )
 
     def get_default_spec(self):
-        """Exported methods, input shapes, parameter mode, and effect mode."""
         batch = 1
         return {
             'embed': {

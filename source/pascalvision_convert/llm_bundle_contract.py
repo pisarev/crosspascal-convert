@@ -1,13 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Fail-closed, stdlib-only inspection of native LLM compilation outputs.
 
-This is NOT an LLM numerical oracle, a source/weight SHA snapshot, or an
-atomic directory commit. It checks that the *actual on-disk* native compiler
-outputs describe the approved BuildPlan and the Pascal consumer's real ABI.
-The stricter consumer mode additionally requires tokenizer/runtime/licences.
-Neither mode can issue VERIFIED from metadata.
-"""
 
 import hashlib
 import json
@@ -93,11 +86,6 @@ def _read_bounded(root, name, limit, *, approved_sha256=None):
 
 
 def _approved_sha(approved_sha256s, name):
-    """Require a complete trusted original ZIP pin for every semantic reread.
-
-    Standalone builder routes intentionally pass None: they do not possess an
-    external selected ZIP authority and keep their existing API contract.
-    """
     if approved_sha256s is None:
         return None
     if type(approved_sha256s) is not dict:
@@ -139,8 +127,6 @@ def _hash_file(root, name, *, approved_size=None, approved_sha256=None):
     except ValueError as exc:
         raise ValueError('native LLM library is missing/unsafe: %s' % exc) from exc
     if approved_size is not None:
-
-
         if type(approved_size) is not int or approved_size <= 0:
             raise ValueError('native LLM library approved size is invalid')
         if expected != approved_size:
@@ -171,8 +157,6 @@ def _hash_file(root, name, *, approved_size=None, approved_sha256=None):
         raise ValueError('native LLM library changed during SHA validation')
     measured_sha = digest.hexdigest()
     if approved_sha256 is not None and measured_sha != approved_sha256:
-
-
         raise ValueError('native LLM library changed since initial ZIP inventory')
     return measured_sha
 
@@ -184,7 +168,6 @@ def _match(actual, expected, what):
 
 
 def _qwen_parameter_layout(model_key, model=None):
-    """Approved Qwen2 packed FP32 shapes, in the Pascal loader's exact order."""
     if model_key == 'qwen2-compatible-local':
         from . import qwen_universal
         if not isinstance(model, dict):
@@ -217,7 +200,6 @@ def _qwen_parameter_layout(model_key, model=None):
 
 
 def _validate_qwen_metadata(model, model_key):
-    """Compare a native Qwen description against its approved structural profile."""
     if model_key == 'qwen2-compatible-local':
         from . import qwen_universal
         qwen_universal.validate_descriptor(
@@ -239,19 +221,14 @@ def _validate_qwen_metadata(model, model_key):
         raise ValueError('native LLM approved Qwen rope_theta differs')
     head_dim = profile['hidden_size'] // profile['num_attention_heads']
     _match(model.get('head_dim'), head_dim, 'approved Qwen head_dim')
-    
-    
+
+
     if model_key == 'qwen2.5-1.5b' or 'intermediate_size' in model:
         _match(model.get('intermediate_size'), profile['intermediate_size'],
                'approved Qwen intermediate_size')
 
 
 def _validate_qwen15_source_marker(root, *, approved_sha256s=None):
-    """Recheck the official 1.5B provenance at receipt and ZIP validation.
-
-    Admission of a consumer kit is not a substitute for checking its source
-    marker again in the final staged/published bundle.
-    """
     from .model_sources import catalog_model
     official = catalog_model('qwen2.5-1.5b')
     license_name = 'LICENSE-' + official['repository'].split('/')[-1] + '.txt'
@@ -308,8 +285,6 @@ def _check_parameters(root, model, dtype, device, *, model_key=None,
             raise ValueError('native Qwen packed byte count differs from approved profile')
     bin_path, disk_bytes = _regular(root, 'params.bin')
     if approved_params_size is not None:
-
-
         if type(approved_params_size) is not int or approved_params_size <= 0:
             raise ValueError('native LLM params.bin approved size is invalid')
         if disk_bytes != approved_params_size:
@@ -377,12 +352,6 @@ def _check_parameters(root, model, dtype, device, *, model_key=None,
 def validate_llm_output(directory, plan, model_key, *, require_consumer=False,
                         approved_library_size=None, approved_params_size=None,
                         approved_member_sha256s=None):
-    """Check structural native artifacts; optionally insist on portable closure.
-
-    Native/adapter can use require_consumer=False to check compiled outputs;
-    receipt/public download MUST request True. The returned status never claims
-    independent numerical verification, including on a successful compilation.
-    """
     validate_recorded(plan)
     if plan['route'] != 'family_full_build':
         raise ValueError('native LLM outputs require a family BuildPlan')
@@ -462,8 +431,6 @@ def validate_llm_output(directory, plan, model_key, *, require_consumer=False,
     if not isinstance(passport, dict):
         raise ValueError('native LLM manifest.json must be an object')
     if 'license' in passport:
-
-
         raise ValueError('native LLM model license is not attested by child')
     artifact = passport.get('artifact')
     if not isinstance(artifact, dict):

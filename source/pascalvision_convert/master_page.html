@@ -962,7 +962,7 @@ qwenVLPreview.addEventListener('click', async () => {
   qwenVLApproval = null;
   qwenVLBuild.disabled = true;
   qwenVLPreview.disabled = true;
-  qwenVLStatus.textContent = 'Checking the architecture, tensor shapes and source hashes…';
+  qwenVLStatus.textContent = 'Checking the architecture, tensor shapes and source hashes...';
   try {
     const result = await ask('/api/qwen-vl-preview', qwenVLOptions());
     if (selection !== JSON.stringify(qwenVLOptions())){
@@ -972,8 +972,8 @@ qwenVLPreview.addEventListener('click', async () => {
     } else {
       qwenVLApproval = {token:result.preview_token, selection};
       qwenVLBuild.disabled = false;
-      qwenVLStatus.textContent = result.architecture + ' · ' + result.layers + ' layers · ' +
-        result.backend + ' · ' + result.context + ' context tokens · ' + result.soft_tokens + ' image tokens';
+      qwenVLStatus.textContent = result.architecture + ' | ' + result.layers + ' layers | ' +
+        result.backend + ' | ' + result.context + ' context tokens | ' + result.soft_tokens + ' image tokens';
     }
   } catch (error) {
     qwenVLStatus.textContent = String(error);
@@ -990,7 +990,7 @@ qwenVLBuild.addEventListener('click', async () => {
     return;
   }
   qwenVLPreview.disabled = true;
-  qwenVLStatus.textContent = 'Converting the approved text and image graphs through TVM…';
+  qwenVLStatus.textContent = 'Converting the approved text and image graphs through TVM...';
   try {
     const result = await ask('/api/qwen-vl-build', {preview_token:approved.token});
     qwenVLStatus.textContent = result.trouble ||
@@ -1028,7 +1028,7 @@ gemmaPreview.addEventListener('click', async () => {
   gemmaApproval = null;
   gemmaPreview.disabled = true;
   gemmaBuild.disabled = true;
-  gemmaStatus.textContent = 'Inspecting architecture, tensor files and tokenizer…';
+  gemmaStatus.textContent = 'Inspecting architecture, tensor files and tokenizer...';
   try {
     const report = await ask('/api/gemma-preview', options);
     if (selection !== JSON.stringify(gemmaOptions())){
@@ -1038,10 +1038,10 @@ gemmaPreview.addEventListener('click', async () => {
     } else {
       gemmaApproval = {token: report.preview_token, selection};
       gemmaBuild.disabled = false;
-      gemmaStatus.textContent = report.architecture + ' · ' + report.layers +
-        ' layers · width ' + report.hidden_size + ' · ' + report.backend +
-        ' · ' + report.context + ' context tokens' +
-        (report.cuda_arch ? ' · ' + report.cuda_arch : '');
+      gemmaStatus.textContent = report.architecture + ' | ' + report.layers +
+        ' layers | width ' + report.hidden_size + ' | ' + report.backend +
+        ' | ' + report.context + ' context tokens' +
+        (report.cuda_arch ? ' | ' + report.cuda_arch : '');
     }
   } finally {
     gemmaPreview.disabled = false;
@@ -1057,7 +1057,7 @@ gemmaBuild.addEventListener('click', async () => {
     return;
   }
   gemmaPreview.disabled = true;
-  gemmaStatus.textContent = 'Converting the approved checkpoint with TVM…';
+  gemmaStatus.textContent = 'Converting the approved checkpoint with TVM...';
   try {
     const result = await ask('/api/gemma-build', {preview_token: approval.token});
     gemmaStatus.textContent = result.trouble ||
@@ -1080,7 +1080,7 @@ for (const field of [visionBundle, visionProjector]){
 visionPreview.addEventListener('click', async () => {
   const selection = JSON.stringify(visionOptions());
   visionApproval = null; visionPreview.disabled = true; visionBuild.disabled = true;
-  visionStatus.textContent = 'Checking the projector architecture and pinning selected files…';
+  visionStatus.textContent = 'Checking the projector architecture and pinning selected files...';
   try {
     const result = await ask('/api/gemma-vision-preview', visionOptions());
     if (selection !== JSON.stringify(visionOptions())){
@@ -1089,7 +1089,7 @@ visionPreview.addEventListener('click', async () => {
     } else {
       visionApproval = {token: result.preview_token, selection}; visionBuild.disabled = false;
       const device = result.cuda_arch ? 'CUDA ' + result.cuda_arch : result.backend;
-      visionStatus.textContent = 'Compatible vision projector · ' + result.image_size + ' px · ' + device;
+      visionStatus.textContent = 'Compatible vision projector | ' + result.image_size + ' px | ' + device;
     }
   } finally { visionPreview.disabled = false; }
 });
@@ -1098,7 +1098,7 @@ visionBuild.addEventListener('click', async () => {
   if (!approval || approval.selection !== JSON.stringify(visionOptions())){
     visionStatus.textContent = 'Inspect the selected bundle and projector again.'; return;
   }
-  visionPreview.disabled = true; visionStatus.textContent = 'Converting the vision encoder with TVM…';
+  visionPreview.disabled = true; visionStatus.textContent = 'Converting the vision encoder with TVM...';
   try {
     const result = await ask('/api/gemma-vision-build', {preview_token: approval.token});
     visionStatus.textContent = result.trouble || ('Text-and-image bundle saved to ' + result.bundle_root);

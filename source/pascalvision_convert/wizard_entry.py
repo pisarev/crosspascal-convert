@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Installed wizard entry points."""
+
 
 from __future__ import annotations
 
@@ -37,7 +37,6 @@ def main() -> int:
 
 
 def gui_main() -> int:
-    """Launch from the installed desktop entry without a console window."""
     app_paths.prepare()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     log_path = app_paths.data_path("logs") / ("wizard-%s-%s.log" % (stamp, os.getpid()))

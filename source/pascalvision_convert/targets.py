@@ -1,12 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Describe build and verification support for a selected deployment target.
 
-The classifier uses the supplied host and target facts. A CUDA build can
-target another architecture, but local execution checks require a matching
-device. A different operating system requires a separate build runner.
-The host probe reports the first CUDA device that the TVM runtime can use.
-"""
 
 import platform
 import re
@@ -42,15 +36,6 @@ _SM_CAPABILITY = re.compile(r'([1-9][0-9]?)\.([0-9])\Z')
 
 
 def normalize_cuda_sm(value):
-    """Canonical CUDA architecture or None: sm_89, 89 and 8.9 -> sm_89.
-
-    Validate the *whole* value before passing it to TVM. Extracting digits from
-    arbitrary text used to accept typos such as 'sm_89garbage' as a real GPU.
-    The format is future-compatible (no hard-coded architecture whitelist) and
-    retains architecture suffixes such as sm_90a rather than silently dropping
-    them. Support for an architecture is ultimately checked by the TVM/CUDA
-    toolchain, not inferred from its syntactic validity.
-    """
     if value is None:
         return None
     if isinstance(value, bool):
@@ -68,7 +53,6 @@ def normalize_cuda_sm(value):
 
 
 def _norm_sm(value):
-    """Legacy comparison helper; bad host probes mean an *unknown* GPU."""
     try:
         return normalize_cuda_sm(value) or ''
     except ValueError:
@@ -76,10 +60,6 @@ def _norm_sm(value):
 
 
 def validate_target_sm(req_device, req_sm=None):
-    """Validate device/SM together and return the canonical SM (or None).
-
-    A CUDA SM given with a CPU build is an error, not an ignored option.
-    """
     device = getattr(req_device, 'value', req_device) or 'cpu'
     device = str(device).strip().lower()
     if device not in ('cpu', 'cuda', 'cudnn'):
@@ -92,7 +72,6 @@ def validate_target_sm(req_device, req_sm=None):
 
 
 def tvm_target_spec(req_device, req_sm=None):
-    """The *actual* TVM target string used by both model frontends."""
     sm = validate_target_sm(req_device, req_sm)
     device = getattr(req_device, 'value', req_device) or 'cpu'
     if str(device).strip().lower() == 'cpu':
@@ -101,13 +80,6 @@ def tvm_target_spec(req_device, req_sm=None):
 
 
 def recommend_target(host_facts, req_device=None, req_sm=None):
-    """Pure machine-first suggestion with an explicit user override.
-
-    host_facts is the shape returned by host(). The detected CUDA architecture
-    is offered as a *build target* when available, otherwise generic CPU is
-    offered. UI callers still need to check the CUDA toolchain is installed;
-    the hardware probe alone does not establish that it can compile.
-    """
     detected_sm = _norm_sm(host_facts.get('cuda_arch')) or None
     requested_sm = normalize_cuda_sm(req_sm)
     if req_device is None:
@@ -137,22 +109,11 @@ TARGET_PROFILE_VERSION = 1
 
 
 def _cpu_codegen_module():
-    """Lazy LLVM codegen module; keeping imports local preserves stdlib callers."""
     from tvm.target import codegen
     return codegen
 
 
 def admit_cpu_codegen(mode='host', mcpu=None, *, host_arch=None, llvm_codegen=None):
-    """Admit an x86_64 LLVM CPU codegen target, without claiming destination UAT.
-
-    BuildPlan uses this check before admitting an explicit tuned CPU target.
-    A valid LLVM CPU name identifies a compiler target. Runtime compatibility
-    requires a separate check on the machine that will execute the module.
-
-    `host` retains the historically optimized tuned target, `generic` uses the
-    x86-64 baseline, and `explicit` requires a caller-selected LLVM CPU name.
-    An explicit request is never replaced with the host CPU after a failure.
-    """
     if type(mode) is not str or mode not in ('host', 'generic', 'explicit'):
         raise ValueError('CPU codegen mode must be host, generic or explicit')
     if _norm_arch(host_arch or platform.machine()) != 'x86_64':
@@ -186,20 +147,6 @@ def admit_cpu_codegen(mode='host', mcpu=None, *, host_arch=None, llvm_codegen=No
 
 
 def require_local_cpu_tuning_target(selected, *, llvm_codegen=None):
-    """Refuse foreign explicit mcpu BEFORE any local MetaSchedule runner runs.
-
-    LLVM accepting a CPU *name* proves a compiler can emit that ISA, not that
-    the host can execute generated kernels.  The current tuning pipeline runs
-    native candidates on its build host.  Until a separate destination tuner
-    is implemented, an explicit CPU must match the observed LLVM host CPU.
-    That equality is a conservative admission rule, NOT a destination feature
-    attestation or a native numerical verification.
-
-    `admit_cpu_codegen` intentionally remains the pure syntax/LLVM-target
-    capability check; it may describe a foreign compiler intention.  A real
-    tuned build has the additional requirement enforced here and at the
-    compiler entry, so no public caller can bypass this runtime safety gate.
-    """
     if type(selected) is not dict or selected.get('mode') not in (
             'host', 'generic', 'explicit'):
         raise ValueError('CPU tuning target is not an admitted mode')
@@ -229,7 +176,6 @@ def require_local_cpu_tuning_target(selected, *, llvm_codegen=None):
 
 
 def normalize_driver_api(value):
-    """CUDA Driver API number (e.g. 12080), or None when it is unknown."""
     if value is None or value == '':
         return None
     if isinstance(value, bool):
@@ -247,12 +193,6 @@ def normalize_driver_api(value):
 
 def resolve_target_profile(host_facts, req_device='cpu', req_sm=None,
                            req_os=None, req_arch=None, req_driver_api=None):
-    """Produce one versioned target description for preview/build/recipe.
-
-    Every piece comes from observed host facts or an explicit user override.
-    This is deliberately independent of GPU/Toolkit discovery and can be
-    exercised with mock hosts without silently selecting the developer's GPU.
-    """
     host_os = _norm_os(host_facts.get('os'))
     host_arch = _norm_arch(host_facts.get('arch'))
     host_sm = _norm_sm(host_facts.get('cuda_arch')) or None
@@ -290,13 +230,6 @@ def resolve_target_profile(host_facts, req_device='cpu', req_sm=None,
 
 
 def validate_recorded_profile(profile, target=None, req_sm=None):
-    """Reject tampered or contradictory versioned target profiles.
-
-    The profile is a recipe input, not a security credential. This check
-    detects inconsistent edits where a user changes only the top-level SM,
-    OS, architecture or TVM target string, accidentally replaying another
-    architecture while believing the original target is being reproduced.
-    """
     if not isinstance(profile, dict):
         raise ValueError('target_profile must be an object')
     if profile.get('target_profile_version') != TARGET_PROFILE_VERSION:
@@ -331,21 +264,6 @@ def validate_recorded_profile(profile, target=None, req_sm=None):
 
 def classify_target(req_os, req_arch, req_device, req_sm,
                     host_os, host_arch, host_cuda_arch):
-    """Classify a requested build target against a host. PURE.
-
-    req_os, req_arch, req_device, req_sm
-        the target: an OS, a CPU architecture, a device ("cpu" or "cuda"), and -
-        for CUDA - a specific sm such as "sm_89" (empty or None when no particular
-        card is named).
-    host_os, host_arch, host_cuda_arch
-        the machine that would build it: its OS, its CPU architecture, and the CUDA
-        architecture of its first card, or None when there is none (or none could
-        be detected).
-
-    Returns (level, reason): one of the five module constants and a short honest
-    sentence. Nothing here reads the running machine - the host is entirely in the
-    arguments - so a given target and host always yield the same verdict.
-    """
     arch_match = _norm_arch(req_arch) == _norm_arch(host_arch)
     os_match = _norm_os(req_os) == _norm_os(host_os)
     device = getattr(req_device, 'value', req_device) or 'cpu'
@@ -374,12 +292,6 @@ def classify_target(req_os, req_arch, req_device, req_sm,
 
 
 def _classify_cuda(req_sm, host_cuda_arch):
-    """LOCAL when the host's card matches the request, COMPILE_ONLY otherwise.
-
-    Compilation of a CUDA module does not need a card (TVM emits the kernels), but
-    tuning, benchmarking and verify all RUN on the device - so a card that is
-    absent or of another sm turns a reachable build into a compile-only one.
-    """
     want = _norm_sm(req_sm)
     have = _norm_sm(host_cuda_arch)
 
@@ -407,24 +319,6 @@ def _classify_cuda(req_sm, host_cuda_arch):
 
 
 def host():
-    """This machine's own facts: OS, CPU architecture, and its CUDA sm if any.
-
-    NOT PURE, unlike classify_target: it reads the running machine and may import
-    TVM to ask about the card. That is why it is a separate function - so the
-    verdict logic stays pure and testable while the machine-reading lives in one
-    place.
-
-        os         platform.system() lowered - "windows", "linux", "darwin"
-        arch       platform.machine() normalised - "AMD64" and "x86_64" both come
-                   back "x86_64", so a Windows and a Linux x86 host agree
-        cuda_arch  the first CUDA card's architecture ("sm_89"), or None
-
-    cuda_arch is BEST EFFORT. Detecting it needs TVM, which the converter does not
-    require to be installed; when TVM is absent, or no card is present, or the
-    query raises for any reason, cuda_arch is None. A None is not an error - it
-    reads downstream as "no local card", the honest thing to say when none was
-    found.
-    """
     return {
         'os': _norm_os(platform.system()),
         'arch': _norm_arch(platform.machine()),
@@ -433,13 +327,6 @@ def host():
 
 
 def _detect_cuda_arch():
-    """The first CUDA card's architecture through TVM, or None. Never raises.
-
-    Mirrors how llm/build_llm.py names a card: tvm.cuda(0).exist to see whether one
-    is there, then Target.from_device to read its arch. Every failure - TVM not
-    installed, no driver, no card, an API that has moved - collapses to None,
-    because the caller needs one plain answer: is there a local card we can name.
-    """
     try:
         import tvm
     except Exception:

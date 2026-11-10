@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Command-line entry point for pascalvision-convert."""
+
 from __future__ import annotations
 
 import argparse
@@ -249,10 +249,6 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 
 def _run_with_a_large_stack(argv=None) -> int:
-    """Run the converter on a worker with a larger stack for deep TVM graphs.
-
-    Try smaller stack sizes if the operating system refuses the initial size.
-    """
     import threading
 
     outcome = {}

@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Session-owned CUDA workspace through TVM's generated-module C ABI."""
+
 import ctypes
 from pathlib import Path
 import threading
@@ -9,13 +9,6 @@ _lock = threading.Lock()
 
 
 class CudaWorkspace:
-    """Replace only this library's two workspace context slots.
-
-    The pinned Windows TVM pool frees CUDA storage in a TLS destructor under
-    the loader lock. Keep these small temporary allocations in the session
-    instead, then free them explicitly before closing the driver context.
-    Other context functions, libraries and on-disk binaries are unchanged.
-    """
     @staticmethod
     def claim(path):
         key = str(Path(path).resolve()).casefold()
@@ -58,7 +51,6 @@ class CudaWorkspace:
             self.alloc_slot = context_slot('__TVMBackendAllocWorkspace')
             self.free_slot = context_slot('__TVMBackendFreeWorkspace')
             if self.alloc_slot is None and self.free_slot is None:
-                                                                           
                 return
             if self.alloc_slot is None or self.free_slot is None:
                 raise ValueError('Incomplete TVM workspace context ABI')
@@ -121,7 +113,7 @@ class CudaWorkspace:
             return
         if self.alloc_slot is not None:
             self.alloc_slot.value, self.free_slot.value = self.saved
-                                                                               
+
         if len(self.free) != len(self.owners):
             self.errors.append('CUDA workspace was still live at session close')
         for pointer in list(self.owners):

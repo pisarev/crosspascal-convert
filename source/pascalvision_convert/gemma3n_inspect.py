@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Inspect the architecture and tensor inventory without loading weights."""
+
 import json
 import os
 from pathlib import Path

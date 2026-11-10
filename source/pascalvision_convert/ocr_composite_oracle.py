@@ -1,22 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Read-only, independent NUMERIC evidence gate for a draft OCR composite.
 
-Run only on captured files, never launch ONNX Runtime, GPU, or a native process.
-The producer must separately execute the ORIGINAL Det/Rec ONNX models on the
-same source image/crops, preserve their raw outputs and preprocessed inputs,
-capture the Pascal tensors BEFORE postprocessing, and independently label the
-text and boxes. A repeated native stdout transcript is never sufficient.
-
-Tensor transport: flat little-endian float32 (.f32le) in declared C order,
-with a SHA-256, shape and dtype for EVERY file. No pickle or automatic layout
-guessing. Comparison is streamed with bounded memory and checks every scalar.
-
-The result NEVER claims VERIFIED_LOCAL for the composite and never writes
-manifest.json or modifies the source plan. Even complete numerical agreement
-is a conditional assessment of the supplied captures; their producers are
-external and their independence cannot be attested by this parser alone.
-"""
 
 from __future__ import annotations
 
@@ -51,11 +35,11 @@ SCORE_ATOL = 0.003
 
 
 class MissingEvidence(Exception):
-    """An essential independent observation is absent; do not judge the model."""
+    pass
 
 
 class InvalidEvidence(Exception):
-    """All necessary observations were supplied but conflict or are invalid."""
+    pass
 
 
 def _needed(mapping, key, where):
@@ -101,8 +85,6 @@ def _digest(path, *, max_bytes=None, expected_bytes=None, identity=None):
         limit = min(v for v in (max_bytes, expected_bytes) if v is not None) if (
             max_bytes is not None or expected_bytes is not None) else None
         while True:
-
-
             amount = 1 << 20 if limit is None else min(1 << 20, limit - length + 1)
             block = stream.read(amount)
             if not block:
@@ -116,7 +98,6 @@ def _digest(path, *, max_bytes=None, expected_bytes=None, identity=None):
 
 def _file(root, name, where, expected_sha=None, *, max_bytes=None,
           expected_bytes=None):
-
     try:
         path = composite._source_file(root, composite._safe_name(name))
     except composite.CompositeContractError as exc:
@@ -148,8 +129,6 @@ def _read_json(root, name, where, sha=None):
     path, digest, _ = _file(root, name, where, sha,
                             max_bytes=MAX_JSON_BYTES)
     try:
-
-
         payload = composite._read_bytes(path, limit=MAX_JSON_BYTES)
         if hashlib.sha256(payload).hexdigest() != digest:
             raise InvalidEvidence('%s JSON bytes changed after SHA' % where)
@@ -165,13 +144,6 @@ def _read_json(root, name, where, sha=None):
 
 
 def _validated_source_png(file, width, height, *, expected_sha=None):
-    """Validate the actual lossless RGB image metadata, CRC and pixel stream.
-
-    Captures must include a PNG8 RGB, non-interlaced image. We do not try to
-    reproduce OpenCV resizing here (the intermediate tensors provide that
-    measurement); unsupported or corrupt image formats remain NOT_CHECKED.
-    No image file is ever written.
-    """
     if width * height > MAX_IMAGE_PIXELS:
         raise MissingEvidence('source image exceeds bounded pixel capacity')
     with file.open('rb') as stream:
@@ -467,12 +439,6 @@ def _candidates(values, where, width, height, *, score_required):
 
 
 def _one_to_one(left, right, compatible, label):
-    """Require a mathematically UNIQUE perfect bipartite matching.
-
-    A perfect matching alone can hide ambiguous close boxes. Eliminate every
-    edge of the selected assignment in turn and reject if another perfect
-    matching still exists. At most MAX_CANDIDATES nodes, bounded.
-    """
     if len(left) != len(right):
         raise InvalidEvidence('%s candidates missing/extra: %d vs %d'
                               % (label, len(left), len(right)))
@@ -564,12 +530,6 @@ def _recognition_tokens(bundle, plan):
 
 
 def _decode_ctc(tensor, ctc, tokens, where):
-    """Independent greedy CTC with explicit blank mapping and token frame spans.
-
-    All class logits are read, finite checked, then argmax class IDs collapse
-    ONLY consecutively, with blank separating repeated characters. Frames
-    return exact alignment intervals so transcribed text stays tied to logits.
-    """
     shape = tensor['shape']
     layout = ctc['logits_layout']
     classes = ctc['expected_classes']
@@ -1043,11 +1003,6 @@ def _evaluate(bundle, evidence_root):
 
 
 def audit_composite_evidence(bundle, evidence_dir):
-    """Always fail closed; missing artifacts -> NOT_CHECKED, mismatches -> FAILED.
-
-    Returns a JSON-ready report. No data is written, no root manifest is issued.
-    A successful synthetic fixture checks the gate implementation, not a model.
-    """
     try:
         return _evaluate(bundle, evidence_dir)
     except (MissingEvidence, FileNotFoundError) as why:

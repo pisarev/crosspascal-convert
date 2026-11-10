@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""One local wizard instance per user, with a bounded discovery receipt."""
+
 
 from contextlib import contextmanager
 import hashlib

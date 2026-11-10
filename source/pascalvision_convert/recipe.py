@@ -1,12 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Build a TVM bundle from a model or a saved recipe.
 
-    python -m pascalvision_convert.recipe MODEL --into out --target cpu
-
-The report records which comparisons ran. Native family builds can complete
-without an independent numerical comparison.
-"""
 
 import argparse
 from contextlib import nullcontext
@@ -25,13 +19,6 @@ from .targets import validate_target_sm
 
 
 def _unheld_onnx_external_data(path):
-    """Find external ONNX tensors without ever dereferencing their sidecars.
-
-    A recipe field can be removed/forged, so *absence of source_closure* is NOT
-    proof of a self-contained graph. Until CLI has its own compiler-held
-    multi-file stage, it must reject direct ONNX external_data even when the
-    saved recipe intentionally omits the original wizard provenance.
-    """
     if not isinstance(path, (str, os.PathLike)) or not os.path.isfile(path):
         return False
 
@@ -48,11 +35,9 @@ def _unheld_onnx_external_data(path):
     try:
         model = onnx.load(path, load_external_data=False)
     except DecodeError as error:
-
         raise ValueError('cannot prove unheld ONNX source self-contained '
                          'after protobuf DecodeError: %s' % error) from error
     except Exception as error:
-
         raise ValueError('cannot prove unheld ONNX source is self-contained '
                          'after an uncertain read/parse failure: %s'
                          % error) from error
@@ -269,7 +254,6 @@ def main(argv=None):
         except (OSError, ValueError) as trouble:
             parser.error(str(trouble))
         if recipe.get('source_closure') is not None:
-
             parser.error('saved ONNX external_data source_closure requires '
                          'native multi-file staged replay, not yet wired to '
                          'plain CLI; use a new wizard Preview/Build instead')
@@ -353,8 +337,6 @@ def main(argv=None):
         license = args.license or None
 
     if native_family_atomic:
-
-
         if (not isinstance(source, str) or not os.path.isabs(source) or
                 not os.path.isdir(source) or source.lower().startswith(
                     ('http://', 'https://'))):
@@ -471,7 +453,6 @@ def main(argv=None):
                 try:
                     shared_root = os.path.commonpath((source_root, destination))
                 except ValueError:
-
                     shared_root = None
                 if shared_root == source_root:
                     raise ValueError('selected Paddle output inside original model')
@@ -613,7 +594,6 @@ def main(argv=None):
             consumer_inventory = None
             kwargs = {}
             if args.hf_selected_tree_sha256:
-
                 kwargs['approved_hf_source_tree_sha256'] = (
                     args.hf_selected_tree_sha256)
             if native_family_atomic:
@@ -656,7 +636,6 @@ def main(argv=None):
                                       arch=arch, dtype=dtype, build_plan=plan,
                                       **kwargs)
                 if args.hf_selected_tree_sha256:
-
                     provenance = built.get('provenance') if type(built) is dict else None
                     selected_source = (provenance.get('hf_source_closure')
                                        if type(provenance) is dict else None)
@@ -713,8 +692,6 @@ def main(argv=None):
                     plan, output, model_key=key,
                     provenance=built['provenance'], license=license)
             if native_family_atomic:
-
-
                 after = bundle_publication.inspect_selected_native_consumer_kit(
                     args.consumer_kit_source, model_key=key, device=target,
                     expected_tree_sha256=args.consumer_kit_tree_sha256)
@@ -732,7 +709,6 @@ def main(argv=None):
         except Exception as trouble:
             print('FAILED native family build/replay: %s' % trouble, file=sys.stderr)
             if native_family_atomic and private_stage is not None:
-
                 try:
                     retained = bundle_atomic._guard_stat(private_stage,
                                                          directory=True)
@@ -801,8 +777,6 @@ def main(argv=None):
                 exported = adapter.export(path, args.into)
             path = exported['onnx']
             if paddle_approved is not None:
-
-
                 selected_paddle_export_provenance = exported['provenance']
             else:
                 with open(os.path.join(args.into, 'import-provenance.json'), 'x',
@@ -841,7 +815,6 @@ def main(argv=None):
                             approved_build_plan=saved_raw_plan, **run_kwargs)
 
     if paddle_approved is not None:
-
         try:
             from . import exported_onnx_hold, paddle_consumer_dictionary
             provenance = selected_paddle_export_provenance
@@ -895,7 +868,6 @@ def main(argv=None):
                 'retained_after_context': True,
             }
             if dictionary_receipt is not None:
-
                 if (dictionary_receipt['status'] !=
                         'POST_WIN32_HELD_SELECTED_REC_DICTIONARY_NOT_MODEL_UAT' or
                         dictionary_receipt['source_tree_sha256'] !=
@@ -912,8 +884,6 @@ def main(argv=None):
                 json.dump(provenance, handle, ensure_ascii=False, indent=2)
                 handle.write('\n')
         except Exception as trouble:
-
-
             print('FAILED selected Paddle exported-ONNX compiler custody: %s'
                   % trouble, file=sys.stderr)
             return 1

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Convert a model, copy its runtime, and compare its output with a reference."""
+
 
 import datetime
 import hashlib
@@ -56,13 +56,6 @@ def _native_artifact_arch():
 
 
 def _unsafe_output_directory(directory):
-    """Detect linked ancestors without following them into unrelated trees.
-
-    A user-supplied destination through a symlink or NTFS junction can redirect
-    a supposedly isolated build into a different user's directory. Do not
-    resolve the link (that would hide it); check each lexical ancestor before
-    any mkdir, native compiler import or output write.
-    """
     path = Path(directory).absolute()
     for member in (path, *path.parents):
         if member.is_symlink() or getattr(member, 'is_junction', lambda: False)():
@@ -71,11 +64,6 @@ def _unsafe_output_directory(directory):
 
 
 def parse_shape(text):
-    """A shape out of "images:1,3,640,640" or "1,3,640,640".
-
-    The name is cut at the LAST colon: inputs of TensorFlow models end in ":0"
-    themselves, and splitting at the first colon tore the name in half.
-    """
     if not text:
         return None, None
     name, _, dims = text.rpartition(':')
@@ -84,12 +72,6 @@ def parse_shape(text):
 
 
 def download(url, target_dir):
-    """Fetch with exact bounded bytes and exclusive no-clobber publication.
-
-    The partially written newly owned destination is RETAINED on failure.
-    It never replaces an existing model.bin or follows a redirected output
-    directory. This bounds transport, not selected compiler-source custody.
-    """
     import urllib.request
     path = os.path.join(target_dir, 'model.bin')
     redirected = _unsafe_output_directory(target_dir)
@@ -154,7 +136,6 @@ def download(url, target_dir):
 
 
 def _remove_leftovers(base):
-    """Drop the .exp and .lib the linker left behind."""
     removed = []
     for suffix in LINKER_LEFTOVERS:
         candidate = base + suffix
@@ -165,7 +146,6 @@ def _remove_leftovers(base):
 
 
 def _sha256_file(path):
-    """Hash a file in blocks without loading it into memory."""
     digest = hashlib.sha256()
     with open(path, 'rb') as handle:
         for block in iter(lambda: handle.read(1 << 20), b''):
@@ -174,14 +154,6 @@ def _sha256_file(path):
 
 
 def _toolchain_versions():
-    """The TVM and ONNX versions that produced the module - best effort.
-
-    NEVER RAISES. A package that will not import records its field as ``unknown``
-    rather than sinking a build that already succeeded (the passport is issued for
-    a model that passed, and a missing version does not unmake that). tvm.runtime
-    is added only when it advertises its own __version__; in TVM 0.26 it does not,
-    so the field is simply left out rather than guessed.
-    """
     versions = {}
     try:
         import tvm
@@ -204,22 +176,11 @@ def _toolchain_versions():
 
 
 def _utc_now_iso():
-    """The current moment as ISO 8601 UTC, e.g. 2026-09-06T12:00:00Z - seconds
-    precision, a trailing Z rather than +00:00, so it reads as one token."""
     now = datetime.datetime.now(datetime.timezone.utc)
     return now.strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def _gather_provenance(built, model_path, source, source_closure=None):
-    """The audit facts the passport and the recipe share, gathered ONCE so the two
-    files agree to the byte: the built module's fingerprint, the source as recorded
-    and its own fingerprint when it is a local file, the toolchain, and the moment.
-
-    NEVER RAISES. Each fact is best effort - a fingerprint that cannot be taken is
-    recorded as None (and then omitted downstream), a version that will not import
-    as ``unknown`` - because this feeds the recipe, which is written for every
-    build that got this far, success or not; a stumble here must not unmake it.
-    """
     facts = {
         'artifact_hash': _try(lambda: _sha256_file(built)),
         'source': source if source is not None else model_path,
@@ -236,8 +197,6 @@ def _gather_provenance(built, model_path, source, source_closure=None):
 
 
 def _try(thunk):
-    """Run *thunk*, returning its value or None if it raised - the best-effort
-    wrapper the provenance facts use so none of them can sink a finished build."""
     try:
         return thunk()
     except Exception:
@@ -245,14 +204,12 @@ def _try(thunk):
 
 
 def _require_selected_cpu_codegen_route(plan, tuned_onnx_cpu):
-    """Reject an unimplemented CPU target route before any TVM compilation."""
     if 'cpu_codegen' in plan and not tuned_onnx_cpu:
         raise ValueError('selected CPU codegen requires ONNX tuned CPU '
                          'compilation; this model route cannot honour it')
 
 
 def _build_failure_diagnostic(error):
-    """Keep the real compiler call site and full traceback outside public reports."""
     import traceback
 
     captured = traceback.TracebackException.from_exception(
@@ -280,47 +237,6 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         req_driver_api=None, approved_build_plan=None, cpu_codegen=None,
         approved_source_closure=None, approved_paddle_source=None,
         approved_onnx_source_pack=None):
-    """Walk the whole path and return a report.
-
-    model_path       a file on disk (already downloaded)
-    target_dir       where the module, runtime and licence go
-    target           cpu or cuda
-    shape            "images:1,3,640,640" or None
-    source           the model as the user named it - a URL or a path - for the
-                     build recipe to record, so a repeat fetches the model afresh
-                     rather than reaching for a local download that may be gone.
-                     None means the recipe records model_path itself, which is
-                     right when the caller was handed a local file to begin with.
-    license          the source model's licence (an SPDX id or a name), recorded
-                     in the passport and the recipe, or None to leave it out. It
-                     is the one audit fact the build cannot discover for itself -
-                     provenance, the hashes and the toolchain are gathered here;
-                     the licence is whatever the caller was told.
-    tune_work_dir    tune the CPU build, keeping the database here; None to skip
-    trials_per_task  trials each tuning task gets; the total budget is that
-                     figure times the model's own task count
-    contract         the model-contract input from the recipe, or None. When it
-                     names a task, a bundle manifest (manifest.txt + manifest.json)
-                     is written beside the module after a successful build; when
-                     it is None or names no task, nothing is emitted and the run
-                     behaves exactly as it always has. See _emit_manifest.
-    req_sm           the CUDA architecture to pass to the TVM compiler (e.g.
-                     "sm_89"), or None to resolve from the measured host GPU.
-                     A CUDA build without either an explicit or a measured SM
-                     is refused before compilation; it must not silently use
-                     an unspecified host GPU. Supplying an SM for CPU refuses.
-    req_os, req_arch  optional deployment OS/CPU architecture overrides.
-                     Defaults are measured from this build host. Every new
-                     build records the same versioned target_profile in recipe
-                     v2; older recipe v1 files remain readable for replay.
-    req_driver_api    optional CUDA Driver API version of the destination.
-                      This is a deployment requirement, not an installed
-                      compiler version; it is recorded in the profile and
-                      checked before compiling for that destination.
-
-    Tuning is disabled by default. When enabled, it searches for schedules
-    for the selected CPU target and stores measurements in the tuning database.
-    """
     report = Report('Converting a model to the TVM format')
 
     def finished(step):
@@ -506,8 +422,6 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         return report
     if (target_profile['deployment'].get('driver_api') is not None
             and target.lower() == 'cuda'):
-
-
         from . import cuda_preflight, environment
         compiler = environment.find_cuda()
         toolkit = cuda_preflight.installed_toolkit_version(
@@ -576,8 +490,6 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         check.numbers['adapter_output_mode'] = adapter_output_mode
         report.summary['adapter_output_mode'] = adapter_output_mode
         if adapter_output_mode == 'rtdetr_fused':
-
-
             adapter_output_signature = signature
         check.say('Pascal %s output shape compatible (%s): %s' % (
             contract['adapter'], adapter_output_mode,
@@ -747,8 +659,6 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
 
 
     if target.lower() == 'cuda' and req_sm and level == targets.COMPILE_ONLY:
-
-
         verify_step = report.step('Comparison with the reference')
         verify_step.say('NOT CHECKED: built for %s, host GPU is %s. Verification '
                         'requires a device matching the requested architecture.'
@@ -769,8 +679,6 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
         'VERIFIED_LOCAL' if verify_step.state == 'done' else
         'NOT_CHECKED' if verify_step.state == 'unchecked' else 'FAILED')
     if paddle_selected is not None:
-
-
         report.summary['exported_onnx_comparison_status'] = (
             report.summary['verification_status'])
         report.summary['verification_status'] = 'NOT_CHECKED'
@@ -873,13 +781,6 @@ def run(model_path, target_dir, target='cpu', shape=None, module_name='model',
 
 
 def _source_output_signature(model_path, kind):
-    """Inspect actual source graph outputs without loading TVM or compiling.
-
-    The signature is used only for adapters with known Pascal output contracts.
-    All dimensions remain as declared: integers for fixed sizes, ONNX symbolic
-    names for shared dynamic sizes, and None for an unconstrained dimension.
-    Inferring values from example data would wrongly certify incompatible graphs.
-    """
     if kind == detect.ONNX:
         import onnx
 
@@ -942,15 +843,6 @@ def _source_output_signature(model_path, kind):
 
 
 def _read_first_input(inputs_path):
-    """Return the ONLY supported public Pascal input with strict TSV parsing.
-
-    The sidecar is the TSV the converter writes beside every module -
-    ``index<TAB>name<TAB>d0,d1,...``. The manifest's io line describes the tensor
-    the caller must supply. The public vision Facade currently describes ONE
-    input; accepting the first of four OmDet tensors would create a false
-    manifest saying a multi-input model only needs one caller tensor.
-    A free dimension -1 is retained explicitly rather than guessing a value.
-    """
     candidate = Path(inputs_path)
     if (candidate.is_symlink() or
             getattr(candidate, 'is_junction', lambda: False)()):
@@ -983,22 +875,6 @@ def _emit_manifest(target_dir, built, target, contract, step,
                    provenance=None, license=None, req_sm=None,
                    target_profile=None, adapter_output_mode=None,
                    adapter_output_signature=None):
-    """Write manifest.txt and manifest.json beside a freshly built vision module.
-
-    The artifact quad is filled here from what the build knows: os and native
-    CPU architecture from the running platform, dtype fixed to float32,
-    device from the chosen target, file from the module's own name, and format
-    and entry from the vision conventions build_vision_contract bakes in. The io
-    name and shape come from the .inputs sidecar; the layout comes from the
-    recipe, because the file does not record it.
-
-    provenance and license enrich the passport into a VERIFIABLE artifact (see
-    _enrich_contract): the built module's hash, where the model came from and
-    when, the toolchain, and the licence. They are optional here on purpose - the
-    pipeline always passes provenance, so a real build gets the rich passport;
-    a direct caller (a test exercising the emit path alone) may omit it and get
-    the plain manifest, exactly as before.
-    """
     linked = _unsafe_output_directory(target_dir)
     if linked:
         raise ValueError('cannot issue Pascal passport through linked output '
@@ -1119,23 +995,11 @@ def _emit_manifest(target_dir, built, target, contract, step,
     step.say('wrote manifest.txt and manifest.json')
     labels = contract.get('labels')
     if labels:
-
-
         step.say('labels source recorded: %s (not yet emitted into the manifest)'
                  % labels)
 
 
 def _enrich_contract(built_contract, provenance, license):
-    """Fold the audit facts into a built vision contract, in place, so the emitter
-    writes them as the extra manifest lines (and the JSON companion mirrors them).
-
-    Each field is added ONLY when it has a value, which is what keeps the
-    optional-in-the-emitter promise intact: a contract enriched with nothing is
-    the contract build_vision_contract made, and renders exactly as the shipped
-    bundles do. provenance is the dict _gather_provenance built (or None); license
-    is the caller's string (or None). The internal keys stay snake_case, matching
-    the rest of the contract; the emitter renders them camelCase.
-    """
     if provenance:
         artifact_hash = provenance.get('artifact_hash')
         if artifact_hash:

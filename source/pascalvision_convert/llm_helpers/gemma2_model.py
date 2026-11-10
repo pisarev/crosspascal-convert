@@ -1,18 +1,7 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Gemma2 architecture using the same TVM compiler/runtime family as Qwen2.
 
-Gemma2 uses bias-free Q/K/V projections and an explicit head_dim independent of
-hidden_size. Each decoder layer has four normalization steps; post-normalization
-is applied before the residual sum. GeGLU uses the PyTorch tanh approximation,
-embeddings are scaled by sqrt(hidden_size), and final logits use softcapping.
-The output head shares the embedding weights. The Gemma weight converter adds
-one to each RMSNorm weight before using the ordinary TVM RMSNorm operator.
 
-This exploratory graph does not implement attention-logit softcapping or
-alternating sliding/global attention. Planned Gemma2 builds are explicitly
-refused until those semantics are implemented and independently checked.
-"""
 import math
 
 from tvm import relax as rx
@@ -23,8 +12,6 @@ from tvm.target import Target
 
 
 class Gemma2Config(object):
-    """Gemma2 architecture parameters from the Hugging Face config.json."""
-
     def __init__(self, raw, dtype='float32',
                  context_window_size=8192, prefill_chunk_size=512):
         self.hidden_size = raw['hidden_size']
@@ -55,18 +42,6 @@ class Gemma2Config(object):
 
 
 def require_step08_exact_gemma2_native_attention(config):
-    """Refuse selected TYPE-1 BuildPlan before any native artifact is written.
-
-    The installed TVM 0.26 fused paged cache applies sm_scale and softmax
-    without pre-softmax 50*tanh(score/50); its one-cache unwindowed route also
-    cannot alternate local4096/global8192. The separate final vocabulary
-    30*tanh(logits/30) must NOT masquerade as attention softcap.
-
-    Once an actually validated Gemma2-only TVM kernel and alternating cache
-    ABI are integrated, replace the final refusal with a source/version-pinned
-    backend capability check plus independent full trained-logit oracle.
-    Ordinary legacy/exploratory Gemma builds remain explicitly non-TYPE1.
-    """
     if (config.attn_logit_softcapping != 50 or
             config.final_logit_softcapping != 30 or
             config.sliding_window != 4096 or
@@ -87,19 +62,12 @@ def require_step08_exact_gemma2_native_attention(config):
 
 
 def _gelu_tanh(x):
-    """gelu_pytorch_tanh: 0.5*x*(1+tanh(sqrt(2/pi)*(x+0.044715*x^3))).
-
-    The wheel's op.gelu uses erf. Gemma2 requires this tanh approximation;
-    substituting the other formula would change each decoder layer.
-    """
     c = math.sqrt(2.0 / math.pi)
     inner = op.tanh((x + x * x * x * 0.044715) * c)
     return x * (inner + 1.0) * 0.5
 
 
 class Gemma2Attention(nn.Module):
-    """Grouped-query attention with fused, bias-free Q/K/V projections."""
-
     def __init__(self, config):
         super().__init__()
         self.head_dim = config.head_dim
@@ -125,8 +93,6 @@ class Gemma2Attention(nn.Module):
 
 
 class Gemma2MLP(nn.Module):
-    """GeGLU with fused gate/up projections, split after the linear layer."""
-
     def __init__(self, config):
         super().__init__()
         self.gate_up_proj = nn.Linear(config.hidden_size,
@@ -143,14 +109,11 @@ class Gemma2MLP(nn.Module):
 
 
 def _rms(config):
-
     return nn.RMSNorm(config.hidden_size, -1, config.rms_norm_eps,
                       bias=False, dtype=config.dtype)
 
 
 class Gemma2DecoderLayer(nn.Module):
-    """Four normalization steps, with post-normalization before residual sums."""
-
     def __init__(self, config):
         super().__init__()
         self.self_attn = Gemma2Attention(config)
@@ -176,8 +139,6 @@ class Gemma2DecoderLayer(nn.Module):
 
 
 class Gemma2Model(nn.Module):
-    """Token embeddings, decoder layers, and final normalization."""
-
     def __init__(self, config):
         super().__init__()
         self.embed_tokens = nn.Embedding(config.vocab_size,
@@ -195,8 +156,6 @@ class Gemma2Model(nn.Module):
 
 
 def _take_last_position(hidden_states):
-    """Keep only the final token's hidden state, as in qwen2_model.py."""
-
     def compute_last(x):
         from tvm import te
         b, s, d = x.shape
@@ -208,8 +167,6 @@ def _take_last_position(hidden_states):
 
 
 class Gemma2ForCausalLM(nn.Module):
-    """Causal language model and its four exported runtime methods."""
-
     def __init__(self, config):
         super().__init__()
         self.model = Gemma2Model(config)
@@ -242,7 +199,6 @@ class Gemma2ForCausalLM(nn.Module):
         return logits
 
     def embed(self, input_ids):
-
         return self.model.embed_tokens(input_ids) * self.embed_scale
 
     def prefill(self, input_embed, paged_kv_cache):

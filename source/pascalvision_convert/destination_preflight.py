@@ -158,8 +158,6 @@ def _required_file(known, name, where, *, expected_sha=None):
 
 
 def _runtime_component(known, name, ext):
-
-
     names = [name + ext, "lib" + name + ext]
     present = [candidate for candidate in names if candidate in known]
     if len(present) != 1:
@@ -268,7 +266,6 @@ def _compare_machine(deploy, machine):
 
 
 def _evaluate(folder, machine):
-
     entries = bundle_download.collect_bundle_files(
         folder, allow_download_info=True)
     known = {name: (Path(path), size) for name, path, size in entries}
@@ -354,7 +351,6 @@ def _evaluate(folder, machine):
     if not licences:
         raise BundleMismatch("TVM licence files missing from bundle")
     if manifest is not None:
-
         try:
             bundle_download._validate_pascal_passport_pair(entries)
         except bundle_download.UnsafeBundle as exc:

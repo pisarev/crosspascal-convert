@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Native TVM Qwen2.5-VL CPU sessions; PyTorch is not a runtime dependency."""
+
 import hashlib
 import json
 import math
@@ -97,7 +97,7 @@ class Session:
                 raise ValueError("Image exceeds 64 megapixels; resize it before attaching")
             image = ImageOps.exif_transpose(original).convert("RGB")
             size = self.manifest["image_size"]
-                                                                                           
+
             image = ImageOps.pad(image, (size, size), method=Image.Resampling.BICUBIC, color=(0, 0, 0))
             pixels = np.asarray(image, dtype="float32")
         p = self.preprocessor

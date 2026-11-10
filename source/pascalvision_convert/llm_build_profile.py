@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Explicit LLM build profiles and the selected compiler interpreter."""
+
 
 import hashlib
 import os
@@ -45,7 +45,6 @@ _PROFILES = {
 
 
 def select(profile_id, *, model_key=None):
-    """Return an explicit profile; an empty selection keeps legacy defaults."""
     if profile_id in (None, ""):
         return None
     if type(profile_id) is not str or profile_id not in _PROFILES:
@@ -74,7 +73,6 @@ def validate(options, *, route, target, dtype, sm):
 
 
 def console_python(path=None):
-    """Use the same distribution's console executable for captured child output."""
     candidate = Path(path or sys.executable).absolute()
     if candidate.name.casefold() == 'pythonw.exe':
         candidate = candidate.with_name('python.exe')
@@ -84,7 +82,6 @@ def console_python(path=None):
 
 
 def python_snapshot(path=None):
-    """Pin a real executable without importing or running its environment."""
     candidate = Path(console_python(path))
     if not candidate.is_file():
         raise ValueError("The selected Python executable does not exist")
@@ -127,7 +124,6 @@ def validate_python(record, *, route):
 
 
 def check_python(record):
-    """Fail before a child starts if its selected executable changed."""
     validate_python(record, route="family_full_build")
     if record is None or python_snapshot(record["path"]) != record:
         raise ValueError("The selected Python executable changed after Preview")

@@ -1,12 +1,6 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
 # -*- coding: utf-8 -*-
-"""Inventory selected local Hugging Face files for Qwen and Gemma.
 
-The scanner reads the model configuration, tokenizer metadata and either a
-single safetensors file or the shards listed in the safetensors index. It
-returns a digest of the files read. Provenance and runtime validation
-require separate checks.
-"""
 
 from __future__ import annotations
 
@@ -67,11 +61,11 @@ _LOCAL_REFERENCE_FIELDS = frozenset((
 
 
 class HfClosureError(ValueError):
-    """Selected HF dependency cannot be represented safely."""
+    pass
 
 
 class HfClosureChanged(HfClosureError):
-    """Selected bytes no longer equal the separately approved SHA tree."""
+    pass
 
 
 def _deny(reason):
@@ -90,12 +84,10 @@ def _identity(info):
 
 
 def _descriptor_identity(info):
-
     return (info.st_mode, info.st_size, info.st_mtime_ns, info.st_dev, info.st_ino)
 
 
 def _root_identity(info):
-
     return info.st_mode, info.st_dev, info.st_ino
 
 
@@ -115,7 +107,6 @@ def _root(path):
 
 
 def _relative(value):
-    """Lexically unambiguous POSIX-like relative path; nested shards allowed."""
     if (type(value) is not str or not value or
             unicodedata.normalize('NFC', value) != value or
             '\\' in value or ':' in value or value.startswith('/') or
@@ -137,7 +128,6 @@ def _relative(value):
 
 
 def _register_path(aliases, relative):
-    """Check case/NFC aliases at EVERY nested ancestor, not just file leaves."""
     parts = _relative(relative).split('/')
     for i in range(1, len(parts) + 1):
         prefix = '/'.join(parts[:i])
@@ -271,7 +261,6 @@ def _valid_tensor_name(name):
 
 
 def _safetensors(base, relative):
-    """Hash one exact opened descriptor while verifying its bounded tensor header."""
     with _opened_regular(base, relative, max_bytes=MAX_TOTAL_BYTES) as (handle, info):
         prefix = handle.read(8)
         if len(prefix) != 8:
@@ -370,7 +359,6 @@ def _index_map(index):
 
 
 def _metadata_selection(base):
-    """Find exact, supported local metadata paths without traversing the tree."""
     present = set(_MANDATORY)
     for name in _OPTIONAL_JSON | _OPTIONAL_OTHER:
         if os.path.lexists(base / name):
@@ -385,11 +373,6 @@ def _metadata_selection(base):
 
 def scan_selected_hf_source(directory, *, expected_model_key=None,
                             max_total_bytes=MAX_TOTAL_BYTES):
-    """Inventory selected files and compute a digest of their relative paths and bytes.
-
-    The digest is independent of the parent directory and unrelated files.
-    Callers that need a stable input must also hold or recheck the files.
-    """
     if (type(max_total_bytes) is not int or
             not 1 <= max_total_bytes <= MAX_TOTAL_BYTES):
         _deny('HF selected source quota must be 1..16GiB')
@@ -439,9 +422,6 @@ def scan_selected_hf_source(directory, *, expected_model_key=None,
     _check_reference_metadata(config, 'config.json', selected)
     _check_reference_metadata(tokenizer, 'tokenizer.json', selected)
     if model_key == qwen_universal.KEY:
-                                                                        
-                                                                       
-                                                                           
         qwen_universal.validate_config(config)
         qwen_universal.verify_tokenizer(base)
         qwen_universal.inspect_local_headers(base, qwen_universal.validate_config(config))
@@ -540,7 +520,6 @@ def scan_selected_hf_source(directory, *, expected_model_key=None,
 
 def audit_selected_hf_source(directory, *, expected_tree_sha256,
                              expected_model_key=None):
-    """Read-only rescan of live source against separately approved exact bytes."""
     approved = _sha(expected_tree_sha256)
     current = scan_selected_hf_source(
         directory, expected_model_key=expected_model_key)

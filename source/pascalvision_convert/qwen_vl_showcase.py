@@ -1,5 +1,5 @@
 # Copyright (C) 2026 Yuriy Pisarev. MIT license; see LICENSE.
-"""Held-source Preview/Build gate for architecture-derived Qwen2.5-VL."""
+
 import ctypes
 import json
 from pathlib import Path
