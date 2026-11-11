@@ -1,6 +1,6 @@
 {
   "schema": "crosspascal-windows-source-index-v1",
-  "release_id": "early-access-017",
+  "release_id": "early-access-018",
   "repository": "crosspascal-convert",
   "local_metadata": [
     {
@@ -18,7 +18,7 @@
     {
       "path": "INSTALL.md",
       "bytes": 31606,
-      "sha256": "b29e0114faf5818d01b6b300dea2a6e99f7734d28ba23989cfc9ebf5b04d514f"
+      "sha256": "d0f9660e17a2e958205d66b329d60af89a5beeb873297c8317f73b7671f532ae"
     },
     {
       "path": "LICENSE",

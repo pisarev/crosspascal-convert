@@ -1,6 +1,6 @@
 # Install and use CrossPascal Converter
 
-Download and extract the [Windows x64 SDK](https://github.com/pisarev/crosspascal/releases/tag/early-access-017).
+Download and extract the [Windows x64 SDK](https://github.com/pisarev/crosspascal/releases/tag/early-access-018).
 The SDK contains the desktop converter, the native TVM compiler and the runtime libraries.
 The converter needs the x64 MSVC linker and the Windows SDK libraries. CUDA profiles also
 need an NVIDIA driver and CUDA Toolkit with NVRTC. Keep the SDK folders together.
