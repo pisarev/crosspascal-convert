@@ -12,9 +12,10 @@ program ConvertQwenVLProfile;
 {$IFDEF FPC}{$MODE DELPHIUNICODE}{$ENDIF}
 
 uses
-  {$IFDEF FPC}SysUtils, Classes, Windows{$ELSE}System.SysUtils, System.Classes, Winapi.Windows{$ENDIF},
-  CrossPascal.Json, CrossPascal.Onnx, CrossPascal.SafeTensors, CrossPascal.SHA256,
-  CrossPascal.TVMCompiler, CrossPascal.TVMOnnx;
+  {$IFDEF FPC}SysUtils, Classes, Windows, Generics.Collections
+  {$ELSE}System.SysUtils, System.Classes, Winapi.Windows, System.Generics.Collections{$ENDIF},
+  CrossPascal.Json, CrossPascal.Onnx, CrossPascal.RowQuantization, CrossPascal.SafeTensors,
+  CrossPascal.SHA256, CrossPascal.TVMCompiler, CrossPascal.TVMOnnx, TVM.CpuGraph;
 
 procedure Check(const Condition: Boolean; const MessageText: string);
 begin
@@ -199,18 +200,181 @@ begin
   {$ENDIF}
 end;
 
-procedure CompileGraph(const Stage: string; const Spec, Artifacts: TJSONObject;
-  const ExpectedLibrary: string; const Kit: TWindowsTvmKit);
+procedure AddParameter(const Params: TJSONObject; const Name, FileName, Kind, Hash: string;
+  const Dimensions: array of Int64);
 var
-  Model: TOnnxModel;
+  Spec: TJSONObject;
+  Shape: TJSONArray;
+  Size: Int64;
+begin
+  Spec := TJSONObject.Create;
+  Params.AddPair(Name, Spec);
+  Shape := TJSONArray.Create;
+  Spec.AddPair('shape', Shape);
+  for Size in Dimensions do Shape.AddElement(JSONInteger(Size));
+  Spec.AddPair('file', FileName);
+  Spec.AddPair('dtype', Kind);
+  Spec.AddPair('sha256', Hash);
+end;
+
+procedure QuantizeMatrix(const Stage, Original, Quantized, Scales: string;
+  const Rows, Columns: Integer; const Written: TStringList);
+var
+  Source: TMappedModelFile;
+  Q8File, ScaleFile: TFileStream;
+  Size: Int64;
+begin
+  if Written.IndexOfName(Quantized) >= 0 then Exit;
+  Source := TMappedModelFile.Create(FileIn(Stage, Original));
+  Q8File := nil;
+  ScaleFile := nil;
+  try
+    Size := Int64(Rows) * Columns * SizeOf(Single);
+    Check(Source.Size = Size, 'Invalid matrix size: ' + Original);
+    Q8File := TFileStream.Create(FileIn(Stage, Quantized), fmCreate or fmShareExclusive);
+    ScaleFile := TFileStream.Create(FileIn(Stage, Scales), fmCreate or fmShareExclusive);
+    WriteSymmetricInt8Rows(Source.AtOffset(0, Size), Rows, Columns, Q8File, ScaleFile);
+    Q8File.Position := 0;
+    ScaleFile.Position := 0;
+    Written.Values[Quantized] := SHA256Stream(Q8File);
+    Written.Values[Scales] := SHA256Stream(ScaleFile);
+  finally
+    ScaleFile.Free;
+    Q8File.Free;
+    Source.Free;
+  end;
+end;
+
+function QuantizeTextGraph(const Model: TOnnxModel; const Stage: string;
+  const Spec: TJSONObject; const Written: TStringList): TOnnxModel;
+var
+  Matrices, Replaced: TDictionary<string, TOnnxValue>;
+  Transposes: TDictionary<string, string>;
+  Nodes: TList<TOnnxNode>;
+  Inputs: TList<TOnnxValue>;
+  Input, Quantized, Scale: TOnnxValue;
+  Node, OriginalNode: TOnnxNode;
+  Attr: TOnnxAttribute;
+  Params, NewParams, Weight: TJSONObject;
+  Names: TJSONArray;
+  Name, Original, Q8File, ScaleFile: string;
+  Rows, Columns, I: Integer;
+begin
+  Matrices := TDictionary<string, TOnnxValue>.Create;
+  Replaced := TDictionary<string, TOnnxValue>.Create;
+  Transposes := TDictionary<string, string>.Create;
+  Nodes := TList<TOnnxNode>.Create;
+  Inputs := TList<TOnnxValue>.Create;
+  NewParams := TJSONObject.Create;
+  Names := TJSONArray.Create;
+  try
+    for Input in Model.Inputs do
+      if (Input.DataType = OnnxFloat) and (Length(Input.Shape) = 2) and
+        (Copy(Input.Name, Length(Input.Name) - 6, 7) = '.weight') then Matrices.Add(Input.Name, Input);
+    for Node in Model.Nodes do
+      if (Node.OpType = 'Transpose') and (Length(Node.Inputs) = 1) and
+        (Length(Node.Outputs) = 1) and Matrices.TryGetValue(Node.Inputs[0], Input) then
+        for Attr in Node.Attributes do
+          if (Attr.Name = 'perm') and (Length(Attr.IntValues) = 2) and
+            (Attr.IntValues[0] = 1) and (Attr.IntValues[1] = 0) then
+          begin
+            Transposes.Add(Node.Outputs[0], Input.Name);
+            Replaced.AddOrSetValue(Input.Name, Input);
+          end;
+    Check(Replaced.Count > 0, 'Qwen-VL text graph has no quantizable linear weights');
+    for OriginalNode in Model.Nodes do
+    begin
+      Node := OriginalNode;
+      if (Node.OpType = 'Transpose') and (Length(Node.Outputs) = 1) and
+        Transposes.ContainsKey(Node.Outputs[0]) then Continue;
+      for I := 0 to High(Node.Inputs) do
+      begin
+        Check(not Replaced.ContainsKey(Node.Inputs[I]), 'Unexpected direct use of a quantized weight');
+        if not Transposes.TryGetValue(Node.Inputs[I], Name) then Continue;
+        Check((Node.OpType = 'MatMul') and (I = 1) and (Length(Node.Inputs) = 2),
+          'A transposed Qwen-VL matrix is not a linear projection');
+        Node.OpType := 'Q8MatMul';
+        Node.Domain := 'crosspascal';
+        Node.Inputs := TArray<string>.Create(Node.Inputs[0], Name + ':int8', Name + ':scale');
+        Break;
+      end;
+      Nodes.Add(Node);
+    end;
+    Params := ObjectValue(Spec.GetValue('parameters'), 'graph parameters');
+    for Input in Model.Inputs do
+    begin
+      if not Replaced.ContainsKey(Input.Name) then
+      begin
+        Inputs.Add(Input);
+        Names.AddElement(TJSONString.Create(Input.Name));
+        if Params.GetValue(Input.Name) <> nil then
+          NewParams.AddPair(Input.Name,
+            ParseCrossJSON(ObjectValue(Params.GetValue(Input.Name), Input.Name).ToJSON));
+        Continue;
+      end;
+      Weight := ObjectValue(Params.GetValue(Input.Name), Input.Name);
+      Check((Input.Shape[0].Value > 0) and (Input.Shape[0].Value <= High(Integer)) and
+        (Input.Shape[1].Value > 0) and (Input.Shape[1].Value <= High(Integer)),
+        'Invalid Qwen-VL linear weight dimensions');
+      Rows := Input.Shape[0].Value;
+      Columns := Input.Shape[1].Value;
+      Original := StringValue(Weight, 'file');
+      Q8File := 'q8-' + Original;
+      ScaleFile := 'scale-' + Original;
+      QuantizeMatrix(Stage, Original, Q8File, ScaleFile, Rows, Columns, Written);
+      Quantized := Input;
+      Quantized.Name := Input.Name + ':int8';
+      Quantized.DataType := OnnxInt8;
+      Scale := Input;
+      Scale.Name := Input.Name + ':scale';
+      Scale.Shape := Copy(Input.Shape, 0, 1);
+      Inputs.Add(Quantized);
+      Inputs.Add(Scale);
+      Names.AddElement(TJSONString.Create(Quantized.Name));
+      Names.AddElement(TJSONString.Create(Scale.Name));
+      AddParameter(NewParams, Quantized.Name, Q8File, 'int8', Written.Values[Q8File], [Rows, Columns]);
+      AddParameter(NewParams, Scale.Name, ScaleFile, 'float32', Written.Values[ScaleFile], [Rows]);
+    end;
+    Result := TOnnxModel.CreateGenerated(Model.Opset, Inputs.ToArray, Model.Outputs,
+      Model.Initializers, Nodes.ToArray, nil);
+    DeleteField(Spec, 'input_names');
+    Spec.AddPair('input_names', Names);
+    Names := nil;
+    DeleteField(Spec, 'parameters');
+    Spec.AddPair('parameters', NewParams);
+    NewParams := nil;
+  finally
+    Names.Free;
+    NewParams.Free;
+    Inputs.Free;
+    Nodes.Free;
+    Transposes.Free;
+    Replaced.Free;
+    Matrices.Free;
+  end;
+end;
+
+procedure CompileGraph(const Stage: string; const Spec, Artifacts: TJSONObject;
+  const ExpectedLibrary: string; const Kit: TWindowsTvmKit;
+  const NvrtcLibrary, Architecture: string; const Quantize: Boolean; const Written: TStringList);
+var
+  Model, Lowered: TOnnxModel;
   Name, LibraryFile: string;
   Inputs: TJSONValue;
   I: Integer;
 begin
   Name := StringValue(Spec, 'library');
   Check(Name = ExpectedLibrary, 'Unexpected Qwen-VL library: ' + Name);
+  DeleteField(Artifacts, Name);
+  if Architecture <> '' then
+  begin
+    Name := StringReplace(Name, '-cpu.dll', '-cuda.dll', []);
+    DeleteField(Spec, 'library');
+    Spec.AddPair('library', Name);
+  end;
   LibraryFile := FileIn(Stage, Name);
   Model := TOnnxModel.Create(FileIn(Stage, StringValue(Spec, 'onnx')));
+  Lowered := nil;
   try
     Inputs := Spec.GetValue('input_names');
     Check((Inputs is TJSONArray) and (TJSONArray(Inputs).Count = Length(Model.Inputs)),
@@ -219,11 +383,17 @@ begin
       Check(Model.Inputs[I].Name = JSONValueText(TJSONArray(Inputs).Items[I]),
         'Unexpected Qwen-VL graph input: ' + Model.Inputs[I].Name);
     WriteLn('Compiling ', UTF8Encode(Name));
-    CompileWindowsTvmOnnxLibrary(Model, Kit, LibraryFile);
+    if Quantize then
+    begin
+      Lowered := QuantizeTextGraph(Model, Stage, Spec, Written);
+      CompileWindowsTvmOnnxLibrary(Lowered, Kit, LibraryFile, NvrtcLibrary, Architecture);
+    end
+    else
+      CompileWindowsTvmOnnxLibrary(Model, Kit, LibraryFile, NvrtcLibrary, Architecture);
   finally
+    Lowered.Free;
     Model.Free;
   end;
-  DeleteField(Artifacts, Name);
   Artifacts.AddPair(Name, FileHash(LibraryFile));
 end;
 
@@ -260,7 +430,47 @@ begin
   RemoveDir(Folder);
 end;
 
-procedure Convert(const Source, Profile, Destination: string; const Kit: TWindowsTvmKit);
+procedure KeepUsedWeights(const Stage: string; const Graphs, Weights: TJSONObject;
+  const Written: TStringList);
+var
+  Used: TStringList;
+  Params, Spec: TJSONObject;
+  I, J, At: Integer;
+  Name, FileName: string;
+begin
+  Used := TStringList.Create;
+  try
+    Used.Sorted := True;
+    Used.Duplicates := dupIgnore;
+    Spec := ObjectValue(Weights.GetValue('model.language_model.embed_tokens.weight'), 'embedding table');
+    Used.Add(StringValue(Spec, 'file'));
+    for I := 0 to Graphs.Count - 1 do
+    begin
+      Spec := ObjectValue(JSONObjectValue(Graphs, I), 'graph');
+      Params := ObjectValue(Spec.GetValue('parameters'), 'graph parameters');
+      for J := 0 to Params.Count - 1 do
+        Used.Add(StringValue(ObjectValue(JSONObjectValue(Params, J), 'weight'), 'file'));
+    end;
+    for I := Weights.Count - 1 downto 0 do
+    begin
+      Name := JSONObjectName(Weights, I);
+      FileName := StringValue(ObjectValue(JSONObjectValue(Weights, I), Name), 'file');
+      if Used.IndexOf(FileName) >= 0 then Continue;
+      At := Written.IndexOfName(FileName);
+      if At >= 0 then
+      begin
+        Check(DeleteFileW(PWideChar(FileIn(Stage, FileName))), 'Cannot remove unused weight: ' + FileName);
+        Written.Delete(At);
+      end;
+      DeleteField(Weights, Name);
+    end;
+  finally
+    Used.Free;
+  end;
+end;
+
+procedure Convert(const Source, Profile, Destination: string; const Kit: TWindowsTvmKit;
+  const NvrtcLibrary, Architecture: string);
 var
   Checkpoint: TSafeTensorCheckpoint;
   Manifest, Parameters, Weights, Sources, Artifacts, Graphs: TJSONObject;
@@ -316,21 +526,35 @@ begin
           end;
           Graphs := ObjectValue(Manifest.GetValue('graphs'), 'graphs');
           Check(Graphs.Count = 3, 'Expected text, vision and prefill graphs');
-          CompileGraph(Stage, ObjectValue(Graphs.GetValue('vision'), 'vision'), Artifacts,
-            'qwen-vl-vision-cpu.dll', Kit);
-          CompileGraph(Stage, ObjectValue(Graphs.GetValue('text'), 'text'), Artifacts,
-            'qwen-vl-text-cpu.dll', Kit);
-          CompileGraph(Stage, ObjectValue(Graphs.GetValue('prefill'), 'prefill'), Artifacts,
-            'qwen-vl-prefill-cpu.dll', Kit);
           ExportWeights(Checkpoint, Weights, Stage, Written, SourceNames);
-          WeightCount := Written.Count;
           CopyGraphBuffers(Manifest, Profile, Stage, Written);
+          CompileGraph(Stage, ObjectValue(Graphs.GetValue('vision'), 'vision'), Artifacts,
+            'qwen-vl-vision-cpu.dll', Kit, NvrtcLibrary, Architecture, False, Written);
+          CompileGraph(Stage, ObjectValue(Graphs.GetValue('text'), 'text'), Artifacts,
+            'qwen-vl-text-cpu.dll', Kit, NvrtcLibrary, Architecture, Architecture <> '', Written);
+          CompileGraph(Stage, ObjectValue(Graphs.GetValue('prefill'), 'prefill'), Artifacts,
+            'qwen-vl-prefill-cpu.dll', Kit, NvrtcLibrary, Architecture, Architecture <> '', Written);
           if FileExists(FileIn(Source, 'LICENSE')) then
             CopyChecked(FileIn(Source, 'LICENSE'), FileIn(Stage, 'LICENSE'), StringValue(Sources, 'LICENSE'));
           DeleteField(Manifest, 'inference_acceptance');
           DeleteField(Manifest, 'delivery_acceptance');
           DeleteField(Manifest, 'compiler');
-          Manifest.AddPair('compiler', 'TVM native LLVM Haswell');
+          if Architecture = '' then
+            Manifest.AddPair('compiler', 'TVM native LLVM Haswell')
+          else
+          begin
+            KeepUsedWeights(Stage, Graphs, Weights, Written);
+            SaveManifest(FileIn(Stage, 'parameters.json'), Parameters);
+            DeleteField(Artifacts, 'parameters.json');
+            Artifacts.AddPair('parameters.json', FileHash(FileIn(Stage, 'parameters.json')));
+            DeleteField(Manifest, 'backend');
+            DeleteField(Manifest, 'cpu_arch');
+            Manifest.AddPair('backend', 'TVM CUDA W8A32');
+            Manifest.AddPair('cuda_arch', Architecture);
+            Manifest.AddPair('compiler', 'TVM native CUDA');
+            Manifest.AddPair('vision_precision', 'FP32');
+          end;
+          WeightCount := Written.Count;
           SaveManifest(FileIn(Stage, 'model.json'), Manifest);
           Check(MoveFileW(PWideChar(Stage), PWideChar(Destination)),
             'Cannot move the verified bundle to its destination');
@@ -354,13 +578,15 @@ end;
 
 var
   Kit: TWindowsTvmKit;
+  NvrtcLibrary, Architecture: string;
 
 begin
   try
-    if ParamCount <> 9 then
+    if (ParamCount <> 9) and not ((ParamCount = 12) and (ParamStr(10) = '--cuda')) then
     begin
       WriteLn(ErrOutput, 'Usage: ConvertQwenVLProfile original-directory profile-directory output-directory');
       WriteLn(ErrOutput, '       TVM-compiler-directory link.exe tvm_ffi.lib msvc-lib ucrt-lib windows-lib');
+      WriteLn(ErrOutput, '       [--cuda nvrtc.dll sm_XX]');
       Halt(2);
     end;
     Kit.CompilerDirectory := ParamStr(4);
@@ -369,7 +595,13 @@ begin
     Kit.MsvcLibraries := ParamStr(7);
     Kit.UcrtLibraries := ParamStr(8);
     Kit.WindowsLibraries := ParamStr(9);
-    Convert(ExpandFileName(ParamStr(1)), ExpandFileName(ParamStr(2)), ExpandFileName(ParamStr(3)), Kit);
+    if ParamCount = 12 then
+    begin
+      NvrtcLibrary := ParamStr(11);
+      Architecture := ParamStr(12);
+    end;
+    Convert(ExpandFileName(ParamStr(1)), ExpandFileName(ParamStr(2)), ExpandFileName(ParamStr(3)),
+      Kit, NvrtcLibrary, Architecture);
   except
     on E: Exception do
     begin

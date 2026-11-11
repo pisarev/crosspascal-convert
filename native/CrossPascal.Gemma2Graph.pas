@@ -36,7 +36,7 @@ type
 
 function ReadGemma2Config(const Config: TJSONObject): TGemma2Config;
 function BuildGemma2Graph(const Config: TGemma2Config; const Weights: TSafeTensorCheckpoint;
-  const Context, Chunk: Integer): TOnnxModel;
+  const Context, Chunk: Integer; const Quantize: Boolean = False): TOnnxModel;
 
 implementation
 
@@ -52,6 +52,7 @@ type
     FKnownWeights: TDictionary<string, Byte>;
     FContext: Integer;
     FChunk: Integer;
+    FQuantize: Boolean;
     FRotary: TRotaryEmbedding;
     FCacheMask: string;
     FCacheIndex: string;
@@ -66,7 +67,7 @@ type
     function DecoderLayer(const Input: string; const Index: Integer): string;
   public
     constructor Create(const Config: TGemma2Config; const Checkpoint: TSafeTensorCheckpoint;
-      const Context, Chunk: Integer);
+      const Context, Chunk: Integer; const Quantize: Boolean);
     destructor Destroy; override;
     function Build: TOnnxModel;
   end;
@@ -120,7 +121,8 @@ begin
 end;
 
 constructor TGemma2GraphBuilder.Create(const Config: TGemma2Config;
-  const Checkpoint: TSafeTensorCheckpoint; const Context, Chunk: Integer);
+  const Checkpoint: TSafeTensorCheckpoint; const Context, Chunk: Integer;
+  const Quantize: Boolean);
 begin
   inherited Create;
   RequireCpu((Context >= 2) and (Context <= Config.MaxContext) and (Chunk >= 1) and
@@ -129,6 +131,7 @@ begin
   FCheckpoint := Checkpoint;
   FContext := Context;
   FChunk := Chunk;
+  FQuantize := Quantize;
   FKnownWeights := TDictionary<string, Byte>.Create;
 end;
 
@@ -156,8 +159,32 @@ begin
 end;
 
 function TGemma2GraphBuilder.Linear(const Input, Name: string; const Features, Rows: Integer): string;
+var
+  Node: TOnnxNode;
+  Quantized, Scale: string;
+  Info: TSafeTensorInfo;
 begin
-  Result := Op('MatMul', [Input, Transpose(Weight(Name, [Rows, Features]), [1, 0])]);
+  if not FQuantize then
+    Exit(Op('MatMul', [Input, Transpose(Weight(Name, [Rows, Features]), [1, 0])]));
+  Quantized := Name + ':int8';
+  Scale := Name + ':scale';
+  if not FKnownWeights.ContainsKey(Quantized) then
+  begin
+    Info := FCheckpoint.TensorInfo(Name);
+    RequireCpu((Length(Info.Shape) = 2) and (Info.Shape[0] = Rows) and
+      (Info.Shape[1] = Features), 'Invalid Gemma 2 matrix shape: ' + Name);
+    FInputs.Add(ValueInfo(Quantized, OnnxInt8, [Rows, Features]));
+    FInputs.Add(ValueInfo(Scale, OnnxFloat, [Rows]));
+    FKnownWeights.Add(Quantized, 0);
+  end;
+  Result := NextName;
+  Node := Default(TOnnxNode);
+  Node.Name := Result;
+  Node.Domain := 'crosspascal';
+  Node.OpType := 'Q8MatMul';
+  Node.Inputs := TArray<string>.Create(Input, Quantized, Scale);
+  Node.Outputs := TArray<string>.Create(Result);
+  FNodes.Add(Node);
 end;
 
 function TGemma2GraphBuilder.Normalize(const Input, Name: string): string;
@@ -288,11 +315,11 @@ begin
 end;
 
 function BuildGemma2Graph(const Config: TGemma2Config; const Weights: TSafeTensorCheckpoint;
-  const Context, Chunk: Integer): TOnnxModel;
+  const Context, Chunk: Integer; const Quantize: Boolean): TOnnxModel;
 var
   Builder: TGemma2GraphBuilder;
 begin
-  Builder := TGemma2GraphBuilder.Create(Config, Weights, Context, Chunk);
+  Builder := TGemma2GraphBuilder.Create(Config, Weights, Context, Chunk, Quantize);
   try
     Result := Builder.Build;
   finally

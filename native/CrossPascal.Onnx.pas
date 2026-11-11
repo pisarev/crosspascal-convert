@@ -16,6 +16,12 @@ interface
 uses
   {$IFDEF FPC}SysUtils{$ELSE}System.SysUtils{$ENDIF}, TVM.CpuGraph;
 
+const
+  OnnxFloat = 1;
+  OnnxInt8 = 3;
+  OnnxInt64 = 7;
+  OnnxBool = 9;
+
 type
   TOnnxBytes = record
     Data: PByte;

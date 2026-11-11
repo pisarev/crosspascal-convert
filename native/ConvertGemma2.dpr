@@ -16,12 +16,14 @@ uses
 
 var
   Kit: TWindowsTvmKit;
+  NvrtcLibrary, Architecture: string;
 
 begin
-  if ParamCount <> 10 then
+  if (ParamCount <> 10) and not ((ParamCount = 13) and (ParamStr(11) = '--cuda')) then
   begin
     WriteLn(ErrOutput, 'Usage: ConvertGemma2 checkpoint-directory destination context prefill-chunk');
     WriteLn(ErrOutput, '       TVM-compiler-directory link.exe tvm_ffi.lib msvc-lib ucrt-lib windows-lib');
+    WriteLn(ErrOutput, '       [--cuda nvrtc.dll sm_XX]');
     Halt(2);
   end;
   try
@@ -31,7 +33,13 @@ begin
     Kit.MsvcLibraries := ParamStr(8);
     Kit.UcrtLibraries := ParamStr(9);
     Kit.WindowsLibraries := ParamStr(10);
-    ConvertGemma2Bundle(ParamStr(1), ParamStr(2), StrToInt(ParamStr(3)), StrToInt(ParamStr(4)), Kit);
+    if ParamCount = 13 then
+    begin
+      NvrtcLibrary := ParamStr(12);
+      Architecture := ParamStr(13);
+    end;
+    ConvertGemma2Bundle(ParamStr(1), ParamStr(2), StrToInt(ParamStr(3)), StrToInt(ParamStr(4)),
+      Kit, NvrtcLibrary, Architecture);
     WriteLn(UTF8Encode(ExpandFileName(ParamStr(2))));
   except
     on E: Exception do

@@ -17,6 +17,8 @@ uses
 
 procedure ConvertCpuVisionBundle(const SourceFile, CatalogFile, ProfileID, Destination: string;
   const Kit: TWindowsTvmKit; const RecipeFile: string = '');
+procedure ConvertVisionBundle(const SourceFile, CatalogFile, ProfileID, Destination: string;
+  const Kit: TWindowsTvmKit; const RecipeFile, NvrtcLibrary, Architecture: string);
 
 implementation
 
@@ -24,9 +26,6 @@ uses
   {$IFDEF FPC}SysUtils, Classes, Windows{$ELSE}System.SysUtils, System.Classes, Winapi.Windows{$ENDIF},
   CrossPascal.Json, CrossPascal.NativeBundle, CrossPascal.Onnx, CrossPascal.SHA256,
   CrossPascal.RtDetrSource, CrossPascal.TVMOnnx, CrossPascal.YoloSource, TVM.CpuGraph;
-
-const
-  ModelFile = 'model.cpu.dll';
 
 function BuildTimeUTC: string;
 var
@@ -92,7 +91,7 @@ begin
 end;
 
 function VisionManifest(const Catalog: TJSONValue;
-  const ProfileID, Source, SourceHash, RecipeHash, BindingsHash: string): TJSONObject;
+  const ProfileID, Source, SourceHash, RecipeHash, BindingsHash, ModelFile, Architecture: string): TJSONObject;
 var
   Root, Profile, Artifact, IO, Provenance, Parameters, Toolchain: TJSONObject;
   Models, Digests, Shape, Mean, Std, Numbers: TJSONArray;
@@ -145,7 +144,12 @@ begin
     Result.AddPair('artifact', Artifact);
     Artifact.AddPair('os', 'windows');
     Artifact.AddPair('arch', 'x86_64');
-    Artifact.AddPair('device', 'cpu');
+    if Architecture = '' then Artifact.AddPair('device', 'cpu')
+    else
+    begin
+      Artifact.AddPair('device', 'cuda');
+      Artifact.AddPair('cuda_arch', Architecture);
+    end;
     Artifact.AddPair('dtype', 'float32');
     Artifact.AddPair('file', ModelFile);
     Artifact.AddPair('entry', 'main');
@@ -207,17 +211,19 @@ begin
   end;
 end;
 
-procedure ConvertCpuVisionBundle(const SourceFile, CatalogFile, ProfileID, Destination: string;
-  const Kit: TWindowsTvmKit; const RecipeFile: string);
+procedure ConvertVisionBundle(const SourceFile, CatalogFile, ProfileID, Destination: string;
+  const Kit: TWindowsTvmKit; const RecipeFile, NvrtcLibrary, Architecture: string);
 var
   Source, RecipeSource, BindingSource: TFileStream;
   Catalog, BindingData: TJSONValue;
   Root, Artifact: TJSONObject;
   Graph, Recipe: TOnnxModel;
-  SourcePath, Output, Stage, ModelPath, Sidecar, RecipeHash, BindingsHash, BindingsFile: string;
+  SourcePath, Output, Stage, ModelPath, ModelFile, Sidecar, RecipeHash, BindingsHash, BindingsFile: string;
   ID: TGUID;
   IsTorch, IsSafeTensors: Boolean;
 begin
+  if Architecture = '' then ModelFile := 'model.cpu.dll'
+  else ModelFile := 'model.cuda.dll';
   SourcePath := ExpandFileName(SourceFile);
   Output := ExcludeTrailingPathDelimiter(ExpandFileName(Destination));
   RequireCpu((not DirectoryExists(Output)) and (not FileExists(Output)) and
@@ -256,7 +262,7 @@ begin
         'Expected an ONNX model or a supported checkpoint');
     Catalog := ReadModelJSON(CatalogFile);
     Root := VisionManifest(Catalog, ProfileID, ExtractFileName(SourcePath), SHA256Stream(Source),
-      RecipeHash, BindingsHash);
+      RecipeHash, BindingsHash, ModelFile, Architecture);
     if IsTorch or IsSafeTensors then
     begin
       Recipe := TOnnxModel.Create(RecipeFile);
@@ -276,7 +282,7 @@ begin
     RequireCpu(CreateDir(ModelPath), 'Could not create the vision build directory');
     Stage := ModelPath;
     ModelPath := BundleMember(Stage, ModelFile);
-    CompileWindowsTvmOnnxLibrary(Graph, Kit, ModelPath);
+    CompileWindowsTvmOnnxLibrary(Graph, Kit, ModelPath, NvrtcLibrary, Architecture);
     Artifact.AddPair('hash', BundleFileSHA256(ModelPath));
     WriteUTF8(BundleMember(Stage, ModelFile + '.inputs'), Sidecar);
     WriteBundleJSON(BundleMember(Stage, 'manifest.json'), Root);
@@ -293,6 +299,12 @@ begin
     Catalog.Free;
     Source.Free;
   end;
+end;
+
+procedure ConvertCpuVisionBundle(const SourceFile, CatalogFile, ProfileID, Destination: string;
+  const Kit: TWindowsTvmKit; const RecipeFile: string);
+begin
+  ConvertVisionBundle(SourceFile, CatalogFile, ProfileID, Destination, Kit, RecipeFile, '', '');
 end;
 
 end.

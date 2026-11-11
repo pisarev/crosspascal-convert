@@ -1,9 +1,12 @@
 # Install and use CrossPascal Converter
 
-Download and extract the [Windows x64 SDK](https://github.com/pisarev/crosspascal/releases/tag/early-access-018).
+Download and extract the [Windows x64 SDK](https://github.com/pisarev/crosspascal/releases/tag/early-access-019).
 The SDK contains the desktop converter, the native TVM compiler and the runtime libraries.
-The converter needs the x64 MSVC linker and the Windows SDK libraries. CUDA profiles also
-need an NVIDIA driver and CUDA Toolkit with NVRTC. Keep the SDK folders together.
+The converter needs the x64 MSVC linker and the Windows SDK libraries. For CUDA
+conversion use NVIDIA CUDA Toolkit 12.8 with NVRTC. It can compile both Pascal
+GPUs such as the GTX 1060 and Blackwell GPUs such as the RTX 5090. Keep the SDK
+folders together. Prepared CUDA inference requires only the compatible driver
+and the supplied TVM runtime.
 
 Open `CrossPascalConvert.exe`, select a profile and its original source, and enter a
 new output directory. Choose **Preview** to check the toolchain, then **Build**.
@@ -12,12 +15,16 @@ Select the generated bundle in GemmaChat, QwenChat or VisionModels.
 | Profile | Input |
 | --- | --- |
 | Gemma 3n E4B CPU or CUDA | GGUF. For image input, also select the matching projector GGUF. |
-| Gemma 2 CPU | Safetensors checkpoint folder with configuration and tokenizer. |
+| Gemma 2 CPU or CUDA | Safetensors checkpoint folder with configuration and tokenizer. |
 | Dense Qwen2.5 CUDA | Safetensors checkpoint folder with configuration and tokenizer. |
-| Qwen2.5-VL 3B CPU | Supported original Qwen2.5-VL-3B-Instruct Safetensors snapshot. |
-| YOLO11n detection and classification | Pinned Ultralytics `.pt` or the matching ONNX. |
-| RT-DETR R18vd CPU | Pinned PekingU Safetensors or the matching ONNX. |
-| SqueezeNet 1.1 and ResNet50 v1 CPU | Original ONNX. |
+| Qwen2.5-VL 3B CPU or CUDA | Supported original Qwen2.5-VL-3B-Instruct Safetensors snapshot. |
+| YOLO11n detection and classification on CPU or CUDA | Pinned Ultralytics `.pt` or the matching ONNX. |
+| RT-DETR R18vd CPU or CUDA | Pinned PekingU Safetensors or the matching ONNX. |
+| SqueezeNet 1.1 and ResNet50 v1 on CPU or CUDA | Original ONNX. |
+
+For CUDA, enter the target compute capability as `sm_61`, `sm_75`, `sm_86`,
+`sm_89` or `sm_120`. A conversion builds one architecture. The ready EA019
+language downloads carry all five variants and share the weight files.
 
 For a custom toolchain, set the appropriate paths in `runtime/converter/toolchain.ini`
 under `[toolchain]`: `COMPILER`, `LINKER`, `FFI_LIB`, `MSVC_LIB`, `UCRT_LIB`,

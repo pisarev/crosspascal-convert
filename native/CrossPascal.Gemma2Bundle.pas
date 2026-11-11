@@ -16,18 +16,16 @@ uses
   CrossPascal.TVMCompiler;
 
 procedure ConvertGemma2Bundle(const Checkpoint, Destination: string; const Context, Chunk: Integer;
-  const Kit: TWindowsTvmKit);
+  const Kit: TWindowsTvmKit; const NvrtcLibrary: string = ''; const Architecture: string = '');
 
 implementation
 
 uses
   {$IFDEF FPC}Windows, SysUtils, Classes{$ELSE}Winapi.Windows, System.SysUtils, System.Classes{$ENDIF},
-  CrossPascal.Gemma2Graph, CrossPascal.Json, CrossPascal.Onnx, CrossPascal.SafeTensors,
+  CrossPascal.Gemma2Graph, CrossPascal.Json, CrossPascal.Onnx, CrossPascal.RowQuantization, CrossPascal.SafeTensors,
   CrossPascal.SHA256, CrossPascal.TokenizerSource, CrossPascal.TVMOnnx, TVM.CpuGraph;
 
 const
-  DecodeLibrary = 'gemma2-cpu.dll';
-  PrefillLibrary = 'gemma2-prefill-cpu.dll';
   ParameterFile = 'weights.bin';
   TokenizerMembers: array[0..6] of string = ('tokenizer-tokens.bin', 'tokenizer-tokens.index',
     'tokenizer-merges.bin', 'tokenizer-chars.bin', 'tokenizer-bytes.bin', 'tokenizer-specials.txt',
@@ -68,12 +66,12 @@ begin
 end;
 
 procedure CompileGraph(const Folder, LibraryName: string; const Kit: TWindowsTvmKit;
-  const Graph: TOnnxModel; const Hashes: TJSONObject);
+  const Graph: TOnnxModel; const Hashes: TJSONObject; const NvrtcLibrary, Architecture: string);
 var
   LibraryPath: string;
 begin
   LibraryPath := BundleMember(Folder, LibraryName);
-  CompileWindowsTvmOnnxLibrary(Graph, Kit, LibraryPath);
+  CompileWindowsTvmOnnxLibrary(Graph, Kit, LibraryPath, NvrtcLibrary, Architecture);
   Hashes.AddPair(LibraryName, HashFile(LibraryPath));
 end;
 
@@ -81,20 +79,28 @@ procedure WriteWeights(const Folder: string; const Checkpoint: TSafeTensorCheckp
   const Decode, Prefill: TOnnxModel; const RuntimeInputs: Integer; const Layout: TJSONArray);
 var
   Stream: TFileStream;
+  Temporary: TFileStream;
+  Mapped: TMappedModelFile;
+  Scales: TMemoryStream;
   Weight, Other: TOnnxValue;
   Shape: TArray<Int64>;
   Entry: TJSONObject;
-  Offset, Expected: Int64;
+  Offset, Expected, FloatBytes: Int64;
+  TemporaryPath, Name, ScaleName: string;
   I, J: Integer;
 begin
   RequireCpu(Length(Decode.Inputs) = Length(Prefill.Inputs), 'Gemma 2 graph input count changed');
+  TemporaryPath := BundleMember(Folder, 'matrix.tmp');
+  Scales := nil;
+  ScaleName := '';
   Stream := TFileStream.Create(BundleMember(Folder, ParameterFile), fmCreate);
   try
     for I := RuntimeInputs to High(Decode.Inputs) do
     begin
       Weight := Decode.Inputs[I];
       Other := Prefill.Inputs[I];
-      RequireCpu((Weight.Name = Other.Name) and (Length(Weight.Shape) = Length(Other.Shape)),
+      RequireCpu((Weight.Name = Other.Name) and (Weight.DataType = Other.DataType) and
+        (Length(Weight.Shape) = Length(Other.Shape)),
         'Gemma 2 weight binding order changed');
       SetLength(Shape, Length(Weight.Shape));
       for J := 0 to High(Shape) do
@@ -105,15 +111,50 @@ begin
       end;
       Offset := Stream.Position;
       Expected := TensorElements(Shape) * SizeOf(Single);
-      Checkpoint.WriteFloat32(Weight.Name, Stream);
+      if Weight.DataType = OnnxInt8 then
+      begin
+        RequireCpu((Scales = nil) and (Length(Shape) = 2) and
+          (Copy(Weight.Name, Length(Weight.Name) - 4, 5) = ':int8'), 'Invalid int8 matrix binding');
+        Name := Copy(Weight.Name, 1, Length(Weight.Name) - 5);
+        Temporary := TFileStream.Create(TemporaryPath, fmCreate);
+        try
+          Checkpoint.WriteFloat32(Name, Temporary);
+        finally
+          Temporary.Free;
+        end;
+        Scales := TMemoryStream.Create;
+        Mapped := TMappedModelFile.Create(TemporaryPath);
+        try
+          FloatBytes := Expected;
+          RequireCpu(Mapped.Size = FloatBytes, 'Invalid source matrix size: ' + Name);
+          WriteSymmetricInt8Rows(Mapped.AtOffset(0, FloatBytes), Shape[0], Shape[1], Stream, Scales);
+        finally
+          Mapped.Free;
+          SysUtils.DeleteFile(TemporaryPath);
+        end;
+        Expected := Expected div SizeOf(Single);
+        ScaleName := Name + ':scale';
+      end
+      else if Scales <> nil then
+      begin
+        RequireCpu((Weight.Name = ScaleName) and (Scales.Size = Expected),
+          'Invalid int8 scale binding: ' + Weight.Name);
+        Stream.CopyFrom(Scales, 0);
+        FreeAndNil(Scales);
+      end
+      else
+        Checkpoint.WriteFloat32(Weight.Name, Stream);
       RequireCpu(Stream.Position - Offset = Expected, 'Incorrect Gemma 2 parameter size: ' + Weight.Name);
       Entry := TJSONObject.Create;
       Layout.AddElement(Entry);
       Entry.AddPair('name', Weight.Name);
       Entry.AddPair('offset', JSONInteger(Offset));
       Entry.AddPair('shape', Dimensions(Shape));
+      if Weight.DataType = OnnxInt8 then Entry.AddPair('dtype', 'int8');
     end;
+    RequireCpu(Scales = nil, 'Missing int8 scale binding');
   finally
+    Scales.Free;
     Stream.Free;
   end;
 end;
@@ -139,7 +180,7 @@ begin
 end;
 
 procedure ConvertGemma2Bundle(const Checkpoint, Destination: string; const Context, Chunk: Integer;
-  const Kit: TWindowsTvmKit);
+  const Kit: TWindowsTvmKit; const NvrtcLibrary, Architecture: string);
 var
   Data: TJSONValue;
   Source, Manifest, Hashes: TJSONObject;
@@ -147,12 +188,17 @@ var
   Weights: TSafeTensorCheckpoint;
   Decode, Prefill: TOnnxModel;
   Config: TGemma2Config;
-  Stage, Output, Name: string;
+  Stage, Output, Name, Target, DecodeLibrary, PrefillLibrary: string;
   ID: TGUID;
   Published: Boolean;
   I: Integer;
   TokenID: Int64;
 begin
+  RequireCpu((NvrtcLibrary = '') = (Architecture = ''), 'CUDA conversion requires NVRTC and an architecture');
+  Target := 'cpu';
+  if Architecture <> '' then Target := 'cuda';
+  DecodeLibrary := 'gemma2-' + Target + '.dll';
+  PrefillLibrary := 'gemma2-prefill-' + Target + '.dll';
   Output := ExcludeTrailingPathDelimiter(ExpandFileName(Destination));
   RequireCpu(DirectoryExists(ExtractFileDir(Output)) and not DirectoryExists(Output) and
     not FileExists(Output), 'Choose a new bundle directory in an existing parent');
@@ -169,8 +215,8 @@ begin
     RequireCpu((Context >= 2) and (Context <= Config.MaxContext) and (Chunk >= 2) and
       (Chunk <= Context), 'Invalid Gemma 2 context or prefill chunk');
     Weights := TSafeTensorCheckpoint.Create(Checkpoint);
-    Decode := BuildGemma2Graph(Config, Weights, Context, 1);
-    Prefill := BuildGemma2Graph(Config, Weights, Context, Chunk);
+    Decode := BuildGemma2Graph(Config, Weights, Context, 1, Architecture <> '');
+    Prefill := BuildGemma2Graph(Config, Weights, Context, Chunk, Architecture <> '');
     RequireCpu(CreateGUID(ID) = 0, 'Could not name the Gemma 2 build directory');
     Name := Output + '.building-' + GUIDToString(ID);
     RequireCpu(CreateDir(Name), 'Could not create the Gemma 2 build directory');
@@ -178,7 +224,12 @@ begin
     Manifest := TJSONObject.Create;
     Manifest.AddPair('schema', 'crosspascal.gemma2.text.v1');
     Manifest.AddPair('model_type', 'gemma2');
-    Manifest.AddPair('target', 'cpu');
+    Manifest.AddPair('target', Target);
+    if Architecture <> '' then
+    begin
+      Manifest.AddPair('backend', 'TVM CUDA W8A32');
+      Manifest.AddPair('cuda_arch', Architecture);
+    end;
     Manifest.AddPair('library', DecodeLibrary);
     Manifest.AddPair('prefill_library', PrefillLibrary);
     Manifest.AddPair('context_window_size', JSONInteger(Context));
@@ -207,8 +258,8 @@ begin
     for Name in TokenizerMembers do Hashes.AddPair(Name, HashFile(BundleMember(Stage, Name)));
     WriteWeights(Stage, Weights, Decode, Prefill, 2 + 2 * Config.Layers, Layout);
     Hashes.AddPair(ParameterFile, HashFile(BundleMember(Stage, ParameterFile)));
-    CompileGraph(Stage, DecodeLibrary, Kit, Decode, Hashes);
-    CompileGraph(Stage, PrefillLibrary, Kit, Prefill, Hashes);
+    CompileGraph(Stage, DecodeLibrary, Kit, Decode, Hashes, NvrtcLibrary, Architecture);
+    CompileGraph(Stage, PrefillLibrary, Kit, Prefill, Hashes, NvrtcLibrary, Architecture);
     WriteManifest(Stage, Manifest);
     RequireCpu(MoveFileW(PWideChar(Stage), PWideChar(Output)), 'Could not install the Gemma 2 bundle');
     Published := True;

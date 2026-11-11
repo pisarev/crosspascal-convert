@@ -33,12 +33,6 @@ uses
   {$IFDEF FPC}SysUtils, Windows, Generics.Collections{$ELSE}System.SysUtils, Winapi.Windows, System.Generics.Collections{$ENDIF},
   DLPack, TVM, TVM.CpuGraph;
 
-const
-  OnnxFloat = 1;
-  OnnxInt8 = 3;
-  OnnxInt64 = 7;
-  OnnxBool = 9;
-
 type
   TFieldGetter = function(Field: Pointer; Output: PTVMFFIAny): Integer; cdecl;
   PFieldInfo = ^TFieldInfo;
@@ -172,6 +166,8 @@ type
     function Where(const Node: TOnnxNode): TGraphValue;
     function GridSample(const Node: TOnnxNode): TGraphValue;
     function ScatterND(const Node: TOnnxNode): TGraphValue;
+    procedure CudaTopK(const Node: TOnnxNode; const Source: TGraphValue;
+      const Axis: Integer; const Count: Int64);
     procedure TopK(const Node: TOnnxNode);
     procedure AddNode(const Node: TOnnxNode);
   public
@@ -588,7 +584,8 @@ var
   var
     ChildBlocks, Loops, Statement, Iterators, Iter, Kind, SpatialLoop, Split, BlockIndex, ThreadIndex: TTVMFFIAny;
     Spatial: TArray<TTVMFFIAny>;
-    J, Count, Used: Integer;
+    J, Count, IteratorCount, Used: Integer;
+    AllSpatial: Boolean;
   begin
     ChildBlocks := Make('s_tir.schedule.ScheduleGetChildBlocks', [Schedule, Candidate]);
     if ArrayLength(ChildBlocks) <> 0 then
@@ -601,19 +598,27 @@ var
     Statement := Make('s_tir.schedule.ScheduleGet', [Schedule, Candidate]);
     Iterators := GetField(Statement, 'iter_vars');
     Count := ArrayLength(Loops);
-    RequireCpu(Count = ArrayLength(Iterators), 'CUDA graph requires a loop per block iterator');
-    SetLength(Spatial, Count);
-    Used := 0;
-    for J := 0 to Count - 1 do
+    IteratorCount := ArrayLength(Iterators);
+    AllSpatial := True;
+    for J := 0 to IteratorCount - 1 do
     begin
       Iter := Make('ffi.ArrayGetItem', [Iterators, TTVMRuntime.AnyInt(J)]);
       Kind := GetField(Iter, 'iter_type');
       RequireCpu(Kind.TypeIndex = kTVMFFIInt, 'Invalid TVM loop kind');
-      if Kind.VInt64 = 0 then
+      if Kind.VInt64 <> 0 then AllSpatial := False;
+    end;
+    RequireCpu(AllSpatial or (Count = IteratorCount), 'CUDA reduction requires a loop per block iterator');
+    SetLength(Spatial, Count);
+    Used := 0;
+    for J := 0 to Count - 1 do
+    begin
+      if not AllSpatial then
       begin
-        Spatial[Used] := Make('ffi.ArrayGetItem', [Loops, TTVMRuntime.AnyInt(J)]);
-        Inc(Used);
+        Iter := Make('ffi.ArrayGetItem', [Iterators, TTVMRuntime.AnyInt(J)]);
+        if GetField(Iter, 'iter_type').VInt64 <> 0 then Continue;
       end;
+      Spatial[Used] := Make('ffi.ArrayGetItem', [Loops, TTVMRuntime.AnyInt(J)]);
+      Inc(Used);
     end;
     SetLength(Spatial, Used);
     case Used of
@@ -2261,6 +2266,93 @@ begin
   end;
 end;
 
+procedure TOnnxBuilder.CudaTopK(const Node: TOnnxNode; const Source: TGraphValue;
+  const Axis: Integer; const Count: Int64);
+const
+  IndexBase = Int64(4294967296);
+var
+  Keys, Indices: TGraphValue;
+  NetworkShape, ResultShape: TArray<Int64>;
+  Iter, Subscripts, Peer: TArray<TTVMFFIAny>;
+  AxisIndex, SourceTensor, KeyTensor, IndexTensor, Bits, Rank, Key, OtherKey,
+    PreferLow, FirstInPair, Ascending, Output: TTVMFFIAny;
+  Int32: TDLDataType;
+  Extent, Width, Stride: Int64;
+  I: Integer;
+
+  function EvenGroup(const Span: Int64): TTVMFFIAny;
+  begin
+    Result := Primitive('tirx.EQ', Primitive('tirx.FloorMod',
+      Primitive('tirx.FloorDiv', AxisIndex, IntImm(Span)), IntImm(2)), IntImm(0));
+  end;
+
+begin
+  Extent := Source.Shape[Axis];
+  RequireCpu(Extent <= High(Integer), 'CUDA TopK axis is too large');
+  Width := 1;
+  while Width < Extent do Width := Width * 2;
+  NetworkShape := Copy(Source.Shape);
+  NetworkShape[Axis] := Width;
+  ResultShape := Copy(Source.Shape);
+  ResultShape[Axis] := Count;
+  SetLength(Iter, Length(NetworkShape));
+  SetLength(Subscripts, Length(NetworkShape));
+  for I := 0 to High(Iter) do
+    Iter[I] := Iteration(UTF8Encode('i' + IntToStr(I)), NetworkShape[I], False, Subscripts[I]);
+  AxisIndex := Subscripts[Axis];
+  SourceTensor := Placeholder(Source.Shape, 'topk_input');
+  Int32 := FIntDType;
+  Int32.bits := 32;
+  Bits := Intrinsic('tirx.reinterpret', Make('ir.PrimType', [TTVMRuntime.AnyDataType(Int32)]),
+    [ReadTensor(SourceTensor, Subscripts)]);
+  Bits := Make('tirx.Cast', [FIntType, Bits, FEmpty]);
+  // Order IEEE floats by signed bits, with the source index breaking equal-score ties.
+  Rank := Intrinsic('tirx.if_then_else', FIntType, [Primitive('tirx.LT', Bits, IntImm(0)),
+    Primitive('tirx.Sub', IntImm(Low(Integer)), Bits), Bits]);
+  if IntAttribute(Node, 'largest', 1) <> 0 then Rank := Primitive('tirx.Sub', IntImm(0), Rank);
+  Key := Primitive('tirx.Add', Primitive('tirx.Mul', Rank, IntImm(IndexBase)), AxisIndex);
+  Key := Intrinsic('tirx.if_then_else', FIntType, [Primitive('tirx.LT', AxisIndex, IntImm(Extent)),
+    Key, IntImm(High(Int64))]);
+  Output := ComputeTensor('topk_keys', Key, Iter);
+  Keys := Emit([Source], [SourceTensor], Output, NetworkShape, OnnxInt64);
+  Peer := Copy(Subscripts);
+  Width := 2;
+  while Width <= NetworkShape[Axis] do
+  begin
+    Ascending := EvenGroup(Width);
+    Stride := Width div 2;
+    while Stride > 0 do
+    begin
+      FirstInPair := EvenGroup(Stride);
+      Peer[Axis] := Intrinsic('tirx.if_then_else', FIntType, [FirstInPair,
+        Primitive('tirx.Add', AxisIndex, IntImm(Stride)),
+        Primitive('tirx.Sub', AxisIndex, IntImm(Stride))]);
+      KeyTensor := Placeholder(NetworkShape, 'topk_pass', OnnxInt64);
+      Key := ReadTensor(KeyTensor, Subscripts);
+      OtherKey := ReadTensor(KeyTensor, Peer);
+      PreferLow := Primitive('tirx.EQ', Ascending, FirstInPair);
+      Output := ComputeTensor('topk_sort', Intrinsic('tirx.if_then_else', FIntType, [PreferLow,
+        Primitive('tirx.Min', Key, OtherKey), Primitive('tirx.Max', Key, OtherKey)]), Iter);
+      Keys := Emit([Keys], [KeyTensor], Output, NetworkShape, OnnxInt64);
+      Stride := Stride div 2;
+    end;
+    Width := Width * 2;
+  end;
+  for I := 0 to High(Iter) do
+    Iter[I] := Iteration(UTF8Encode('i' + IntToStr(I)), ResultShape[I], False, Subscripts[I]);
+  KeyTensor := Placeholder(NetworkShape, 'topk_sorted_keys', OnnxInt64);
+  Output := ComputeTensor('topk_indices',
+    Primitive('tirx.FloorMod', ReadTensor(KeyTensor, Subscripts), IntImm(IndexBase)), Iter);
+  Indices := Emit([Keys], [KeyTensor], Output, ResultShape, OnnxInt64);
+  FValues.Add(Node.Outputs[1], Indices);
+  IndexTensor := Placeholder(ResultShape, 'topk_indices', OnnxInt64);
+  Peer := Copy(Subscripts);
+  Peer[Axis] := ReadTensor(IndexTensor, Subscripts);
+  Output := ComputeTensor('topk_scores', ReadTensor(SourceTensor, Peer), Iter);
+  FValues.Add(Node.Outputs[0], Emit([Source, Indices], [SourceTensor, IndexTensor],
+    Output, ResultShape));
+end;
+
 procedure TOnnxBuilder.TopK(const Node: TOnnxNode);
 var
   Source, Value: TGraphValue;
@@ -2315,6 +2407,11 @@ begin
   K := StaticInput(Node, 1);
   RequireCpu((Source.DataType = OnnxFloat) and (Axis >= 0) and (Axis < Length(Shape)) and
     (Length(K) = 1) and (K[0] > 0) and (K[0] <= Shape[Axis]), 'Invalid ONNX TopK input');
+  if FCuda then
+  begin
+    CudaTopK(Node, Source, Axis, K[0]);
+    Exit;
+  end;
   Shape[Axis] := K[0];
   EmptyArray := Make('ffi.Array', []);
   DType := FIntDType;
