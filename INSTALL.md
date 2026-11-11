@@ -1,4 +1,30 @@
-# Manual Windows installation and first Qwen run
+# Install and use CrossPascal Converter
+
+Download and extract the [Windows x64 SDK](https://github.com/pisarev/crosspascal/releases/tag/early-access-017).
+The SDK contains the desktop converter, the native TVM compiler and the runtime libraries.
+The converter needs the x64 MSVC linker and the Windows SDK libraries. CUDA profiles also
+need an NVIDIA driver and CUDA Toolkit with NVRTC. Keep the SDK folders together.
+
+Open `CrossPascalConvert.exe`, select a profile and its original source, and enter a
+new output directory. Choose **Preview** to check the toolchain, then **Build**.
+Select the generated bundle in GemmaChat, QwenChat or VisionModels.
+
+| Profile | Input |
+| --- | --- |
+| Gemma 3n E4B CPU or CUDA | GGUF. For image input, also select the matching projector GGUF. |
+| Gemma 2 CPU | Safetensors checkpoint folder with configuration and tokenizer. |
+| Dense Qwen2.5 CUDA | Safetensors checkpoint folder with configuration and tokenizer. |
+| Qwen2.5-VL 3B CPU | Supported original Qwen2.5-VL-3B-Instruct Safetensors snapshot. |
+| YOLO11n detection and classification | Pinned Ultralytics `.pt` or the matching ONNX. |
+| RT-DETR R18vd CPU | Pinned PekingU Safetensors or the matching ONNX. |
+| SqueezeNet 1.1 and ResNet50 v1 CPU | Original ONNX. |
+
+For a custom toolchain, set the appropriate paths in `runtime/converter/toolchain.ini`
+under `[toolchain]`: `COMPILER`, `LINKER`, `FFI_LIB`, `MSVC_LIB`, `UCRT_LIB`,
+`WINDOWS_LIB` or `NVRTC`. The converter accepts absolute paths and paths relative
+to `runtime/converter`.
+
+## Browser converter in earlier releases
 
 This guide takes you from the Windows x64 SDK to a short Qwen answer in Delphi or Lazarus. It uses the supplied converter and Python environment.
 

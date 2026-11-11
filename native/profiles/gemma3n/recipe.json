@@ -1,0 +1,10 @@
+{
+  "schema": "crosspascal.gemma3n.cpu-recipe.v1",
+  "source_sha256": "4e3c80c945d2db3ad542bc133e0465cb59332aa9b7e6376e38ab25782559a599",
+  "projector_sha256": "79d049bcb4e446e2ca427e960799ac3e2c7152e906c1c1669e24037e0600f7d7",
+  "context": 1024,
+  "prefill_chunk": 16,
+  "graph_sha256": {
+    "vision.onnx": "ae5a3057747cf6d0654e469294a2576b7d5a7572f26c617a7b597f0f3e65b69d"
+  }
+}

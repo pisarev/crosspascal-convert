@@ -1,5 +1,19 @@
 # CrossPascal Converter
 
+## Native Windows converter
+
+Open `CrossPascalConvert.exe` from the Windows x64 SDK. Select a profile,
+provide the original checkpoint and choose a new output directory. For a
+Gemma 3n image bundle, also provide the matching projector GGUF. Use
+**Preview** to review the selected build, then **Build** to generate TVM
+libraries and a model bundle. The desktop launcher and its converter tools
+run without Python. The SDK includes the TVM compiler. Conversion uses the
+Windows x64 linker and SDK libraries, with NVRTC for CUDA builds.
+
+See the [installation guide](INSTALL.md) for the current profiles and toolchain. The sections below describe the browser converter from earlier releases.
+
+## Browser converter in earlier releases
+
 CrossPascal Convert builds native model libraries and weights for Pascal applications. The converter runs on your computer and opens a local browser interface. This repository contains its Python package, browser interface, model adapters, and language-model compiler integration.
 
 ## Get started

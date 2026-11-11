@@ -16,6 +16,21 @@
       "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da"
     },
     {
+      "path": "INSTALL.md",
+      "bytes": 31606,
+      "sha256": "b29e0114faf5818d01b6b300dea2a6e99f7734d28ba23989cfc9ebf5b04d514f"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 1070,
+      "sha256": "04b643fe3d2d95be3b9a0ad9d3882d00a9b2d9dfb74694f35fe8edfc77e67815"
+    },
+    {
+      "path": "README.md",
+      "bytes": 6497,
+      "sha256": "ff240930eb27273b177e67e342c190f4cf48356f7f705dd348fa7ee185a3a39b"
+    },
+    {
       "path": "docs/FIRST-RUN-VALIDATION.md",
       "bytes": 1319,
       "sha256": "51964e9a9b9eef48f816dff31442d09f67a88847c0bec7a16c7218635b2731bd"
@@ -36,14 +51,19 @@
       "sha256": "bc5478e2d835b137d15b62358ec4107b52121acad365cc3d2bf4d16a9715902b"
     },
     {
-      "path": "INSTALL.md",
-      "bytes": 30080,
-      "sha256": "c61bbf538aa0c97dbd047c27633d2437e35baa139ac5ba68f1ed5625fdc3025a"
+      "path": "licenses/LLAMA_CPP_LICENSE.txt",
+      "bytes": 1099,
+      "sha256": "bcd8ec749126d45cb06737d0690295d73df4b6e7e194205bcf91190368f27285"
     },
     {
-      "path": "LICENSE",
-      "bytes": 1070,
-      "sha256": "04b643fe3d2d95be3b9a0ad9d3882d00a9b2d9dfb74694f35fe8edfc77e67815"
+      "path": "licenses/LLAMA_CPP_VENDORS_LICENSE.txt",
+      "bytes": 7424,
+      "sha256": "7547ae6372a35e7382898dd9f5519ebc16e93095f69c2466b5b74b617c33d4da"
+    },
+    {
+      "path": "licenses/ggml-base.md",
+      "bytes": 421,
+      "sha256": "e652a04b1c02cf1357adf2f3db7e636956c7ede00a41a11bd2c064c88eacc7ae"
     },
     {
       "path": "licenses/timm-LICENSE.txt",
@@ -51,14 +71,209 @@
       "sha256": "71b111620fa32c17a80ccd6db2da759d31a591e497d8b5f382174f59d1b59d49"
     },
     {
+      "path": "licenses/ultralytics-LICENSE-AGPL-3.0.txt",
+      "bytes": 34523,
+      "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+    },
+    {
+      "path": "native/ConvertGemma2.dpr",
+      "bytes": 1583,
+      "sha256": "cace1ca31cda8f2b77e227f072370a5ee1e5c1297c668dcd81cec3091cda19c5"
+    },
+    {
+      "path": "native/ConvertGemma3n.dpr",
+      "bytes": 3596,
+      "sha256": "c7f8095f2f0242a83d088bd8be9760a6381842d9dfdae29e870f4f614b6785e5"
+    },
+    {
+      "path": "native/ConvertQwen2.dpr",
+      "bytes": 6107,
+      "sha256": "51de9158e3ba03435ae0c44987d4428f5f88775dafe813fe81cc94a321a49d2c"
+    },
+    {
+      "path": "native/ConvertQwenVLProfile.dpr",
+      "bytes": 13865,
+      "sha256": "3c23a317aa60f733ad010b47bfbfd17259272e1ca6bf38cb1ea5b5fce5841b63"
+    },
+    {
+      "path": "native/ConvertVisionOnnx.dpr",
+      "bytes": 1693,
+      "sha256": "062bf4bc09661011d4194d7a9e801eb0c80172727f64cedb2a834d0750f99662"
+    },
+    {
+      "path": "native/CrossPascal.GGUF.pas",
+      "bytes": 14561,
+      "sha256": "428cc42f726a6dfe71288fb53e20519ac189054cf8667baf5d681c345b54368f"
+    },
+    {
+      "path": "native/CrossPascal.Gemma2Bundle.pas",
+      "bytes": 8495,
+      "sha256": "fa7ed8e61c68e8a27e793fa922ba87a9b9eb9243f4fe27a8f28a4232cdd2e7fd"
+    },
+    {
+      "path": "native/CrossPascal.Gemma2Graph.pas",
+      "bytes": 11995,
+      "sha256": "c72edcf33a325889eb58b1dd236939517ccd4b39b684cb86f4761ad02d3de51b"
+    },
+    {
+      "path": "native/CrossPascal.Gemma3nBundle.pas",
+      "bytes": 31448,
+      "sha256": "6cd0289f1b3e1ec7b5d11788b9f027ea9fd651f4e19cae56a6abcd2042171e50"
+    },
+    {
+      "path": "native/CrossPascal.Gemma3nGraph.pas",
+      "bytes": 15443,
+      "sha256": "fe08c0c196b57104e3095971a9305a67fe55f25a29527cca2c605632a5e25695"
+    },
+    {
+      "path": "native/CrossPascal.Gemma3nSource.pas",
+      "bytes": 17971,
+      "sha256": "77ae09f2a79f911b093b8e9086bd68920f32c6a48e6e9e06820cb9b43bc2f419"
+    },
+    {
+      "path": "native/CrossPascal.Gemma3nVisionSource.pas",
+      "bytes": 6074,
+      "sha256": "f4905c0acef7d7895a6c4b00e47683f9c29298e0bfdb39a96a190892cddb1fec"
+    },
+    {
+      "path": "native/CrossPascal.ModelGraph.pas",
+      "bytes": 10665,
+      "sha256": "3fc262e2d1019b1c6904065b213c77989d57827f43777aa41161e86633859a3b"
+    },
+    {
+      "path": "native/CrossPascal.NativeBundle.pas",
+      "bytes": 4135,
+      "sha256": "bc4461ebcf972fbf50cadab8e72c8f8e1c36ecbd9619e7f53a97f364ed014eac"
+    },
+    {
+      "path": "native/CrossPascal.Nvrtc.pas",
+      "bytes": 12477,
+      "sha256": "f3cc4270029d34d4537b58ba6b8741ccf8de19dafdf6cf2898ca452db951f072"
+    },
+    {
+      "path": "native/CrossPascal.Onnx.pas",
+      "bytes": 16866,
+      "sha256": "40fe5994c9a1a8393983ce603a158cb4303c5e92a950c437680d7ab29f835796"
+    },
+    {
+      "path": "native/CrossPascal.Qwen2Graph.pas",
+      "bytes": 10858,
+      "sha256": "681112c214430555096ead7c1e6a653d668e5b3cfe41ce763150881f2c8682c4"
+    },
+    {
+      "path": "native/CrossPascal.RowQuantization.pas",
+      "bytes": 2743,
+      "sha256": "acd49bbafa05dd8c0223971c9d3bcaed3cfb4d03f46d8105f9dcce71bef45014"
+    },
+    {
+      "path": "native/CrossPascal.RtDetrSource.pas",
+      "bytes": 6302,
+      "sha256": "ea0536c45fde657090eb5b8580e00e7a3326310983768bc4502364286d174d28"
+    },
+    {
+      "path": "native/CrossPascal.SafeTensors.pas",
+      "bytes": 11508,
+      "sha256": "67e5dae6958d795769d9f42086d97fb5d49f5e9330d91814a28779f5c9864eda"
+    },
+    {
+      "path": "native/CrossPascal.TVMCompiler.pas",
+      "bytes": 27295,
+      "sha256": "7564a7586095dd0d12a6d3c9475b67c6374debb673ef641d0a298121fb9fed21"
+    },
+    {
+      "path": "native/CrossPascal.TVMOnnx.pas",
+      "bytes": 106595,
+      "sha256": "c5c22dc9659dbe927b9f6c80bd540c57b285d6e3251a02396c743b19fdd12ca8"
+    },
+    {
+      "path": "native/CrossPascal.TokenizerSource.pas",
+      "bytes": 9693,
+      "sha256": "313bca327bd3931df064ca6a286564e2576f3fa3c75efc5d8e3c2b535c5c324c"
+    },
+    {
+      "path": "native/CrossPascal.TorchCheckpoint.pas",
+      "bytes": 20445,
+      "sha256": "5054e0e32db1db200e1b132ccd52589c9b7fc63472aaacd27539955ad9c5596b"
+    },
+    {
+      "path": "native/CrossPascal.UnicodeJson.pas",
+      "bytes": 9582,
+      "sha256": "fa0fe9bed33b60c883744aa4b592bb255943914b1d49f2e8712defbd956b7c65"
+    },
+    {
+      "path": "native/CrossPascal.VisionBundle.pas",
+      "bytes": 12246,
+      "sha256": "572fe4c9b578cc8c6ab244e1c323c68956a10c06cb8379e0ef92be978755a41f"
+    },
+    {
+      "path": "native/CrossPascal.YoloSource.pas",
+      "bytes": 5189,
+      "sha256": "5d1bb3abe32c443b49e77965c3cd7e57ea92027f2a25921f3aa01a18ebfaa635"
+    },
+    {
+      "path": "native/profiles/README.md",
+      "bytes": 1127,
+      "sha256": "a432b0a6c6ff895d4a6879c14f77732e32e20fc8181f2c05f429be0cbe16ce99"
+    },
+    {
+      "path": "native/profiles/gemma3n/recipe.json",
+      "bytes": 382,
+      "sha256": "2fa8ac7705bc023cb3018cf717fbe42220d68a86309f44f8d0e46f7e5862ea6f"
+    },
+    {
+      "path": "native/profiles/gemma3n/vision.onnx",
+      "bytes": 1027366,
+      "sha256": "ae5a3057747cf6d0654e469294a2576b7d5a7572f26c617a7b597f0f3e65b69d"
+    },
+    {
+      "path": "native/profiles/qwen-vl/model.json",
+      "bytes": 475935,
+      "sha256": "db1e925fbd4db85b6ac09ba9b7b73d1736b72b105c600120145cc6adc1d98662"
+    },
+    {
+      "path": "native/profiles/qwen-vl/parameters.json",
+      "bytes": 216044,
+      "sha256": "f50e0da24f95003f9f3d08572bc9b44d646899cbf43a2db02f42df308c31b93d"
+    },
+    {
+      "path": "native/profiles/qwen-vl/prefill.onnx",
+      "bytes": 1738236,
+      "sha256": "cddd130b138c7b85859b0bfc8b9dbdba4949f8323efb42844807f34f8004caac"
+    },
+    {
+      "path": "native/profiles/qwen-vl/text.onnx",
+      "bytes": 1723591,
+      "sha256": "905b2ec75841b5ce809227129cf4f3e7230a4a34f49cb88cc31bd903a696385a"
+    },
+    {
+      "path": "native/profiles/qwen-vl/vision.onnx",
+      "bytes": 11219124,
+      "sha256": "49d5e3a4ca9cdebe00bd5b0142301dba101f2632f4d8900171515c2b5d80e98e"
+    },
+    {
+      "path": "native/profiles/rtdetr-r18vd/bindings.json",
+      "bytes": 51253,
+      "sha256": "6e941305c6fcde12e46abb9061ddb2a9b059c67f92471e1fc170d581d1153b26"
+    },
+    {
+      "path": "native/profiles/rtdetr-r18vd/model.onnx",
+      "bytes": 754592,
+      "sha256": "1c007787eddb20f0bedd6319a391bfa57f31e106435fb56e0f35b4a510da0c9b"
+    },
+    {
+      "path": "native/profiles/yolo11n-cls/model.onnx",
+      "bytes": 46732,
+      "sha256": "aeba9eb9e849684f1a2958273aa7e6fb9b270a7923d258f6b2081bb606efc315"
+    },
+    {
+      "path": "native/profiles/yolo11n/model.onnx",
+      "bytes": 235266,
+      "sha256": "867d40f677e1244f124108ff1383f4e9fc2e1d212aba79a9fdeb704bb66edaa0"
+    },
+    {
       "path": "pyproject.toml",
       "bytes": 1047,
       "sha256": "74fc6d1bb0c432920cd99584c17bd43826c86ca26ae6a1613200c11c640487f6"
-    },
-    {
-      "path": "README.md",
-      "bytes": 5814,
-      "sha256": "760c40b5d8bd00e3a41010e85feceea434c7b4ab5cfd29483c0200ab62303013"
     },
     {
       "path": "scripts/verify_source.py",
@@ -311,6 +526,11 @@
       "sha256": "a05936a556bd52ddea4731e23e6a119357e2553c94aa521552a36e9ee52a2143"
     },
     {
+      "path": "source/pascalvision_convert/llm_helpers/HELPER-SHA256.json",
+      "bytes": 537,
+      "sha256": "54a672baa2fec5d16096a43ffa8dded719d6adf7832dee0fd6703a12d724dda3"
+    },
+    {
       "path": "source/pascalvision_convert/llm_helpers/__init__.py",
       "bytes": 63,
       "sha256": "c38aef1ecf4333dde1ff77e2417804e66f53696520b7aa76d181e77d35b89466"
@@ -324,11 +544,6 @@
       "path": "source/pascalvision_convert/llm_helpers/gemma2_model.py",
       "bytes": 10821,
       "sha256": "ec57810c0555eec36138087e55f44e15f57f7863ad2f29ab97895c6789c6b9f5"
-    },
-    {
-      "path": "source/pascalvision_convert/llm_helpers/HELPER-SHA256.json",
-      "bytes": 537,
-      "sha256": "54a672baa2fec5d16096a43ffa8dded719d6adf7832dee0fd6703a12d724dda3"
     },
     {
       "path": "source/pascalvision_convert/llm_helpers/qwen2_model.py",
