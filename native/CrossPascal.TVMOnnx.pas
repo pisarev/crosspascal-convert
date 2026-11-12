@@ -134,6 +134,7 @@ type
       const ParallelBlock: PAnsiChar = nil; const ParallelAxes: Integer = 0;
       const ReduceOnCuda: Boolean = False): TGraphValue;
     function Conv(const Node: TOnnxNode): TGraphValue;
+    function ConvTranspose(const Node: TOnnxNode): TGraphValue;
     function PatchConv3D(const Node: TOnnxNode; const Image, Weights: TGraphValue): TGraphValue;
     function Pool(const Node: TOnnxNode): TGraphValue;
     function Concat(const Node: TOnnxNode): TGraphValue;
@@ -166,8 +167,8 @@ type
     function Where(const Node: TOnnxNode): TGraphValue;
     function GridSample(const Node: TOnnxNode): TGraphValue;
     function ScatterND(const Node: TOnnxNode): TGraphValue;
-    procedure CudaTopK(const Node: TOnnxNode; const Source: TGraphValue;
-      const Axis: Integer; const Count: Int64);
+    procedure CudaTopK(const Node: TOnnxNode; const Source: TGraphValue; const Axis: Integer;
+      const Count: Int64);
     procedure TopK(const Node: TOnnxNode);
     procedure AddNode(const Node: TOnnxNode);
   public
@@ -228,6 +229,39 @@ begin
   for Attribute in Node.Attributes do
     if Attribute.Name = 'auto_pad' then
       RequireCpu(Attribute.Text = 'NOTSET', 'Unsupported ONNX automatic padding: ' + Node.Name);
+end;
+
+function SpatialPads(const Node: TOnnxNode;
+  const InputShape, Kernel, Strides, Dilation: array of Int64): TArray<Int64>;
+var
+  Mode: string;
+  I: Integer;
+  OutputSize, Total: Int64;
+  Attribute: TOnnxAttribute;
+begin
+  Mode := StringAttribute(Node, 'auto_pad', 'NOTSET');
+  if Mode = 'NOTSET' then Exit(IntsAttribute(Node, 'pads', [0, 0, 0, 0]));
+  RequireCpu((Mode = 'VALID') or (Mode = 'SAME_UPPER') or (Mode = 'SAME_LOWER'),
+    'Unsupported ONNX automatic padding: ' + Mode);
+  for Attribute in Node.Attributes do
+    RequireCpu(Attribute.Name <> 'pads', 'ONNX automatic and explicit padding cannot be combined');
+  RequireCpu((Length(InputShape) = 4) and (Length(Kernel) = 2) and
+    (Length(Strides) = 2) and (Length(Dilation) = 2), 'Invalid automatic padding dimensions');
+  SetLength(Result, 4);
+  if Mode = 'VALID' then Exit;
+  for I := 0 to 1 do
+  begin
+    RequireCpu((InputShape[I + 2] > 0) and (InputShape[I + 2] <= High(Integer)) and
+      (Strides[I] > 0) and (Strides[I] <= 4096) and
+      (Dilation[I] > 0) and (Dilation[I] <= 4096) and
+      (Kernel[I] > 0) and (Kernel[I] <= 4096), 'Invalid automatic padding extent');
+    OutputSize := (InputShape[I + 2] + Strides[I] - 1) div Strides[I];
+    Total := (OutputSize - 1) * Strides[I] + Dilation[I] * (Kernel[I] - 1) + 1 - InputShape[I + 2];
+    if Total < 0 then Total := 0;
+    Result[I] := Total div 2;
+    if Mode = 'SAME_LOWER' then Result[I] := Total - Result[I];
+    Result[I + 2] := Total - Result[I];
+  end;
 end;
 
 function SpatialSize(const InputSize, BeforePad, AfterPad, Kernel, Stride, Dilation: Int64): Int64;
@@ -772,17 +806,20 @@ var
   end;
 
 begin
-  RequireExplicitPadding(Node);
   Image := Input(Node, 0);
   Weights := Input(Node, 1);
-  if Length(Image.Shape) = 5 then Exit(PatchConv3D(Node, Image, Weights));
+  if Length(Image.Shape) = 5 then
+  begin
+    RequireExplicitPadding(Node);
+    Exit(PatchConv3D(Node, Image, Weights));
+  end;
   Groups := IntAttribute(Node, 'group', 1);
   RequireCpu((Length(Image.Shape) = 4) and (Length(Weights.Shape) = 4) and (Groups > 0) and
     (Image.Shape[1] mod Groups = 0) and (Weights.Shape[0] mod Groups = 0) and
     (Image.Shape[1] div Groups = Weights.Shape[1]), 'Invalid ONNX Conv channel groups');
-  Pads := IntsAttribute(Node, 'pads', [0, 0, 0, 0]);
   Strides := IntsAttribute(Node, 'strides', [1, 1]);
   Dilation := IntsAttribute(Node, 'dilations', [1, 1]);
+  Pads := SpatialPads(Node, Image.Shape, [Weights.Shape[2], Weights.Shape[3]], Strides, Dilation);
   SetLength(Shape, 4);
   Shape[0] := Image.Shape[0];
   Shape[1] := Weights.Shape[0];
@@ -845,6 +882,95 @@ begin
   else
     Result := Emit([Image, Weights], [InputTensor, WeightTensor], Compute, Shape, OnnxFloat,
       'conv2d', ParallelAxes);
+end;
+
+function TOnnxBuilder.ConvTranspose(const Node: TOnnxNode): TGraphValue;
+const
+  Names: array[0..6] of UTF8String = ('n', 'oc', 'h', 'w', 'ic', 'kh', 'kw');
+var
+  Source, Weights, Bias, Convolved: TGraphValue;
+  Shape, Pads, Strides, Dilation, Extra, Kernel: TArray<Int64>;
+  Iter, Axes: array[0..6] of TTVMFFIAny;
+  Sizes: array[0..6] of Int64;
+  X, W, B, Channel, GroupIndex, Y, Z, InsideY, InsideZ, Pixel, Product, Compute: TTVMFFIAny;
+  Groups, Channels: Int64;
+  I: Integer;
+
+  function Coordinate(const Output, K: TTVMFFIAny; const Pad, Step, Stride, Extent: Int64;
+    out Inside: TTVMFFIAny): TTVMFFIAny;
+  var
+    Shift: TTVMFFIAny;
+  begin
+    Shift := Primitive('tirx.Sub', Primitive('tirx.Add', Output, IntImm(Pad)),
+      Primitive('tirx.Mul', K, IntImm(Step)));
+    Result := Primitive('tirx.FloorDiv', Shift, IntImm(Stride));
+    Inside := Primitive('tirx.And',
+      Primitive('tirx.EQ', Primitive('tirx.FloorMod', Shift, IntImm(Stride)), IntImm(0)),
+      Primitive('tirx.And', Primitive('tirx.LE', IntImm(0), Result),
+        Primitive('tirx.LT', Result, IntImm(Extent))));
+  end;
+
+begin
+  RequireExplicitPadding(Node);
+  RequireCpu(Length(IntsAttribute(Node, 'output_shape', [])) = 0,
+    'Explicit ConvTranspose output_shape is not supported');
+  Source := Input(Node, 0);
+  Weights := Input(Node, 1);
+  Groups := IntAttribute(Node, 'group', 1);
+  RequireCpu((Length(Source.Shape) = 4) and (Length(Weights.Shape) = 4) and
+    (Source.DataType = OnnxFloat) and (Weights.DataType = OnnxFloat) and (Groups > 0) and
+    (Source.Shape[1] = Weights.Shape[0]) and (Source.Shape[1] mod Groups = 0),
+    'Invalid ONNX ConvTranspose channels');
+  Pads := IntsAttribute(Node, 'pads', [0, 0, 0, 0]);
+  Strides := IntsAttribute(Node, 'strides', [1, 1]);
+  Dilation := IntsAttribute(Node, 'dilations', [1, 1]);
+  Extra := IntsAttribute(Node, 'output_padding', [0, 0]);
+  Kernel := IntsAttribute(Node, 'kernel_shape', [Weights.Shape[2], Weights.Shape[3]]);
+  RequireCpu((Length(Pads) = 4) and (Length(Strides) = 2) and
+    (Length(Dilation) = 2) and (Length(Extra) = 2) and (Length(Kernel) = 2),
+    'Invalid ONNX ConvTranspose attribute rank');
+  Shape := [Source.Shape[0], Weights.Shape[1] * Groups, 0, 0];
+  Channels := Source.Shape[1] div Groups;
+  for I := 0 to 1 do
+  begin
+    RequireCpu((Strides[I] > 0) and (Strides[I] <= 4096) and (Dilation[I] > 0) and
+      (Dilation[I] <= 4096) and (Pads[I] >= 0) and (Pads[I + 2] >= 0) and
+      (Extra[I] >= 0) and (Extra[I] < Strides[I]) and
+      (Kernel[I] = Weights.Shape[I + 2]), 'Invalid ONNX ConvTranspose spatial attributes');
+    Shape[I + 2] := Strides[I] * (Source.Shape[I + 2] - 1) + Extra[I] +
+      Dilation[I] * (Kernel[I] - 1) + 1 - Pads[I] - Pads[I + 2];
+  end;
+  TensorElements(Shape);
+  for I := 0 to 3 do Sizes[I] := Shape[I];
+  Sizes[4] := Channels;
+  Sizes[5] := Kernel[0];
+  Sizes[6] := Kernel[1];
+  for I := 0 to 6 do Axes[I] := Iteration(Names[I], Sizes[I], I >= 4, Iter[I]);
+  X := Placeholder(Source.Shape, 'image');
+  W := Placeholder(Weights.Shape, 'weights');
+  GroupIndex := Primitive('tirx.FloorDiv', Iter[1], IntImm(Weights.Shape[1]));
+  Channel := Primitive('tirx.Add', Primitive('tirx.Mul', GroupIndex, IntImm(Channels)), Iter[4]);
+  Y := Coordinate(Iter[2], Iter[5], Pads[0], Dilation[0], Strides[0], Source.Shape[2], InsideY);
+  Z := Coordinate(Iter[3], Iter[6], Pads[1], Dilation[1], Strides[1], Source.Shape[3], InsideZ);
+  Pixel := ReadTensor(X, [Iter[0], Channel, Y, Z]);
+  Pixel := Intrinsic('tirx.if_then_else', FFloatType,
+    [Primitive('tirx.And', InsideY, InsideZ), Pixel, FZero]);
+  Product := Primitive('tirx.Mul', Pixel, ReadTensor(W,
+    [Channel, Primitive('tirx.FloorMod', Iter[1], IntImm(Weights.Shape[1])), Iter[5], Iter[6]]));
+  Compute := ComputeTensor('conv_transpose', ReduceSum(Product, [Axes[4], Axes[5], Axes[6]]),
+    [Axes[0], Axes[1], Axes[2], Axes[3]]);
+  Convolved := Emit([Source, Weights], [X, W], Compute, Shape, OnnxFloat, 'conv_transpose', 2);
+  if (Length(Node.Inputs) > 2) and (Node.Inputs[2] <> '') then
+  begin
+    Bias := Input(Node, 2);
+    RequireCpu((Length(Bias.Shape) = 1) and (Bias.Shape[0] = Shape[1]),
+      'Invalid ONNX ConvTranspose bias');
+    X := Placeholder(Shape, 'convolution');
+    B := Placeholder(Bias.Shape, 'bias');
+    Exit(Emit([Convolved, Bias], [X, B],
+      Make('topi.nn.bias_add', [X, B, TTVMRuntime.AnyInt(1)]), Shape));
+  end;
+  Result := Convolved;
 end;
 
 function TOnnxBuilder.PatchConv3D(const Node: TOnnxNode;
@@ -910,7 +1036,6 @@ var
       (Result * Stride < Dim + BeforePad) then Inc(Result);
   end;
 begin
-  RequireExplicitPadding(Node);
   Source := Input(Node, 0);
   RequireCpu(Length(Source.Shape) = 4, 'ONNX pooling needs NCHW input');
   CeilMode := IntAttribute(Node, 'ceil_mode', 0) <> 0;
@@ -918,6 +1043,7 @@ begin
   InputTensor := Placeholder(Source.Shape, 'image');
   if Node.OpType = 'GlobalAveragePool' then
   begin
+    RequireExplicitPadding(Node);
     Shape[2] := 1;
     Shape[3] := 1;
     if FCuda then
@@ -933,9 +1059,9 @@ begin
     Exit(Emit([Source], [InputTensor], Compute, Shape));
   end;
   Kernel := IntsAttribute(Node, 'kernel_shape', [0, 0]);
-  Pads := IntsAttribute(Node, 'pads', [0, 0, 0, 0]);
   Strides := IntsAttribute(Node, 'strides', [1, 1]);
   Dilation := IntsAttribute(Node, 'dilations', [1, 1]);
+  Pads := SpatialPads(Node, Source.Shape, Kernel, Strides, Dilation);
   Shape[2] := OutputSize(Shape[2], Pads[0], Pads[2], Kernel[0], Strides[0], Dilation[0]);
   Shape[3] := OutputSize(Shape[3], Pads[1], Pads[3], Kernel[1], Strides[1], Dilation[1]);
   Compute := Make('topi.nn.pool2d', [InputTensor, ShapeArray(Kernel), ShapeArray(Strides),
@@ -2045,14 +2171,31 @@ function TOnnxBuilder.Softmax(const Node: TOnnxNode): TGraphValue;
 var
   Source, Maximum, Centered, Numerator, Total: TGraphValue;
   InputTensor, ReducedTensor, Compute, Axes: TTVMFFIAny;
-  Axis: Int64;
-  ReducedShape: TArray<Int64>;
+  Axis, Rows, Columns: Int64;
+  I: Integer;
+  ReducedShape, OriginalShape: TArray<Int64>;
 begin
   Source := Input(Node, 0);
-  RequireCpu(FOpset >= 13, 'ONNX Softmax before opset 13 requires a different axis rule');
-  Axis := IntAttribute(Node, 'axis', -1);
+  if FOpset < 13 then
+    Axis := IntAttribute(Node, 'axis', 1)
+  else
+    Axis := IntAttribute(Node, 'axis', -1);
   if Axis < 0 then Inc(Axis, Length(Source.Shape));
   RequireCpu((Axis >= 0) and (Axis < Length(Source.Shape)), 'Invalid ONNX Softmax axis');
+  OriginalShape := nil;
+  if (FOpset < 13) and (Axis <> High(Source.Shape)) then
+  begin
+    OriginalShape := Copy(Source.Shape);
+    Rows := 1;
+    Columns := 1;
+    for I := 0 to High(Source.Shape) do
+      if I < Axis then
+        Rows := Rows * Source.Shape[I]
+      else
+        Columns := Columns * Source.Shape[I];
+    Source := EmitReshape(Source, [Rows, Columns]);
+    Axis := 1;
+  end;
   InputTensor := Placeholder(Source.Shape, 'input');
   if FCuda then
   begin
@@ -2071,10 +2214,13 @@ begin
     Total := Emit([Numerator], [InputTensor], Compute, ReducedShape);
     ReducedTensor := Placeholder(ReducedShape, 'sum');
     Compute := Make('topi.divide', [InputTensor, ReducedTensor]);
-    Exit(Emit([Numerator, Total], [InputTensor, ReducedTensor], Compute, Source.Shape));
+    Result := Emit([Numerator, Total], [InputTensor, ReducedTensor], Compute, Source.Shape);
+    if Length(OriginalShape) > 0 then Result := EmitReshape(Result, OriginalShape);
+    Exit;
   end;
   Compute := Make('topi.nn.softmax', [InputTensor, TTVMRuntime.AnyInt(Axis)]);
   Result := Emit([Source], [InputTensor], Compute, Source.Shape);
+  if Length(OriginalShape) > 0 then Result := EmitReshape(Result, OriginalShape);
 end;
 
 function TOnnxBuilder.Resize(const Node: TOnnxNode): TGraphValue;
@@ -2091,7 +2237,7 @@ var
 begin
   Source := Input(Node, 0);
   RequireCpu(
-    (Length(Source.Shape) = 4) and (Length(Node.Inputs) in [3, 4]) and (Node.Inputs[1] = '') and (StringAttribute(Node, 'mode', 'nearest') = 'nearest') and (StringAttribute(Node, 'coordinate_transformation_mode', 'half_pixel') = 'asymmetric') and (StringAttribute(Node, 'nearest_mode', 'round_prefer_floor') = 'floor'),
+    (Length(Source.Shape) = 4) and (Length(Node.Inputs) in [3, 4]) and (StringAttribute(Node, 'mode', 'nearest') = 'nearest') and (StringAttribute(Node, 'coordinate_transformation_mode', 'half_pixel') = 'asymmetric') and (StringAttribute(Node, 'nearest_mode', 'round_prefer_floor') = 'floor'),
     'Unsupported ONNX Resize signature'
   );
   UseSizes := (Length(Node.Inputs) = 4) and (Node.Inputs[3] <> '');
@@ -2471,6 +2617,7 @@ procedure TOnnxBuilder.AddNode(const Node: TOnnxNode);
   function Lower: TGraphValue;
   begin
     if Node.OpType = 'Conv' then Exit(Conv(Node));
+    if Node.OpType = 'ConvTranspose' then Exit(ConvTranspose(Node));
     if (Node.OpType = 'AveragePool') or (Node.OpType = 'MaxPool') or
       (Node.OpType = 'GlobalAveragePool') then Exit(Pool(Node));
     if Node.OpType = 'Concat' then Exit(Concat(Node));

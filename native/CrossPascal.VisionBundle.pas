@@ -64,8 +64,10 @@ begin
   RequireCpu((Name <> '') and (Pos(#9, Name) = 0) and (Pos(#10, Name) = 0) and (Pos(#13, Name) = 0),
     'Invalid vision input name');
   RequireCpu((Length(Shape) = 4) and (Shape[0] = 1) and (Shape[1] = 3) and
-    (Shape[2] = Shape[3]) and (ModelText(IOProfile.GetValue('layout')) = 'NCHW') and
+    (Shape[2] > 0) and (Shape[2] <= 4096) and (Shape[3] > 0) and (Shape[3] <= 4096) and
+    (ModelText(IOProfile.GetValue('layout')) = 'NCHW') and
     (ModelText(IOProfile.GetValue('dtype')) = 'float32'), 'Expected a batch-one FP32 image input');
+  Model.SpecializeInput(Name, Shape);
   Count := 0;
   for Entry in Model.Inputs do
   begin
@@ -96,7 +98,7 @@ var
   Root, Profile, Artifact, IO, Provenance, Parameters, Toolchain: TJSONObject;
   Models, Digests, Shape, Mean, Std, Numbers: TJSONArray;
   Entry: TJSONObject;
-  I, Size: Integer;
+  I, Size, Height, Width: Integer;
   Pinned: Boolean;
   Task, Adapter: string;
 begin
@@ -129,10 +131,21 @@ begin
   Task := ModelText(Profile.GetValue('task_kind'));
   Adapter := ModelText(Profile.GetValue('adapter'));
   RequireCpu(((Task = 'classification') and (Adapter = 'yolo11')) or
-    ((Task = 'object_detection') and ((Adapter = 'yolo11') or (Adapter = 'rtdetr'))),
+    ((Task = 'object_detection') and ((Adapter = 'yolo11') or (Adapter = 'rtdetr'))) or
+    (((Task = 'ocr_detection') or (Task = 'ocr_recognition')) and (Adapter = 'paddleocr')),
     'Unsupported CPU vision task or adapter');
-  Size := ModelInt(Profile.GetValue('input_size'), 'vision input size');
-  RequireCpu((Size > 0) and (Size <= 4096), 'Invalid CPU vision input size');
+  if Adapter = 'paddleocr' then
+  begin
+    Height := ModelInt(Profile.GetValue('input_height'), 'OCR input height');
+    Width := ModelInt(Profile.GetValue('input_width'), 'OCR input width');
+  end
+  else begin
+    Size := ModelInt(Profile.GetValue('input_size'), 'vision input size');
+    Height := Size;
+    Width := Size;
+  end;
+  RequireCpu((Height > 0) and (Height <= 4096) and (Width > 0) and (Width <= 4096),
+    'Invalid vision input size');
   Result := TJSONObject.Create;
   try
     Result.AddPair('format_version', JSONInteger(1));
@@ -144,9 +157,9 @@ begin
     Result.AddPair('artifact', Artifact);
     Artifact.AddPair('os', 'windows');
     Artifact.AddPair('arch', 'x86_64');
-    if Architecture = '' then Artifact.AddPair('device', 'cpu')
-    else
-    begin
+    if Architecture = '' then
+      Artifact.AddPair('device', 'cpu')
+    else begin
       Artifact.AddPair('device', 'cuda');
       Artifact.AddPair('cuda_arch', Architecture);
     end;
@@ -163,8 +176,8 @@ begin
     IO.AddPair('shape', Shape);
     Shape.AddElement(JSONInteger(1));
     Shape.AddElement(JSONInteger(3));
-    Shape.AddElement(JSONInteger(Size));
-    Shape.AddElement(JSONInteger(Size));
+    Shape.AddElement(JSONInteger(Height));
+    Shape.AddElement(JSONInteger(Width));
     if Task = 'classification' then
     begin
       Mean := ModelArray(Profile.GetValue('mean'), 'vision normalization mean');
@@ -184,15 +197,34 @@ begin
           Numbers.AddElement(JSONFloat(ModelFloat(Std.Items[I], 'std')));
       end;
     end
-    else begin
-      Parameters := TJSONObject.Create;
-      Result.AddPair('defaults', Parameters);
-      Parameters.AddPair('score_threshold',
-        JSONFloat(ModelFloat(Profile.GetValue('score_threshold'), 'score threshold')));
-      if Adapter = 'yolo11' then
-        Parameters.AddPair('nms_threshold',
-          JSONFloat(ModelFloat(Profile.GetValue('nms_threshold'), 'NMS threshold')));
-    end;
+    else if Adapter = 'paddleocr' then
+      begin
+        Parameters := TJSONObject.Create;
+        Result.AddPair('ocr', Parameters);
+        Parameters.AddPair('profile', ProfileID);
+        if Task = 'ocr_detection' then
+        begin
+          Parameters.AddPair('preprocessing', 'centered-square-bgr-imagenet');
+          Parameters.AddPair('threshold', JSONFloat(0.3));
+          Parameters.AddPair('box_threshold', JSONFloat(0.6));
+          Parameters.AddPair('unclip_ratio', JSONFloat(1.5));
+        end
+        else begin
+          Parameters.AddPair('preprocessing', 'bgr-resize-pad-minus-one-to-one');
+          Parameters.AddPair('classes', JSONInteger(ModelInt(Profile.GetValue('classes'), 'OCR classes')));
+          Parameters.AddPair('dictionary_sha256', ModelText(Profile.GetValue('dictionary_sha256')));
+          Parameters.AddPair('blank_index', JSONInteger(0));
+        end;
+      end
+      else begin
+        Parameters := TJSONObject.Create;
+        Result.AddPair('defaults', Parameters);
+        Parameters.AddPair('score_threshold',
+          JSONFloat(ModelFloat(Profile.GetValue('score_threshold'), 'score threshold')));
+        if Adapter = 'yolo11' then
+          Parameters.AddPair('nms_threshold',
+            JSONFloat(ModelFloat(Profile.GetValue('nms_threshold'), 'NMS threshold')));
+      end;
     Provenance := TJSONObject.Create;
     Result.AddPair('provenance', Provenance);
     Provenance.AddPair('source', Source);
@@ -214,16 +246,18 @@ end;
 procedure ConvertVisionBundle(const SourceFile, CatalogFile, ProfileID, Destination: string;
   const Kit: TWindowsTvmKit; const RecipeFile, NvrtcLibrary, Architecture: string);
 var
-  Source, RecipeSource, BindingSource: TFileStream;
+  Source, RecipeSource, BindingSource, DictionarySource, DictionaryOutput: TFileStream;
   Catalog, BindingData: TJSONValue;
-  Root, Artifact: TJSONObject;
+  Root, Artifact, OCR: TJSONObject;
   Graph, Recipe: TOnnxModel;
   SourcePath, Output, Stage, ModelPath, ModelFile, Sidecar, RecipeHash, BindingsHash, BindingsFile: string;
   ID: TGUID;
   IsTorch, IsSafeTensors: Boolean;
 begin
-  if Architecture = '' then ModelFile := 'model.cpu.dll'
-  else ModelFile := 'model.cuda.dll';
+  if Architecture = '' then
+    ModelFile := 'model.cpu.dll'
+  else
+    ModelFile := 'model.cuda.dll';
   SourcePath := ExpandFileName(SourceFile);
   Output := ExcludeTrailingPathDelimiter(ExpandFileName(Destination));
   RequireCpu((not DirectoryExists(Output)) and (not FileExists(Output)) and
@@ -233,6 +267,7 @@ begin
   Root := nil;
   RecipeSource := nil;
   BindingSource := nil;
+  DictionarySource := nil;
   BindingData := nil;
   Graph := nil;
   Recipe := nil;
@@ -263,6 +298,20 @@ begin
     Catalog := ReadModelJSON(CatalogFile);
     Root := VisionManifest(Catalog, ProfileID, ExtractFileName(SourcePath), SHA256Stream(Source),
       RecipeHash, BindingsHash, ModelFile, Architecture);
+    if ModelText(Root.GetValue('task_kind')) = 'ocr_recognition' then
+    begin
+      OCR := ModelObject(Root.GetValue('ocr'), 'OCR dictionary');
+      DictionarySource := TFileStream.Create(
+        BundleMember(
+          ExtractFileDir(SourcePath),
+          'ppocrv5_dict.txt'
+        ),
+        fmOpenRead or fmShareDenyWrite
+      );
+      RequireCpu(SameText(SHA256Stream(DictionarySource), ModelText(OCR.GetValue('dictionary_sha256'))),
+        'The PaddleOCR dictionary does not match the selected profile');
+      DictionarySource.Position := 0;
+    end;
     if IsTorch or IsSafeTensors then
     begin
       Recipe := TOnnxModel.Create(RecipeFile);
@@ -285,6 +334,15 @@ begin
     CompileWindowsTvmOnnxLibrary(Graph, Kit, ModelPath, NvrtcLibrary, Architecture);
     Artifact.AddPair('hash', BundleFileSHA256(ModelPath));
     WriteUTF8(BundleMember(Stage, ModelFile + '.inputs'), Sidecar);
+    if DictionarySource <> nil then
+    begin
+      DictionaryOutput := TFileStream.Create(BundleMember(Stage, 'ppocrv5_dict.txt'), fmCreate);
+      try
+        DictionaryOutput.CopyFrom(DictionarySource, DictionarySource.Size);
+      finally
+        DictionaryOutput.Free;
+      end;
+    end;
     WriteBundleJSON(BundleMember(Stage, 'manifest.json'), Root);
     RequireCpu(MoveFileW(PWideChar(Stage), PWideChar(Output)), 'Could not install the new vision bundle');
     Stage := '';
@@ -294,6 +352,7 @@ begin
     Recipe.Free;
     BindingData.Free;
     BindingSource.Free;
+    DictionarySource.Free;
     RecipeSource.Free;
     Root.Free;
     Catalog.Free;

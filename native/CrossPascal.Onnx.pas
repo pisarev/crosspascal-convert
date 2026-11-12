@@ -86,6 +86,7 @@ type
       const Initializers: TArray<TOnnxTensor>; const Nodes: TArray<TOnnxNode>;
       const OwnedData: TArray<TBytes>);
     destructor Destroy; override;
+    procedure SpecializeInput(const Name: string; const Shape: array of Int64);
     { Raw tensor and attribute views are valid while this model is open. }
     property Opset: Int64 read FOpset;
     property Inputs: TArray < TOnnxValue > read FInputs;
@@ -103,6 +104,26 @@ implementation
 
 uses
   {$IFDEF FPC}Generics.Collections{$ELSE}System.Generics.Collections{$ENDIF};
+
+procedure TOnnxModel.SpecializeInput(const Name: string; const Shape: array of Int64);
+var
+  I, J, Found: Integer;
+begin
+  TensorElements(Shape);
+  Found := -1;
+  for I := 0 to High(FInputs) do
+    if FInputs[I].Name = Name then
+    begin
+      RequireCpu(Found < 0, 'Duplicate ONNX input name');
+      Found := I;
+    end;
+  RequireCpu((Found >= 0) and FInputs[Found].HasShape and
+    (Length(FInputs[Found].Shape) = Length(Shape)), 'ONNX profile input rank differs');
+  for J := 0 to High(Shape) do
+    RequireCpu((FInputs[Found].Shape[J].Value < 0) or
+      (FInputs[Found].Shape[J].Value = Shape[J]), 'ONNX profile changes a fixed input dimension');
+  for J := 0 to High(Shape) do FInputs[Found].Shape[J].Value := Shape[J];
+end;
 
 type
   TProtoField = record
@@ -532,14 +553,19 @@ var
 begin
   RequireCpu((Tensor.DataType = 7) and not Tensor.IsExternal,
     'Expected an embedded ONNX int64 tensor: ' + Tensor.Name);
-  Elements := TensorElements(Tensor.Shape);
+  { A zero-length shape vector is the ONNX representation of a scalar target.
+    Keep empty runtime tensors outside this reader's supported contract. }
+  if (Length(Tensor.Shape) = 1) and (Tensor.Shape[0] = 0) then
+    Elements := 0
+  else
+    Elements := TensorElements(Tensor.Shape);
   RequireCpu(Elements <= High(Integer) div SizeOf(Int64), 'ONNX int64 tensor is too large');
   Result := nil;
   if Tensor.RawData.Data <> nil then
   begin
     RequireCpu(Tensor.RawData.Size = UInt64(Elements) * SizeOf(Int64), 'Invalid ONNX int64 tensor length');
     SetLength(Result, Elements);
-    Move(Tensor.RawData.Data^, Result[0], Tensor.RawData.Size);
+    if Elements > 0 then Move(Tensor.RawData.Data^, Result[0], Tensor.RawData.Size);
     Exit;
   end;
   Reader := TProtoReader.Create(Tensor.Serialized);
