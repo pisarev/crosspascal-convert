@@ -78,77 +78,77 @@
     {
       "path": "native/ConvertGemma2.dpr",
       "bytes": 1893,
-      "sha256": "4dbe2882ce763695927150a5a2a66e276d88d73926ce990f96f137c57c7d7a57"
+      "sha256": "0c12963899ab9febc0f8765750d587a371c194cc1a11899ced472c39de607287"
     },
     {
       "path": "native/ConvertGemma3n.dpr",
       "bytes": 3596,
-      "sha256": "c7f8095f2f0242a83d088bd8be9760a6381842d9dfdae29e870f4f614b6785e5"
+      "sha256": "21e1ddd390e50464d74001262016f9d1430e21c92e07e2bf811c6cd9feea36ab"
     },
     {
       "path": "native/ConvertQwen2.dpr",
       "bytes": 6107,
-      "sha256": "51de9158e3ba03435ae0c44987d4428f5f88775dafe813fe81cc94a321a49d2c"
+      "sha256": "3a33a06d0b70264717f8b08be1b77378016fd45ee4c89dafd3c45d5bf231db4f"
     },
     {
       "path": "native/ConvertQwenVLProfile.dpr",
-      "bytes": 23149,
-      "sha256": "aa4fe9c399c50b7a9c8bbd05c33a82b2e86aa00b7ad4f259372efd26c2cfde6e"
+      "bytes": 23161,
+      "sha256": "0d3166f49f4f2db650b4d057b54fcd39bbf62729282e8168f4be13bca944215a"
     },
     {
       "path": "native/ConvertVisionOnnx.dpr",
       "bytes": 2054,
-      "sha256": "10455234d34b7dac9350258d6b6c52624a8ecc42eb8063f56f42bb060491dc5d"
+      "sha256": "ff8f7330e9d9c67e7118d9fa135557734d40f158d47881c53209c61a4cfb0379"
     },
     {
       "path": "native/CrossPascal.GGUF.pas",
       "bytes": 14561,
-      "sha256": "428cc42f726a6dfe71288fb53e20519ac189054cf8667baf5d681c345b54368f"
+      "sha256": "141ae4a2f8f7bcff09a9e84101dd9f014fe3fc944cec9c9a8207c36fdd01fefb"
     },
     {
       "path": "native/CrossPascal.Gemma2Bundle.pas",
-      "bytes": 10870,
-      "sha256": "25b8e42d50b10530b753bf5905ceb64f70b60f55054f5a152fa9a8a0b0456f68"
+      "bytes": 10888,
+      "sha256": "0f11771543a5251f8952954dd142cbccf2c27c4617af575ec42017e8a6282172"
     },
     {
       "path": "native/CrossPascal.Gemma2Graph.pas",
-      "bytes": 13004,
-      "sha256": "d993367420127b46b0a5bfb19e5f094eba0977a3254e0ae786d502a896b96ecb"
+      "bytes": 13002,
+      "sha256": "bc4c6496adce4ce6845a0e2a0cfe8276cd5fee0fad556095d4223125157896a4"
     },
     {
       "path": "native/CrossPascal.Gemma3nBundle.pas",
       "bytes": 31448,
-      "sha256": "6cd0289f1b3e1ec7b5d11788b9f027ea9fd651f4e19cae56a6abcd2042171e50"
+      "sha256": "84c2c2d3877b9dd1908b12386c429374eb064bbb80494ba39c23d9f61438b831"
     },
     {
       "path": "native/CrossPascal.Gemma3nGraph.pas",
       "bytes": 15443,
-      "sha256": "fe08c0c196b57104e3095971a9305a67fe55f25a29527cca2c605632a5e25695"
+      "sha256": "287ab370a64e64d347b02e47a6304f18dd6801a54e3e2c0ae7aea7a3852a2f80"
     },
     {
       "path": "native/CrossPascal.Gemma3nSource.pas",
       "bytes": 17971,
-      "sha256": "77ae09f2a79f911b093b8e9086bd68920f32c6a48e6e9e06820cb9b43bc2f419"
+      "sha256": "4fc9e396afb6d61fcf244879868376707a23fb521407757ea5a4572bb17792b6"
     },
     {
       "path": "native/CrossPascal.Gemma3nVisionSource.pas",
       "bytes": 6074,
-      "sha256": "f4905c0acef7d7895a6c4b00e47683f9c29298e0bfdb39a96a190892cddb1fec"
+      "sha256": "9d964e48c29f6321f954a1e6785d6f7fce3cfb9856aa44b751f80d860034ab28"
     },
     {
       "path": "native/CrossPascal.ModelGraph.pas",
       "bytes": 10665,
-      "sha256": "3fc262e2d1019b1c6904065b213c77989d57827f43777aa41161e86633859a3b"
+      "sha256": "12f4f107f67abaf581fc48c4954af15fca7d4f7e4038bec0a2c90a022307a686"
     },
     {
       "path": "native/CrossPascal.NativeBundle.pas",
       "bytes": 4135,
-      "sha256": "bc4461ebcf972fbf50cadab8e72c8f8e1c36ecbd9619e7f53a97f364ed014eac"
+      "sha256": "38f26186b5ae4282bbceb45edf8fbb7f5b6a2237cffc7e8db1acb33a4814f02f"
     },
     {
       "path": "native/CrossPascal.Nvrtc.pas",
       "bytes": 12477,
-      "sha256": "f3cc4270029d34d4537b58ba6b8741ccf8de19dafdf6cf2898ca452db951f072"
+      "sha256": "1c2e441e0ae5f8f82e012c6663670abae9fec7719783f384a4de722f7119a3af"
     },
     {
       "path": "native/CrossPascal.Onnx.pas",
@@ -158,27 +158,27 @@
     {
       "path": "native/CrossPascal.Qwen2Graph.pas",
       "bytes": 10858,
-      "sha256": "681112c214430555096ead7c1e6a653d668e5b3cfe41ce763150881f2c8682c4"
+      "sha256": "0777ba43b2d80f62abe9f3a62e9ab81b5ade3552124274497ea993c627244b4b"
     },
     {
       "path": "native/CrossPascal.RowQuantization.pas",
       "bytes": 2743,
-      "sha256": "acd49bbafa05dd8c0223971c9d3bcaed3cfb4d03f46d8105f9dcce71bef45014"
+      "sha256": "c604aee247b7fb1fd3de898db8d2bfe39d10ef0efd1fa042f6d21723bd33cbb7"
     },
     {
       "path": "native/CrossPascal.RtDetrSource.pas",
       "bytes": 6302,
-      "sha256": "ea0536c45fde657090eb5b8580e00e7a3326310983768bc4502364286d174d28"
+      "sha256": "0c4ffc232a62da2cc735b9d5a798d311dda98d4d183880c07de2fa2a26bb5cd1"
     },
     {
       "path": "native/CrossPascal.SafeTensors.pas",
-      "bytes": 11508,
-      "sha256": "67e5dae6958d795769d9f42086d97fb5d49f5e9330d91814a28779f5c9864eda"
+      "bytes": 11995,
+      "sha256": "b9302d0b51342434c321cad7e2cc5ecf99fba084e6dcdc8009aa877305e13da9"
     },
     {
       "path": "native/CrossPascal.TVMCompiler.pas",
       "bytes": 27295,
-      "sha256": "7564a7586095dd0d12a6d3c9475b67c6374debb673ef641d0a298121fb9fed21"
+      "sha256": "aba6edc8824a84d670d11649348638f87e37adf167347107bebd6b2fb9bc2ccd"
     },
     {
       "path": "native/CrossPascal.TVMOnnx.pas",
@@ -188,17 +188,17 @@
     {
       "path": "native/CrossPascal.TokenizerSource.pas",
       "bytes": 9693,
-      "sha256": "313bca327bd3931df064ca6a286564e2576f3fa3c75efc5d8e3c2b535c5c324c"
+      "sha256": "992a7890989685ff61e078b9a9b5e4b95d7f96067dfdf1d3b8fef3db45a311ef"
     },
     {
       "path": "native/CrossPascal.TorchCheckpoint.pas",
       "bytes": 20445,
-      "sha256": "5054e0e32db1db200e1b132ccd52589c9b7fc63472aaacd27539955ad9c5596b"
+      "sha256": "0d548bba43e17ec920587930c8cdc9961046d86534fdbb00e33df645479ef27d"
     },
     {
       "path": "native/CrossPascal.UnicodeJson.pas",
       "bytes": 9582,
-      "sha256": "fa0fe9bed33b60c883744aa4b592bb255943914b1d49f2e8712defbd956b7c65"
+      "sha256": "57fdd97710e4c55bfcf24e359547fbd983648ade9b492dac3fb23b81427541da"
     },
     {
       "path": "native/CrossPascal.VisionBundle.pas",
@@ -208,7 +208,7 @@
     {
       "path": "native/CrossPascal.YoloSource.pas",
       "bytes": 5189,
-      "sha256": "5d1bb3abe32c443b49e77965c3cd7e57ea92027f2a25921f3aa01a18ebfaa635"
+      "sha256": "451f9cb2d5ff76c7fb9c5565096fa976c4dcc2c723d60bd05c9bb3ab63bda869"
     },
     {
       "path": "native/profiles/README.md",

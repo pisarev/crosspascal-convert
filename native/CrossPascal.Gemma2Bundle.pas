@@ -2,7 +2,7 @@
 {                                                                            }
 { CrossPascal.Gemma2Bundle                                                   }
 {                                                                            }
-{ Copyright © 2026 Yuriy Pisarev (ypisareff@outlook.com)                     }
+{ Copyright © 2026 Yuriy Pisarev                                             }
 {                                                                            }
 { ************************************************************************** }
 
@@ -22,8 +22,9 @@ implementation
 
 uses
   {$IFDEF FPC}Windows, SysUtils, Classes{$ELSE}Winapi.Windows, System.SysUtils, System.Classes{$ENDIF},
-  CrossPascal.Gemma2Graph, CrossPascal.Json, CrossPascal.Onnx, CrossPascal.RowQuantization, CrossPascal.SafeTensors,
-  CrossPascal.SHA256, CrossPascal.TokenizerSource, CrossPascal.TVMOnnx, TVM.CpuGraph;
+  CrossPascal.Gemma2Graph, CrossPascal.Json, CrossPascal.Onnx, CrossPascal.RowQuantization,
+  CrossPascal.SafeTensors, CrossPascal.SHA256, CrossPascal.TokenizerSource, CrossPascal.TVMOnnx,
+  TVM.CpuGraph;
 
 const
   ParameterFile = 'weights.bin';
@@ -136,14 +137,14 @@ begin
         ScaleName := Name + ':scale';
       end
       else if Scales <> nil then
-      begin
-        RequireCpu((Weight.Name = ScaleName) and (Scales.Size = Expected),
-          'Invalid int8 scale binding: ' + Weight.Name);
-        Stream.CopyFrom(Scales, 0);
-        FreeAndNil(Scales);
-      end
-      else
-        Checkpoint.WriteFloat32(Weight.Name, Stream);
+        begin
+          RequireCpu((Weight.Name = ScaleName) and (Scales.Size = Expected),
+            'Invalid int8 scale binding: ' + Weight.Name);
+          Stream.CopyFrom(Scales, 0);
+          FreeAndNil(Scales);
+        end
+        else
+          Checkpoint.WriteFloat32(Weight.Name, Stream);
       RequireCpu(Stream.Position - Offset = Expected, 'Incorrect Gemma 2 parameter size: ' + Weight.Name);
       Entry := TJSONObject.Create;
       Layout.AddElement(Entry);

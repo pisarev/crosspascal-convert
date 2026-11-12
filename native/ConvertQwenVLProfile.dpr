@@ -2,7 +2,7 @@
 {                                                                            }
 { ConvertQwenVLProfile                                                       }
 {                                                                            }
-{ Copyright © 2026 Yuriy Pisarev (ypisareff@outlook.com)                     }
+{ Copyright © 2026 Yuriy Pisarev                                             }
 {                                                                            }
 { ************************************************************************** }
 
@@ -245,8 +245,8 @@ begin
   end;
 end;
 
-function QuantizeTextGraph(const Model: TOnnxModel; const Stage: string;
-  const Spec: TJSONObject; const Written: TStringList): TOnnxModel;
+function QuantizeTextGraph(const Model: TOnnxModel; const Stage: string; const Spec: TJSONObject;
+  const Written: TStringList): TOnnxModel;
 var
   Matrices, Replaced: TDictionary<string, TOnnxValue>;
   Transposes: TDictionary<string, string>;
@@ -269,18 +269,18 @@ begin
   Names := TJSONArray.Create;
   try
     for Input in Model.Inputs do
-      if (Input.DataType = OnnxFloat) and (Length(Input.Shape) = 2) and
-        (Copy(Input.Name, Length(Input.Name) - 6, 7) = '.weight') then Matrices.Add(Input.Name, Input);
+      if (Input.DataType = OnnxFloat) and (Length(Input.Shape) = 2) and (Copy(Input.Name, Length(Input.Name) - 6, 7) = '.weight') then
+        Matrices.Add(Input.Name, Input);
     for Node in Model.Nodes do
       if (Node.OpType = 'Transpose') and (Length(Node.Inputs) = 1) and
         (Length(Node.Outputs) = 1) and Matrices.TryGetValue(Node.Inputs[0], Input) then
-        for Attr in Node.Attributes do
-          if (Attr.Name = 'perm') and (Length(Attr.IntValues) = 2) and
-            (Attr.IntValues[0] = 1) and (Attr.IntValues[1] = 0) then
-          begin
-            Transposes.Add(Node.Outputs[0], Input.Name);
-            Replaced.AddOrSetValue(Input.Name, Input);
-          end;
+          for Attr in Node.Attributes do
+            if (Attr.Name = 'perm') and (Length(Attr.IntValues) = 2) and
+              (Attr.IntValues[0] = 1) and (Attr.IntValues[1] = 0) then
+              begin
+                Transposes.Add(Node.Outputs[0], Input.Name);
+                Replaced.AddOrSetValue(Input.Name, Input);
+              end;
     Check(Replaced.Count > 0, 'Qwen-VL text graph has no quantizable linear weights');
     for OriginalNode in Model.Nodes do
     begin
@@ -541,8 +541,7 @@ begin
           DeleteField(Manifest, 'compiler');
           if Architecture = '' then
             Manifest.AddPair('compiler', 'TVM native LLVM Haswell')
-          else
-          begin
+          else begin
             KeepUsedWeights(Stage, Graphs, Weights, Written);
             SaveManifest(FileIn(Stage, 'parameters.json'), Parameters);
             DeleteField(Artifacts, 'parameters.json');

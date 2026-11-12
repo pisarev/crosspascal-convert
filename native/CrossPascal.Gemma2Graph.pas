@@ -2,7 +2,7 @@
 {                                                                            }
 { CrossPascal.Gemma2Graph                                                    }
 {                                                                            }
-{ Copyright © 2026 Yuriy Pisarev (ypisareff@outlook.com)                     }
+{ Copyright © 2026 Yuriy Pisarev                                             }
 {                                                                            }
 { ************************************************************************** }
 
@@ -121,8 +121,7 @@ begin
 end;
 
 constructor TGemma2GraphBuilder.Create(const Config: TGemma2Config;
-  const Checkpoint: TSafeTensorCheckpoint; const Context, Chunk: Integer;
-  const Quantize: Boolean);
+  const Checkpoint: TSafeTensorCheckpoint; const Context, Chunk: Integer; const Quantize: Boolean);
 begin
   inherited Create;
   RequireCpu((Context >= 2) and (Context <= Config.MaxContext) and (Chunk >= 1) and

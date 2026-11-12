@@ -1,4 +1,10 @@
-{ Copyright © 2026 Yuriy Pisarev. MIT license; see LICENSE. }
+{ ************************************************************************** }
+{                                                                            }
+{ CrossPascal.SafeTensors                                                    }
+{                                                                            }
+{ Copyright © 2026 Yuriy Pisarev                                             }
+{                                                                            }
+{ ************************************************************************** }
 
 unit CrossPascal.SafeTensors;
 
@@ -140,8 +146,8 @@ begin
         Check(Range.Count = 2, 'Expected two safetensors offsets');
         Start := NonNegative(Range.Items[0], 'offset');
         Finish := NonNegative(Range.Items[1], 'offset');
-        Check((Start <= Finish) and (Finish <= DataSize) and
-          (Finish - Start = Info.Info.ElementCount * Width), 'Invalid safetensors byte range: ' + Name);
+        Check((Start <= Finish) and (Finish <= DataSize) and (Finish - Start = Info.Info.ElementCount * Width),
+          'Invalid safetensors byte range: ' + Name);
         if Start < Finish then
         begin
           Check(not Ranges.ContainsKey(Start), 'Safetensors byte ranges overlap');
@@ -224,8 +230,7 @@ begin
     if Remaining < Count then Count := Integer(Remaining);
     if Tensor.Info.DType = 'F32' then
       FFile.ReadBuffer(Output[0], Count * SizeOf(Single))
-    else
-    begin
+    else begin
       FFile.ReadBuffer(Input[0], Count * SizeOf(Word));
       if Tensor.Info.DType = 'BF16' then
         for I := 0 to Count - 1 do
