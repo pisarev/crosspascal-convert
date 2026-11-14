@@ -1,4 +1,4 @@
-{ ************************************************************************** }
+﻿{ ************************************************************************** }
 {                                                                            }
 { CrossPascal.VisionBundle                                                   }
 {                                                                            }
@@ -132,7 +132,8 @@ begin
   Adapter := ModelText(Profile.GetValue('adapter'));
   RequireCpu(((Task = 'classification') and (Adapter = 'yolo11')) or
     ((Task = 'object_detection') and ((Adapter = 'yolo11') or (Adapter = 'rtdetr'))) or
-    (((Task = 'ocr_detection') or (Task = 'ocr_recognition')) and (Adapter = 'paddleocr')),
+    (((Task = 'ocr_detection') or (Task = 'ocr_recognition')) and (Adapter = 'paddleocr')) or
+    ((Task = 'image_segmentation') and (Adapter = 'birefnet') and (ProfileID = 'birefnet-hr800')),
     'Unsupported CPU vision task or adapter');
   if Adapter = 'paddleocr' then
   begin
@@ -146,6 +147,9 @@ begin
   end;
   RequireCpu((Height > 0) and (Height <= 4096) and (Width > 0) and (Width <= 4096),
     'Invalid vision input size');
+  if Adapter = 'birefnet' then
+    RequireCpu((Height = 800) and (Width = 800) and (ModelText(Profile.GetValue('input_name')) = 'x'),
+      'Unsupported BiRefNet input profile');
   Result := TJSONObject.Create;
   try
     Result.AddPair('format_version', JSONInteger(1));
@@ -216,15 +220,24 @@ begin
           Parameters.AddPair('blank_index', JSONInteger(0));
         end;
       end
-      else begin
-        Parameters := TJSONObject.Create;
-        Result.AddPair('defaults', Parameters);
-        Parameters.AddPair('score_threshold',
-          JSONFloat(ModelFloat(Profile.GetValue('score_threshold'), 'score threshold')));
-        if Adapter = 'yolo11' then
-          Parameters.AddPair('nms_threshold',
-            JSONFloat(ModelFloat(Profile.GetValue('nms_threshold'), 'NMS threshold')));
-      end;
+      else if Adapter = 'birefnet' then
+        begin
+          Parameters := TJSONObject.Create;
+          Result.AddPair('segmentation', Parameters);
+          Parameters.AddPair('profile', ProfileID);
+          Parameters.AddPair('preprocessing', 'rgb-cubic-imagenet');
+          Parameters.AddPair('output', 'logits-nchw');
+          Parameters.AddPair('mask_resize', 'linear');
+        end
+        else begin
+          Parameters := TJSONObject.Create;
+          Result.AddPair('defaults', Parameters);
+          Parameters.AddPair('score_threshold',
+            JSONFloat(ModelFloat(Profile.GetValue('score_threshold'), 'score threshold')));
+          if Adapter = 'yolo11' then
+            Parameters.AddPair('nms_threshold',
+              JSONFloat(ModelFloat(Profile.GetValue('nms_threshold'), 'NMS threshold')));
+        end;
     Provenance := TJSONObject.Create;
     Result.AddPair('provenance', Provenance);
     Provenance.AddPair('source', Source);

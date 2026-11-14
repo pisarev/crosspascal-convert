@@ -1,6 +1,6 @@
 {
   "schema": "crosspascal-windows-source-index-v1",
-  "release_id": "early-access-020",
+  "release_id": "early-access-021",
   "repository": "crosspascal-convert",
   "local_metadata": [
     {
@@ -17,8 +17,8 @@
     },
     {
       "path": "INSTALL.md",
-      "bytes": 32230,
-      "sha256": "a2cbe9257211fc9b3b6ea2dcb5026e9b7ab7bd8b2ad19f2ec6006f4d0c29246f"
+      "bytes": 32824,
+      "sha256": "a34fb2603221b8c1635508469a9969f406b44269cf14f252107f4de2f69e97c9"
     },
     {
       "path": "LICENSE",
@@ -27,8 +27,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 6497,
-      "sha256": "ff240930eb27273b177e67e342c190f4cf48356f7f705dd348fa7ee185a3a39b"
+      "bytes": 6784,
+      "sha256": "e8ea11fff03ce4cfea8e30c0ed19bd59463ad1abc47ab25c952dfd69fb22faa4"
     },
     {
       "path": "docs/FIRST-RUN-VALIDATION.md",
@@ -182,8 +182,8 @@
     },
     {
       "path": "native/CrossPascal.TVMOnnx.pas",
-      "bytes": 117816,
-      "sha256": "50900f838c2aaab1e966869ca01c1bc07dd1e4345427f29e1b074e8147024b22"
+      "bytes": 138049,
+      "sha256": "80e071a6af10eb1d5e89e39dccadb2cef92a9ad1f98abdd1c5fd4e5e7fca5e22"
     },
     {
       "path": "native/CrossPascal.TokenizerSource.pas",
@@ -202,8 +202,8 @@
     },
     {
       "path": "native/CrossPascal.VisionBundle.pas",
-      "bytes": 15403,
-      "sha256": "3ce36e447fe0ff692f4780435797f0df06d5c13892ce9b899eb69d3fe3e0f85b"
+      "bytes": 16481,
+      "sha256": "f8384245612d48c54e3a37cc0dad5ce460500e629344d84da441690128d722b2"
     },
     {
       "path": "native/CrossPascal.YoloSource.pas",

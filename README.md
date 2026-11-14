@@ -12,6 +12,8 @@ Windows x64 linker and SDK libraries, with NVRTC for CUDA builds.
 
 See the [installation guide](INSTALL.md) for the current profiles and toolchain. The sections below describe the browser converter from earlier releases.
 
+The native converter includes **BiRefNet HR800 background removal | CPU** and **CUDA**. Choose the pinned full SwinL ONNX from the BiRefNet source pack and a new output folder. The resulting bundle works with the [Pascal BiRefNet example](https://github.com/pisarev/crosspascal/tree/main/examples/birefnet), which saves a grayscale mask or transparent PNG.
+
 ## Browser converter in earlier releases
 
 CrossPascal Convert builds native model libraries and weights for Pascal applications. The converter runs on your computer and opens a local browser interface. This repository contains its Python package, browser interface, model adapters, and language-model compiler integration.
@@ -36,7 +38,7 @@ The named Qwen2.5-Instruct CUDA profiles support 0.5B (24 layers) and 1.5B (28 l
 
 Enter a local Gemma 2 checkpoint directory or a Gemma 3n GGUF file in the model path field and open **Gemma conversion (experimental)**. Choose a context size and execution target, click **Inspect Gemma checkpoint**, then click **Convert Gemma**. For Gemma 3n, automatic selection detects CUDA when available; a manual destination architecture is also supported. The wizard derives the topology from the configuration, architecture metadata and tensor shapes. No model-name catalog entries are required. See [Gemma 3n setup and scope](docs/GEMMA3N.md).
 
-The current native backend builds CPU FP32 bundles for compatible Gemma 2 text checkpoints with the expected tokenizer and contexts up to 1,024 tokens. This experimental short-context implementation omits attention-score soft-capping. The preview reports when a Gemma architecture requires another backend. Build confirms conversion and reports the bundle directory. Inference requires a separate check.
+The experimental Gemma 2 CPU route accepts compatible text checkpoints with the expected tokenizer and contexts up to 1,024 tokens. The preview reports when a Gemma architecture requires another backend. Build confirms conversion and reports the bundle directory. Run the Pascal consumer to check inference with the converted model.
 
 Gemma 3n has a separate native TVM text backend with AltUp, LAuReL, per-layer embeddings, activation sparsity, alternating local/global attention, shared KV layers and output soft-capping. Its source format is GGUF. The CPU profile uses file-backed FP32 parameters. The CUDA profile uses compact int8 projection weights with FP32 arithmetic and host embedding lookup. GPU memory requirements depend on the architecture and compiled context; available memory is checked before loading. For CPU or CUDA text bundles with host embeddings, the experimental image add-on converts a matching Gemma 3n projector and creates an independent text-and-image bundle. Audio and arbitrary other Gemma architectures are outside this route. Compilation success alone does not establish model quality or performance.
 

@@ -1,6 +1,6 @@
 # Install and use CrossPascal Converter
 
-Download and extract the [Windows x64 SDK](https://github.com/pisarev/crosspascal/releases/tag/early-access-020).
+Download and extract the [Windows x64 SDK](https://github.com/pisarev/crosspascal/releases/tag/early-access-021).
 The SDK contains the desktop converter, the native TVM compiler and the runtime libraries.
 The converter needs the x64 MSVC linker and the Windows SDK libraries. For CUDA
 conversion use NVIDIA CUDA Toolkit 12.8 with NVRTC. It can compile both Pascal
@@ -10,7 +10,7 @@ and the supplied TVM runtime.
 
 Open `CrossPascalConvert.exe`, select a profile and its original source, and enter a
 new output directory. Choose **Preview** to check the toolchain, then **Build**.
-Select the generated bundle in GemmaChat, QwenChat, VisionModels or PaddleOCR.
+Select the generated bundle in GemmaChat, QwenChat, VisionModels, PaddleOCR, or BiRefNet.
 
 | Profile | Input |
 | --- | --- |
@@ -22,10 +22,15 @@ Select the generated bundle in GemmaChat, QwenChat, VisionModels or PaddleOCR.
 | RT-DETR R18vd CPU or CUDA | Pinned PekingU Safetensors or the matching ONNX. |
 | SqueezeNet 1.1 and ResNet50 v1 on CPU or CUDA | Original ONNX. |
 | PP-OCRv5 Server detection or recognition on CPU or CUDA | Pinned ONNX from the EA020 source model downloads. Keep `ppocrv5_dict.txt` beside the recognizer ONNX. |
+| BiRefNet HR800 background removal on CPU or CUDA | Pinned full SwinL ONNX from the EA021 BiRefNet source pack. |
 
 For CUDA, enter the target compute capability as `sm_61`, `sm_75`, `sm_86`,
 `sm_89` or `sm_120`. A conversion builds one architecture. The ready EA019
 language downloads carry all five variants and share the weight files.
+
+The ready BiRefNet GPU pack targets `sm_89`, checked on an RTX 4060 Ti. Its CPU pack requires AVX2 and FMA. The [BiRefNet example](https://github.com/pisarev/crosspascal/tree/main/examples/birefnet) saves an original-size mask and transparent cutout. The fixed 800-pixel input differs from the upstream 2048-pixel workflow.
+
+Use ASCII paths for the conversion source, output and compiler tools. The ready BiRefNet GPU pack requires at least 4 GiB of free GPU memory.
 
 For a custom toolchain, set the appropriate paths in `runtime/converter/toolchain.ini`
 under `[toolchain]`: `COMPILER`, `LINKER`, `FFI_LIB`, `MSVC_LIB`, `UCRT_LIB`,
