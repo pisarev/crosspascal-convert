@@ -152,18 +152,13 @@ end;
 procedure BindTextGraph(const Graph: TOnnxModel; const Config: TGemma3nConfig;
   const Context, Chunk: Integer; const Folder: string; const RecordData, Manifest: TJSONObject;
   const Gpu: Boolean = False; const ArtifactHashes: TJSONObject = nil);
-const
-  ClipSuffix = '.altup.correction_coefs.weight';
-  CoefficientLimit = 120;
 var
   Inputs, RuntimeInputs, GpuBindings: TJSONArray;
-  Weights, Bindings, Params, Binding, Spec, Coefficient, Quantization, QuantizedWeights: TJSONObject;
+  Weights, Bindings, Params, Binding, Spec, Quantization, QuantizedWeights: TJSONObject;
   InputValue: TOnnxValue;
   CacheShape, Shape: TArray<Int64>;
-  CacheCount, I, J: Integer;
-  Original, Tensor, Name, FileName, Kind: string;
-  Values: TArray<Single>;
-  Stream: TFileStream;
+  CacheCount, I: Integer;
+  Original, Tensor, Name, Kind: string;
   Slice: TJSONValue;
 begin
   CacheCount := 2 * (Config.Layers - Config.SharedLayers);
@@ -250,39 +245,6 @@ begin
     RequireValue(InputValue, Name, 1, Shape);
     if Gpu then AddGpuBinding(GpuBindings, Name, 'original');
     Slice := Binding.GetValue('slice');
-    if Copy(Original, Length(Original) - Length(ClipSuffix) + 1, MaxInt) = ClipSuffix then
-    begin
-      if Weights.GetValue(Name) = nil then
-      begin
-        RequireCpu(Slice is TJSONNull, 'Unexpected slice for a Gemma 3n correction matrix');
-        Spec := ModelObject(Weights.GetValue(Tensor), Tensor);
-        SetLength(Values, TensorElements(Shape));
-        Stream := TFileStream.Create(BundleMember(Folder, ModelText(Spec.GetValue('file'))),
-          fmOpenRead or fmShareDenyWrite);
-        try
-          Stream.ReadBuffer(Values[0], Length(Values) * SizeOf(Single));
-        finally
-          Stream.Free;
-        end;
-        for J := 0 to High(Values) do
-          Values[J] := EnsureRange(Values[J], -CoefficientLimit, CoefficientLimit);
-        FileName := 'coefficient-' + IntToStr(I - CacheCount - 3) + '.bin';
-        Stream := TFileStream.Create(BundleMember(Folder, FileName), fmCreate);
-        try
-          Stream.WriteBuffer(Values[0], Length(Values) * SizeOf(Single));
-          Stream.Position := 0;
-          Coefficient := TJSONObject.Create;
-          Weights.AddPair(Name, Coefficient);
-          Coefficient.AddPair('file', FileName);
-          Coefficient.AddPair('dtype', 'float32');
-          Coefficient.AddPair('shape', Dimensions(Shape));
-          Coefficient.AddPair('sha256', SHA256Stream(Stream));
-        finally
-          Stream.Free;
-        end;
-      end;
-      Tensor := Name;
-    end;
     Spec := TJSONObject.Create;
     Params.AddPair(Name, Spec);
     Spec.AddPair('tensor', Tensor);

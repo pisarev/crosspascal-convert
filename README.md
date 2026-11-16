@@ -14,6 +14,8 @@ See the [installation guide](INSTALL.md) for the current profiles and toolchain.
 
 The native converter includes **BiRefNet HR800 background removal | CPU** and **CUDA**. Choose the pinned full SwinL ONNX from the BiRefNet source pack and a new output folder. The resulting bundle works with the [Pascal BiRefNet example](https://github.com/pisarev/crosspascal/tree/main/examples/birefnet), which saves a grayscale mask or transparent PNG.
 
+For text-guided detection, select **OmDet-Turbo text-guided detection | CPU** or **CUDA** and the supplied five-file ONNX source folder. The native converter builds both the CLIP text encoder and trained Swin-Tiny detector into a bundle for the [OmDet-Turbo example](https://github.com/pisarev/crosspascal/tree/main/examples/omdet-turbo). CUDA targets are read from the installed device and remain editable. The ready bundles cover `sm_75`, `sm_86`, `sm_89`, and `sm_120`.
+
 ## Browser converter in earlier releases
 
 CrossPascal Convert builds native model libraries and weights for Pascal applications. The converter runs on your computer and opens a local browser interface. This repository contains its Python package, browser interface, model adapters, and language-model compiler integration.

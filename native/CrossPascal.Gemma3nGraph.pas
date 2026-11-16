@@ -195,7 +195,7 @@ function TGemma3nGraphBuilder.Layer(const Hidden, PerLayer: string; const Index:
 var
   Prefix, AltUp, Modes, Coefficients, Predicted, Active, Norm, Laurel, Attended, Combined,
     Gate, Center, Delta, Variance, Cutoff, Activated, Innovation, Corrected, PerLayerOut,
-    ClippedWeight, First, Last: string;
+    CorrectionWeight, First, Last: string;
 begin
   Prefix := 'layers.' + IntToStr(Index) + '.';
   AltUp := Prefix + 'altup.';
@@ -229,8 +229,8 @@ begin
   Activated := Op('Add', [Combined, Activated]);
   Innovation := Op('Sub', [Activated, Active]);
   Modes := Router(Activated, AltUp);
-  ClippedWeight := Op('Clip', [Weight(AltUp + 'correction_coefs.weight'), Float(-120), Float(120)]);
-  Coefficients := Op('MatMul', [Modes, Transpose(ClippedWeight, [1, 0])]);
+  CorrectionWeight := Weight(AltUp + 'correction_coefs.weight');
+  Coefficients := Op('MatMul', [Modes, Transpose(CorrectionWeight, [1, 0])]);
   Coefficients := Op('Add', [Coefficients, Float(1)]);
   Coefficients := Reshape(Transpose(Coefficients, [2, 0, 1]), [FConfig.AltUpInputs, 1, FChunk, 1]);
   Corrected := Op('Add', [Predicted, Op('Mul', [Innovation, Coefficients])]);

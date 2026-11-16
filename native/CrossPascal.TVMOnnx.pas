@@ -1869,22 +1869,40 @@ var
   Axes, Shape: TArray<Int64>;
   Reduced: TArray<Boolean>;
   InputTensor, Compute, Divisor: TTVMFFIAny;
-  KeepDims: Boolean;
+  KeepDims, L2Norm: Boolean;
   I, Count: Integer;
   Axis, Elements: Int64;
+
+  function Finish(const Value: TGraphValue): TGraphValue;
+  var
+    Tensor: TTVMFFIAny;
+  begin
+    if not L2Norm then Exit(Value);
+    Tensor := Placeholder(Value.Shape, 'squared_total');
+    Result := Emit([Value], [Tensor], Make('topi.sqrt', [Tensor]), Value.Shape);
+  end;
+
 begin
   Source := Input(Node, 0);
+  L2Norm := Node.OpType = 'ReduceL2';
+  if L2Norm then
+  begin
+    RequireCpu(Source.DataType = OnnxFloat, 'ONNX ReduceL2 requires FP32');
+    InputTensor := Placeholder(Source.Shape, 'input');
+    Source := Emit([Source], [InputTensor],
+      Make('topi.multiply', [InputTensor, InputTensor]), Source.Shape);
+  end;
   if (Length(Node.Inputs) > 1) and (Node.Inputs[1] <> '') then
     Axes := StaticInput(Node, 1)
   else
     Axes := IntsAttribute(Node, 'axes', []);
   if Length(Axes) = 0 then
   begin
-    if IntAttribute(Node, 'noop_with_empty_axes', 0) <> 0 then Exit(Source);
+    if IntAttribute(Node, 'noop_with_empty_axes', 0) <> 0 then Exit(Finish(Source));
     SetLength(Axes, Length(Source.Shape));
     for I := 0 to High(Axes) do Axes[I] := I;
   end;
-  if Length(Axes) = 0 then Exit(Source);
+  if Length(Axes) = 0 then Exit(Finish(Source));
   SetLength(Reduced, Length(Source.Shape));
   Elements := 1;
   for I := 0 to High(Axes) do
@@ -1928,7 +1946,7 @@ begin
     end;
     Compute := Make('topi.divide', [Compute, Divisor]);
   end;
-  Result := Emit([Source], [InputTensor], Compute, Shape, Source.DataType);
+  Result := Finish(Emit([Source], [InputTensor], Compute, Shape, Source.DataType));
 end;
 
 function TOnnxBuilder.Pad(const Node: TOnnxNode): TGraphValue;
@@ -3065,7 +3083,7 @@ procedure TOnnxBuilder.AddNode(const Node: TOnnxNode);
     if Node.OpType = 'Gather' then Exit(Gather(Node, False));
     if Node.OpType = 'GatherElements' then Exit(Gather(Node, True));
     if (Node.OpType = 'ReduceMean') or (Node.OpType = 'ReduceSum') or
-      (Node.OpType = 'ReduceMax') then Exit(Reduce(Node));
+      (Node.OpType = 'ReduceMax') or (Node.OpType = 'ReduceL2') then Exit(Reduce(Node));
     if Node.OpType = 'Pad' then Exit(Pad(Node));
     if Node.OpType = 'Flatten' then Exit(Flatten(Node));
     if Node.OpType = 'Transpose' then Exit(Transpose(Node));

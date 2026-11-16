@@ -1,6 +1,6 @@
 {
   "schema": "crosspascal-windows-source-index-v1",
-  "release_id": "early-access-021",
+  "release_id": "early-access-022",
   "repository": "crosspascal-convert",
   "local_metadata": [
     {
@@ -17,8 +17,8 @@
     },
     {
       "path": "INSTALL.md",
-      "bytes": 32824,
-      "sha256": "a34fb2603221b8c1635508469a9969f406b44269cf14f252107f4de2f69e97c9"
+      "bytes": 33510,
+      "sha256": "cfc68de0a65b6b6c02700431163387ec605d42b68ffba4aa3f624b118acac799"
     },
     {
       "path": "LICENSE",
@@ -27,8 +27,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 6784,
-      "sha256": "e8ea11fff03ce4cfea8e30c0ed19bd59463ad1abc47ab25c952dfd69fb22faa4"
+      "bytes": 7258,
+      "sha256": "f336d6b4af8ec447157299d4000a59137276983af8157957a848b672d8abb2b9"
     },
     {
       "path": "docs/FIRST-RUN-VALIDATION.md",
@@ -86,6 +86,11 @@
       "sha256": "42463bafc861a293dde4c608fb89e95550915b6079ed68c689f579f60dac2185"
     },
     {
+      "path": "native/ConvertOmDetOnnx.dpr",
+      "bytes": 1908,
+      "sha256": "c2f0097f203c36943c9a3e46820bcfd0bbc6b2749f2a1370eda8c7b8c9354357"
+    },
+    {
       "path": "native/ConvertQwen2.dpr",
       "bytes": 6110,
       "sha256": "ebe6670634584135f5596ae825d0952450b8ac3be4966f9bc7fa592ea7cd2fc9"
@@ -117,13 +122,13 @@
     },
     {
       "path": "native/CrossPascal.Gemma3nBundle.pas",
-      "bytes": 31451,
-      "sha256": "bfbb278616805bfad89fa66e1673265774ff67708de7e08ecbe6f7aac5fe6922"
+      "bytes": 29857,
+      "sha256": "95064623815ee0a73e61743bbc5e5dc52ba07ebcbfc8a11b56e05e67da2dab60"
     },
     {
       "path": "native/CrossPascal.Gemma3nGraph.pas",
-      "bytes": 15446,
-      "sha256": "c155171d74affa011cf8fbf74622b3748c89b9a08816a0021018effc80d54bfe"
+      "bytes": 15416,
+      "sha256": "9bcc2fd47240a6c5c6779616d7713995fdf98b944ae82302f8c222377ebd90b7"
     },
     {
       "path": "native/CrossPascal.Gemma3nSource.pas",
@@ -149,6 +154,11 @@
       "path": "native/CrossPascal.Nvrtc.pas",
       "bytes": 12480,
       "sha256": "69676df6ea685ec214dbd41544832f0688b4cfff810c1ae9a22c716b29358c11"
+    },
+    {
+      "path": "native/CrossPascal.OmDetBundle.pas",
+      "bytes": 7168,
+      "sha256": "f241335b04a5327b019275ba3e4fed0e4f144fec849f731268803f80e3d04621"
     },
     {
       "path": "native/CrossPascal.Onnx.pas",
@@ -182,8 +192,8 @@
     },
     {
       "path": "native/CrossPascal.TVMOnnx.pas",
-      "bytes": 138049,
-      "sha256": "80e071a6af10eb1d5e89e39dccadb2cef92a9ad1f98abdd1c5fd4e5e7fca5e22"
+      "bytes": 138725,
+      "sha256": "b269e8a5939c58fe0b671bf7eecf69511d9a38225a52f2b762c4508ec2f099b5"
     },
     {
       "path": "native/CrossPascal.TokenizerSource.pas",
