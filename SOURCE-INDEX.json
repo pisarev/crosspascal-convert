@@ -27,8 +27,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 7258,
-      "sha256": "f336d6b4af8ec447157299d4000a59137276983af8157957a848b672d8abb2b9"
+      "bytes": 7145,
+      "sha256": "e0d2f2ad9fd026b7198ea386ceeeec67dec001382071150a0a60d46bf411f158"
     },
     {
       "path": "docs/FIRST-RUN-VALIDATION.md",
@@ -47,8 +47,8 @@
     },
     {
       "path": "docs/SOURCE-NOTES.md",
-      "bytes": 10690,
-      "sha256": "bc5478e2d835b137d15b62358ec4107b52121acad365cc3d2bf4d16a9715902b"
+      "bytes": 4648,
+      "sha256": "f6f3c5a7d8ef70d246762ad03705e4ea66819201d7fd716beca533eb9f3f2c1c"
     },
     {
       "path": "licenses/LLAMA_CPP_LICENSE.txt",
