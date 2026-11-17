@@ -137,14 +137,14 @@ begin
         ScaleName := Name + ':scale';
       end
       else if Scales <> nil then
-        begin
-          RequireCpu((Weight.Name = ScaleName) and (Scales.Size = Expected),
-            'Invalid int8 scale binding: ' + Weight.Name);
-          Stream.CopyFrom(Scales, 0);
-          FreeAndNil(Scales);
-        end
-        else
-          Checkpoint.WriteFloat32(Weight.Name, Stream);
+      begin
+        RequireCpu((Weight.Name = ScaleName) and (Scales.Size = Expected),
+          'Invalid int8 scale binding: ' + Weight.Name);
+        Stream.CopyFrom(Scales, 0);
+        FreeAndNil(Scales);
+      end
+      else
+        Checkpoint.WriteFloat32(Weight.Name, Stream);
       RequireCpu(Stream.Position - Offset = Expected, 'Incorrect Gemma 2 parameter size: ' + Weight.Name);
       Entry := TJSONObject.Create;
       Layout.AddElement(Entry);

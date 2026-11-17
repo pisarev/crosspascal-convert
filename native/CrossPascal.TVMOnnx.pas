@@ -808,9 +808,9 @@ begin
       Kernel := CudaKernel(Kernel);
   end
   else if CpuVectorWidth > 0 then
-      Kernel := VectorReductionKernel(Kernel, ParallelBlock, CpuSpatialRank, CpuVectorWidth)
-    else if ParallelAxes > 0 then
-        Kernel := ParallelKernel(Kernel, ParallelBlock, ParallelAxes);
+    Kernel := VectorReductionKernel(Kernel, ParallelBlock, CpuSpatialRank, CpuVectorWidth)
+  else if ParallelAxes > 0 then
+    Kernel := ParallelKernel(Kernel, ParallelBlock, ParallelAxes);
   Name := UTF8Encode('kernel_' + IntToStr(FKernelCount));
   Inc(FKernelCount);
   Kernel := Make('ir.BaseFuncWithAttr',
@@ -1210,11 +1210,11 @@ begin
       Shape[I] := 1;
     end
     else if Shape[I] = 0 then
-      begin
-        RequireCpu((IntAttribute(Node, 'allowzero', 0) = 0) and (I < Length(Source.Shape)),
-          'Unsupported ONNX Reshape zero dimension');
-        Shape[I] := Source.Shape[I];
-      end;
+    begin
+      RequireCpu((IntAttribute(Node, 'allowzero', 0) = 0) and (I < Length(Source.Shape)),
+        'Unsupported ONNX Reshape zero dimension');
+      Shape[I] := Source.Shape[I];
+    end;
   Elements := TensorElements(Source.Shape);
   Count := TensorElements(Shape);
   if Inferred >= 0 then
@@ -1374,40 +1374,39 @@ begin
       if Node.OpType = 'Add' then
         Values[I] := L + R
       else if Node.OpType = 'Sub' then
-          Values[I] := L - R
-        else if Node.OpType = 'Mul' then
-            Values[I] := L * R
-          else if Node.OpType = 'Div' then
-            begin
-              RequireCpu(R <> 0, 'ONNX integer division by zero');
-              Values[I] := L div R;
-            end
-            else if Node.OpType = 'Mod' then
-              begin
-                RequireCpu((R <> 0) and not ((L = Low(Int64)) and (R = -1)),
-                  'Invalid ONNX integer modulo');
-                Values[I] := L mod R;
-                if (IntAttribute(Node, 'fmod', 0) = 0) and (Values[I] <> 0) and
-                  ((Values[I] < 0) <> (R < 0)) then Inc(Values[I], R);
-              end
-              else if Node.OpType = 'Max' then
-                begin
-                  Values[I] := L;
-                  if R > L then Values[I] := R;
-                end
-                else if Node.OpType = 'Equal' then
-                    Values[I] := Ord(L = R)
-                  else if Node.OpType = 'Less' then
-                      Values[I] := Ord(L < R)
-                    else if Node.OpType = 'Greater' then
-                        Values[I] := Ord(L > R)
-                      else if Node.OpType = 'GreaterOrEqual' then
-                          Values[I] := Ord(L >= R)
-                        else if Node.OpType = 'And' then
-                            Values[I] := Ord((L <> 0) and (R <> 0))
-                          else
-                            raise ECpuGraph.Create('Unsupported static ONNX integer operator: ' +
-                              Node.OpType);
+        Values[I] := L - R
+      else if Node.OpType = 'Mul' then
+        Values[I] := L * R
+      else if Node.OpType = 'Div' then
+      begin
+        RequireCpu(R <> 0, 'ONNX integer division by zero');
+        Values[I] := L div R;
+      end
+      else if Node.OpType = 'Mod' then
+      begin
+        RequireCpu((R <> 0) and not ((L = Low(Int64)) and (R = -1)), 'Invalid ONNX integer modulo');
+        Values[I] := L mod R;
+        if (IntAttribute(Node, 'fmod', 0) = 0) and (Values[I] <> 0) and
+          ((Values[I] < 0) <> (R < 0)) then Inc(Values[I], R);
+      end
+      else if Node.OpType = 'Max' then
+      begin
+        Values[I] := L;
+        if R > L then Values[I] := R;
+      end
+      else if Node.OpType = 'Equal' then
+        Values[I] := Ord(L = R)
+      else if Node.OpType = 'Less' then
+        Values[I] := Ord(L < R)
+      else if Node.OpType = 'Greater' then
+        Values[I] := Ord(L > R)
+      else if Node.OpType = 'GreaterOrEqual' then
+        Values[I] := Ord(L >= R)
+      else if Node.OpType = 'And' then
+        Values[I] := Ord((L <> 0) and (R <> 0))
+      else
+        raise ECpuGraph.Create('Unsupported static ONNX integer operator: ' +
+          Node.OpType);
     end;
     Exit(StaticIntegers(Shape, Values, Kind));
   end;
@@ -1431,11 +1430,11 @@ begin
         if Node.OpType = 'Add' then
           Floats[I] := LF + RF
         else if Node.OpType = 'Sub' then
-            Floats[I] := LF - RF
-          else if Node.OpType = 'Mul' then
-              Floats[I] := LF * RF
-            else
-              Floats[I] := LF / RF;
+          Floats[I] := LF - RF
+        else if Node.OpType = 'Mul' then
+          Floats[I] := LF * RF
+        else
+          Floats[I] := LF / RF;
       end;
       if Folded then Exit(ConstantValue(Floats, Shape));
     end;
@@ -1708,7 +1707,7 @@ begin
       if Current > High(Int64) - Step then Break;
     end
     else if Current < Low(Int64) - Step then
-        Break;
+      Break;
     Inc(Current, Step);
   end;
   RequireCpu(Count > 0, 'Empty ONNX Range is not supported');
@@ -2745,12 +2744,12 @@ begin
       if Last > First then Shape[Axis] := (Last - First - 1) div Steps[I] + 1;
     end
     else if First > Last then
-      begin
-        if Steps[I] = Low(Int64) then
-          Shape[Axis] := 1
-        else
-          Shape[Axis] := (First - Last - 1) div (-Steps[I]) + 1;
-      end;
+    begin
+      if Steps[I] = Low(Int64) then
+        Shape[Axis] := 1
+      else
+        Shape[Axis] := (First - Last - 1) div (-Steps[I]) + 1;
+    end;
   end;
   if Source.StaticInt then
   begin
@@ -3159,7 +3158,7 @@ begin
       if (Node.OpType <> 'MatMul') or (I <> 1) then
         FMatMulInputs.AddOrSetValue(Node.Inputs[I], False)
       else if not FMatMulInputs.TryGetValue(Node.Inputs[I], UsedOnlyByMatMul) then
-          FMatMulInputs.Add(Node.Inputs[I], True);
+        FMatMulInputs.Add(Node.Inputs[I], True);
   for OutputInfo in Model.Outputs do FMatMulInputs.AddOrSetValue(OutputInfo.Name, False);
   for Initializer in Model.Initializers do FInitializers.Add(Initializer.Name, Initializer);
   SetLength(Inputs, Length(Model.Inputs));

@@ -80,15 +80,15 @@ begin
     Channels := Shape[0];
   end
   else if Mode = 'conv_bias' then
-    begin
-      RequireCpu(Length(Shape) = 1, 'Invalid RT-DETR convolution bias binding');
-      Channels := Shape[0];
-    end
-    else begin
-      RequireCpu(((Mode = 'scale') or (Mode = 'bias')) and (Length(Shape) = 4) and (Shape[0] = 1) and (Shape[2] = 1) and (Shape[3] = 1),
-        'Invalid RT-DETR normalization binding');
-      Channels := Shape[1];
-    end;
+  begin
+    RequireCpu(Length(Shape) = 1, 'Invalid RT-DETR convolution bias binding');
+    Channels := Shape[0];
+  end
+  else begin
+    RequireCpu(((Mode = 'scale') or (Mode = 'bias')) and (Length(Shape) = 4) and (Shape[0] = 1) and (Shape[2] = 1) and (Shape[3] = 1),
+      'Invalid RT-DETR normalization binding');
+    Channels := Shape[1];
+  end;
   Gamma := ReadWeight(Source, Norm + '.weight', [Channels]);
   Variance := ReadWeight(Source, Norm + '.running_var', [Channels]);
   if Mode = 'conv_weight' then

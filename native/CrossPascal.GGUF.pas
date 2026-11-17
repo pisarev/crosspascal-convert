@@ -27,30 +27,31 @@ type
   end;
 
   TGGUFCheckpoint = class
-  private type
-    TInitParams = record
-      NoAlloc: Boolean;
-      TensorContext: Pointer;
-    end;
-    TReader = function(UserData, Output: Pointer; Offset: UInt64; Count: NativeUInt): NativeUInt; cdecl;
-    TOpen = function(Reader: TReader; UserData: Pointer; MaxChunk: NativeUInt; FileSize: UInt64;
-      Params: TInitParams): Pointer; cdecl;
-    TClose = procedure(Context: Pointer); cdecl;
-    TContextSize = function(Context: Pointer): NativeUInt; cdecl;
-    TFind = function(Context: Pointer; Name: PAnsiChar): Int64; cdecl;
-    TCount = function(Context: Pointer): Int64; cdecl;
-    TText = function(Context: Pointer; Index: Int64): PAnsiChar; cdecl;
-    TArrayText = function(Context: Pointer; Index: Int64; Element: NativeUInt): PAnsiChar; cdecl;
-    TShape = function(Context: Pointer; Index: Int64): PInt64; cdecl;
-    TTensorSize = function(Context: Pointer; Index: Int64): NativeUInt; cdecl;
-    TKind = function(Context: Pointer; Index: Int64): Integer; cdecl;
-    TU32 = function(Context: Pointer; Index: Int64): UInt32; cdecl;
-    TF32 = function(Context: Pointer; Index: Int64): Single; cdecl;
-    TBool = function(Context: Pointer; Index: Int64): Boolean; cdecl;
-    TArrayData = function(Context: Pointer; Index: Int64): Pointer; cdecl;
-    TBlockSize = function(Kind: Integer): Int64; cdecl;
-    TTypeSize = function(Kind: Integer): NativeUInt; cdecl;
-    TDecode = procedure(Source: Pointer; Dest: PSingle; Count: Int64); cdecl;
+  private
+    type
+      TInitParams = record
+        NoAlloc: Boolean;
+        TensorContext: Pointer;
+      end;
+      TReader = function(UserData, Output: Pointer; Offset: UInt64; Count: NativeUInt): NativeUInt; cdecl;
+      TOpen = function(Reader: TReader; UserData: Pointer; MaxChunk: NativeUInt; FileSize: UInt64;
+        Params: TInitParams): Pointer; cdecl;
+      TClose = procedure(Context: Pointer); cdecl;
+      TContextSize = function(Context: Pointer): NativeUInt; cdecl;
+      TFind = function(Context: Pointer; Name: PAnsiChar): Int64; cdecl;
+      TCount = function(Context: Pointer): Int64; cdecl;
+      TText = function(Context: Pointer; Index: Int64): PAnsiChar; cdecl;
+      TArrayText = function(Context: Pointer; Index: Int64; Element: NativeUInt): PAnsiChar; cdecl;
+      TShape = function(Context: Pointer; Index: Int64): PInt64; cdecl;
+      TTensorSize = function(Context: Pointer; Index: Int64): NativeUInt; cdecl;
+      TKind = function(Context: Pointer; Index: Int64): Integer; cdecl;
+      TU32 = function(Context: Pointer; Index: Int64): UInt32; cdecl;
+      TF32 = function(Context: Pointer; Index: Int64): Single; cdecl;
+      TBool = function(Context: Pointer; Index: Int64): Boolean; cdecl;
+      TArrayData = function(Context: Pointer; Index: Int64): Pointer; cdecl;
+      TBlockSize = function(Kind: Integer): Int64; cdecl;
+      TTypeSize = function(Kind: Integer): NativeUInt; cdecl;
+      TDecode = procedure(Source: Pointer; Dest: PSingle; Count: Int64); cdecl;
   private
     FLibrary: HMODULE;
     FFile: TMappedModelFile;

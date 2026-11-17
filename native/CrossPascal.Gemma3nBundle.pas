@@ -218,10 +218,10 @@ begin
         Kind := 'q8';
       end
       else if Copy(Original, Length(Original) - 5, 6) = '_scale' then
-        begin
-          SetLength(Original, Length(Original) - 6);
-          Kind := 'scale';
-        end;
+      begin
+        SetLength(Original, Length(Original) - 6);
+        Kind := 'scale';
+      end;
     end;
     Binding := ModelObject(Bindings.GetValue(Original), Original);
     Tensor := ModelText(Binding.GetValue('tensor'));

@@ -202,42 +202,42 @@ begin
       end;
     end
     else if Adapter = 'paddleocr' then
+    begin
+      Parameters := TJSONObject.Create;
+      Result.AddPair('ocr', Parameters);
+      Parameters.AddPair('profile', ProfileID);
+      if Task = 'ocr_detection' then
       begin
-        Parameters := TJSONObject.Create;
-        Result.AddPair('ocr', Parameters);
-        Parameters.AddPair('profile', ProfileID);
-        if Task = 'ocr_detection' then
-        begin
-          Parameters.AddPair('preprocessing', 'centered-square-bgr-imagenet');
-          Parameters.AddPair('threshold', JSONFloat(0.3));
-          Parameters.AddPair('box_threshold', JSONFloat(0.6));
-          Parameters.AddPair('unclip_ratio', JSONFloat(1.5));
-        end
-        else begin
-          Parameters.AddPair('preprocessing', 'bgr-resize-pad-minus-one-to-one');
-          Parameters.AddPair('classes', JSONInteger(ModelInt(Profile.GetValue('classes'), 'OCR classes')));
-          Parameters.AddPair('dictionary_sha256', ModelText(Profile.GetValue('dictionary_sha256')));
-          Parameters.AddPair('blank_index', JSONInteger(0));
-        end;
+        Parameters.AddPair('preprocessing', 'centered-square-bgr-imagenet');
+        Parameters.AddPair('threshold', JSONFloat(0.3));
+        Parameters.AddPair('box_threshold', JSONFloat(0.6));
+        Parameters.AddPair('unclip_ratio', JSONFloat(1.5));
       end
-      else if Adapter = 'birefnet' then
-        begin
-          Parameters := TJSONObject.Create;
-          Result.AddPair('segmentation', Parameters);
-          Parameters.AddPair('profile', ProfileID);
-          Parameters.AddPair('preprocessing', 'rgb-cubic-imagenet');
-          Parameters.AddPair('output', 'logits-nchw');
-          Parameters.AddPair('mask_resize', 'linear');
-        end
-        else begin
-          Parameters := TJSONObject.Create;
-          Result.AddPair('defaults', Parameters);
-          Parameters.AddPair('score_threshold',
-            JSONFloat(ModelFloat(Profile.GetValue('score_threshold'), 'score threshold')));
-          if Adapter = 'yolo11' then
-            Parameters.AddPair('nms_threshold',
-              JSONFloat(ModelFloat(Profile.GetValue('nms_threshold'), 'NMS threshold')));
-        end;
+      else begin
+        Parameters.AddPair('preprocessing', 'bgr-resize-pad-minus-one-to-one');
+        Parameters.AddPair('classes', JSONInteger(ModelInt(Profile.GetValue('classes'), 'OCR classes')));
+        Parameters.AddPair('dictionary_sha256', ModelText(Profile.GetValue('dictionary_sha256')));
+        Parameters.AddPair('blank_index', JSONInteger(0));
+      end;
+    end
+    else if Adapter = 'birefnet' then
+    begin
+      Parameters := TJSONObject.Create;
+      Result.AddPair('segmentation', Parameters);
+      Parameters.AddPair('profile', ProfileID);
+      Parameters.AddPair('preprocessing', 'rgb-cubic-imagenet');
+      Parameters.AddPair('output', 'logits-nchw');
+      Parameters.AddPair('mask_resize', 'linear');
+    end
+    else begin
+      Parameters := TJSONObject.Create;
+      Result.AddPair('defaults', Parameters);
+      Parameters.AddPair('score_threshold',
+        JSONFloat(ModelFloat(Profile.GetValue('score_threshold'), 'score threshold')));
+      if Adapter = 'yolo11' then
+        Parameters.AddPair('nms_threshold',
+          JSONFloat(ModelFloat(Profile.GetValue('nms_threshold'), 'NMS threshold')));
+    end;
     Provenance := TJSONObject.Create;
     Result.AddPair('provenance', Provenance);
     Provenance.AddPair('source', Source);

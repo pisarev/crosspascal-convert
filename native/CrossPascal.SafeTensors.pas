@@ -25,11 +25,12 @@ type
   end;
 
   TSafeTensorFile = class
-  private type
-    TEntry = record
-      Info: TSafeTensorInfo;
-      Offset: Int64;
-    end;
+  private
+    type
+      TEntry = record
+        Info: TSafeTensorInfo;
+        Offset: Int64;
+      end;
   private
     FFile: TFileStream;
     FTensors: TDictionary<string, TEntry>;

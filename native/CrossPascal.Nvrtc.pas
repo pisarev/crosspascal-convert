@@ -18,16 +18,17 @@ uses
 
 type
   TNvrtcCompiler = class
-  private type
-    TCreate = function(out ProgramHandle: Pointer; Source, Name: PAnsiChar; Headers: Integer;
-      HeaderSources, HeaderNames: PPAnsiChar): Integer; cdecl;
-    TDestroy = function(var ProgramHandle: Pointer): Integer; cdecl;
-    TCompile = function(ProgramHandle: Pointer; Options: Integer; Arguments: PPAnsiChar): Integer; cdecl;
-    TGetSize = function(ProgramHandle: Pointer; out Size: NativeUInt): Integer; cdecl;
-    TGetData = function(ProgramHandle: Pointer; Output: PAnsiChar): Integer; cdecl;
-    TGetErrorString = function(Status: Integer): PAnsiChar; cdecl;
-    TGetVersion = function(out Major, Minor: Integer): Integer; cdecl;
-    TBytesFromArray = function(const Data: PTVMFFIByteArray; Output: PTVMFFIAny): Integer; cdecl;
+  private
+    type
+      TCreate = function(out ProgramHandle: Pointer; Source, Name: PAnsiChar; Headers: Integer;
+        HeaderSources, HeaderNames: PPAnsiChar): Integer; cdecl;
+      TDestroy = function(var ProgramHandle: Pointer): Integer; cdecl;
+      TCompile = function(ProgramHandle: Pointer; Options: Integer; Arguments: PPAnsiChar): Integer; cdecl;
+      TGetSize = function(ProgramHandle: Pointer; out Size: NativeUInt): Integer; cdecl;
+      TGetData = function(ProgramHandle: Pointer; Output: PAnsiChar): Integer; cdecl;
+      TGetErrorString = function(Status: Integer): PAnsiChar; cdecl;
+      TGetVersion = function(out Major, Minor: Integer): Integer; cdecl;
+      TBytesFromArray = function(const Data: PTVMFFIByteArray; Output: PTVMFFIAny): Integer; cdecl;
   private
     FLibrary: HMODULE;
     FBuiltins: HMODULE;
@@ -144,15 +145,15 @@ begin
         if Tag = 'math_constants' then
           Header := Header + '#include <math_constants.h>'#10
         else if Tag = 'int8' then
-            Header := Header + '#include <sm_61_intrinsics.h>'#10
-          else if Tag = 'mma' then
-              Header := Header + '#include <mma.h>'#10
-            else if Tag = 'cuda/barrier' then
-                Header := Header + '#include <cuda/barrier>'#10
-              else if Tag = 'cooperative_groups' then
-                  Header := Header + '#include <cooperative_groups.h>'#10
-                else if (Tag <> 'cuda') and (Tag <> 'warp_shuffle') then
-                    raise ECpuGraph.Create('Unsupported CUDA header tag: ' + UTF8Decode(Tag));
+          Header := Header + '#include <sm_61_intrinsics.h>'#10
+        else if Tag = 'mma' then
+          Header := Header + '#include <mma.h>'#10
+        else if Tag = 'cuda/barrier' then
+          Header := Header + '#include <cuda/barrier>'#10
+        else if Tag = 'cooperative_groups' then
+          Header := Header + '#include <cooperative_groups.h>'#10
+        else if (Tag <> 'cuda') and (Tag <> 'warp_shuffle') then
+          raise ECpuGraph.Create('Unsupported CUDA header tag: ' + UTF8Decode(Tag));
       finally
         if Value.TypeIndex >= kTVMFFIStaticObjectBegin then TTVMRuntime.ObjectRelease(Value.VObj);
       end;

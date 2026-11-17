@@ -19,30 +19,31 @@ uses
 
 type
   TTorchCheckpoint = class
-  private type
-    TStorage = record
-      DataType: string;
-      Key: string;
-      Count: Int64;
-    end;
-    TTensor = record
-      Storage: TStorage;
-      Offset: Int64;
-      Shape: TArray<Int64>;
-      Strides: TArray<Int64>;
-    end;
-    TPickleValue = class
-      Kind: (pvNone, pvText, pvNumber, pvFloat, pvGlobal, pvMap, pvSequence, pvObject, pvStorage, pvTensor);
-      Text: string;
-      Number: Int64;
-      Scalar: Double;
-      Items: TArray<TPickleValue>;
-      Map: TDictionary<string, TPickleValue>;
-      State: TPickleValue;
-      Storage: TStorage;
-      Tensor: TTensor;
-      destructor Destroy; override;
-    end;
+  private
+    type
+      TStorage = record
+        DataType: string;
+        Key: string;
+        Count: Int64;
+      end;
+      TTensor = record
+        Storage: TStorage;
+        Offset: Int64;
+        Shape: TArray<Int64>;
+        Strides: TArray<Int64>;
+      end;
+      TPickleValue = class
+        Kind: (pvNone, pvText, pvNumber, pvFloat, pvGlobal, pvMap, pvSequence, pvObject, pvStorage, pvTensor);
+        Text: string;
+        Number: Int64;
+        Scalar: Double;
+        Items: TArray<TPickleValue>;
+        Map: TDictionary<string, TPickleValue>;
+        State: TPickleValue;
+        Storage: TStorage;
+        Tensor: TTensor;
+        destructor Destroy; override;
+      end;
   private
     FArchive: TObjectDictionary<string, TMemoryStream>;
     FPrefix: string;
@@ -319,27 +320,27 @@ begin
     Result.Map := TDictionary<string, TPickleValue>.Create;
   end
   else if Callable.Text = 'torch._utils _rebuild_tensor_v2' then
+  begin
+    RequireCpu((Length(Arguments.Items) >= 4) and (Arguments.Items[0].Kind = pvStorage) and
+      (Arguments.Items[1].Kind = pvNumber) and (Arguments.Items[2].Kind = pvSequence) and
+      (Arguments.Items[3].Kind = pvSequence) and
+      (Length(Arguments.Items[2].Items) = Length(Arguments.Items[3].Items)),
+      'Invalid PyTorch tensor record');
+    Result.Kind := pvTensor;
+    Result.Tensor.Storage := Arguments.Items[0].Storage;
+    Result.Tensor.Offset := Arguments.Items[1].Number;
+    SetLength(Result.Tensor.Shape, Length(Arguments.Items[2].Items));
+    SetLength(Result.Tensor.Strides, Length(Result.Tensor.Shape));
+    for I := 0 to High(Result.Tensor.Shape) do
     begin
-      RequireCpu((Length(Arguments.Items) >= 4) and (Arguments.Items[0].Kind = pvStorage) and
-        (Arguments.Items[1].Kind = pvNumber) and (Arguments.Items[2].Kind = pvSequence) and
-        (Arguments.Items[3].Kind = pvSequence) and
-        (Length(Arguments.Items[2].Items) = Length(Arguments.Items[3].Items)),
-        'Invalid PyTorch tensor record');
-      Result.Kind := pvTensor;
-      Result.Tensor.Storage := Arguments.Items[0].Storage;
-      Result.Tensor.Offset := Arguments.Items[1].Number;
-      SetLength(Result.Tensor.Shape, Length(Arguments.Items[2].Items));
-      SetLength(Result.Tensor.Strides, Length(Result.Tensor.Shape));
-      for I := 0 to High(Result.Tensor.Shape) do
-      begin
-        Result.Tensor.Shape[I] := Arguments.Items[2].Items[I].Number;
-        Result.Tensor.Strides[I] := Arguments.Items[3].Items[I].Number;
-      end;
-    end
-    else begin
-      Result.Kind := pvObject;
-      Result.Text := Callable.Text;
+      Result.Tensor.Shape[I] := Arguments.Items[2].Items[I].Number;
+      Result.Tensor.Strides[I] := Arguments.Items[3].Items[I].Number;
     end;
+  end
+  else begin
+    Result.Kind := pvObject;
+    Result.Text := Callable.Text;
+  end;
 end;
 
 function TTorchCheckpoint.ReadPickle: TPickleValue;
@@ -447,7 +448,7 @@ begin
             if Opcode = Ord('t') then
               Value.Items := PopMarked
             else if Opcode in [$85, $86, $87] then
-                Value.Items := PopItems(Opcode - $84);
+              Value.Items := PopItems(Opcode - $84);
           end;
           FStack.Add(Value);
         end;

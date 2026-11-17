@@ -107,13 +107,13 @@
     },
     {
       "path": "native/CrossPascal.GGUF.pas",
-      "bytes": 14564,
-      "sha256": "387cb08fb96c0ddc0a967ea55bb0598d6e79459b8782b8914c072e60258e4539"
+      "bytes": 14614,
+      "sha256": "d45cce68d91bb02c45336aa549a55ddd6580d09164087071fd63bdf1e40588f6"
     },
     {
       "path": "native/CrossPascal.Gemma2Bundle.pas",
-      "bytes": 10891,
-      "sha256": "d301cdbbb445658b721bf783522178c4cb6d0bbc6f0fcd7e93be7798945ce1b2"
+      "bytes": 10875,
+      "sha256": "ffecea94126f9296035868b28d9b7bd7144db872d81d2844f4986f5524a37ba2"
     },
     {
       "path": "native/CrossPascal.Gemma2Graph.pas",
@@ -122,8 +122,8 @@
     },
     {
       "path": "native/CrossPascal.Gemma3nBundle.pas",
-      "bytes": 29857,
-      "sha256": "95064623815ee0a73e61743bbc5e5dc52ba07ebcbfc8a11b56e05e67da2dab60"
+      "bytes": 29849,
+      "sha256": "60cab4243f8e0d423d18715e9bf5297cf8320cde9f54fda9d58b6eed0f883338"
     },
     {
       "path": "native/CrossPascal.Gemma3nGraph.pas",
@@ -152,8 +152,8 @@
     },
     {
       "path": "native/CrossPascal.Nvrtc.pas",
-      "bytes": 12480,
-      "sha256": "69676df6ea685ec214dbd41544832f0688b4cfff810c1ae9a22c716b29358c11"
+      "bytes": 12452,
+      "sha256": "b8323158a9fcdaea7a1369bb66c0ccbfa404cb6bbd1daaf99a798535d261d4f0"
     },
     {
       "path": "native/CrossPascal.OmDetBundle.pas",
@@ -177,13 +177,13 @@
     },
     {
       "path": "native/CrossPascal.RtDetrSource.pas",
-      "bytes": 6305,
-      "sha256": "09613f5be4656e13ed83a86ba4357e9b20acd9c08b49c0cb082c536069d6b75a"
+      "bytes": 6287,
+      "sha256": "2a5dfda939760fc59c9224d0cb11b0dbd9cea30cd914831b5415ebb1f39f6e09"
     },
     {
       "path": "native/CrossPascal.SafeTensors.pas",
-      "bytes": 11998,
-      "sha256": "27b77a432ddd92343a8394bc12cfc492ff697ad693226bdebf8b0524a058ada8"
+      "bytes": 12010,
+      "sha256": "d1c63bd84fb2ce634260b00a3771c16598a6b6598f072ecac5b3b943796af798"
     },
     {
       "path": "native/CrossPascal.TVMCompiler.pas",
@@ -192,8 +192,8 @@
     },
     {
       "path": "native/CrossPascal.TVMOnnx.pas",
-      "bytes": 138725,
-      "sha256": "b269e8a5939c58fe0b671bf7eecf69511d9a38225a52f2b762c4508ec2f099b5"
+      "bytes": 138308,
+      "sha256": "cbe4ba5a315d6f4a96b36f9d8990e582ff4da967639672b7d79931a0d5c0ee0b"
     },
     {
       "path": "native/CrossPascal.TokenizerSource.pas",
@@ -202,8 +202,8 @@
     },
     {
       "path": "native/CrossPascal.TorchCheckpoint.pas",
-      "bytes": 20448,
-      "sha256": "2c73ccd3c50190bea9fbda8d4c3907ab2e24995b5bd87d67b548ce5fe9044c94"
+      "bytes": 20454,
+      "sha256": "e0c049998c1dc6c70ce848eed62ed0c73900cb4d6165abea291f720d12356e7e"
     },
     {
       "path": "native/CrossPascal.UnicodeJson.pas",
@@ -212,8 +212,8 @@
     },
     {
       "path": "native/CrossPascal.VisionBundle.pas",
-      "bytes": 16481,
-      "sha256": "f8384245612d48c54e3a37cc0dad5ce460500e629344d84da441690128d722b2"
+      "bytes": 16375,
+      "sha256": "fecfd2922a406c20703a7bd7743f4ff27a5ec0cba2ac5d6500496d8519a1a25a"
     },
     {
       "path": "native/CrossPascal.YoloSource.pas",
@@ -866,5 +866,6 @@
       "sha256": "18e9d8b20d80ad2eaf57997895b013eb06f408db6c6f0c36ab8961900a5640dc"
     }
   ],
-  "documentation_revision": "maintenance-20261110"
+  "documentation_revision": "maintenance-20261110",
+  "source_revision": "source-update-20261117"
 }
