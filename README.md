@@ -12,6 +12,13 @@ Windows x64 linker and SDK libraries, with NVRTC for CUDA builds.
 
 See the [installation guide](INSTALL.md) for the current profiles and toolchain. The sections below describe the browser converter from earlier releases.
 
+The native dense Qwen 3.5/3.8 converter accepts original BF16 and mixed GGUF
+sources and can add the original BF16 vision encoder for image input. See the
+[Qwen3.8 conversion and setup guide](docs/QWEN35.md) for the ready CPU and
+CUDA profiles. The separate [Huihui Gemma 3n E4B profiles](docs/HUIHUI-GEMMA3N.md)
+convert the community abliterated checkpoint for CPU or CUDA, with the
+matching projector for image input.
+
 The native converter includes **BiRefNet HR800 background removal | CPU** and **CUDA**. Choose the pinned full SwinL ONNX from the BiRefNet source pack and a new output folder. The resulting bundle works with the [Pascal BiRefNet example](https://github.com/pisarev/crosspascal/tree/main/examples/birefnet), which saves a grayscale mask or transparent PNG.
 
 For text-guided detection, select **OmDet-Turbo text-guided detection | CPU** or **CUDA** and the supplied five-file ONNX source folder. The native converter builds both the CLIP text encoder and trained Swin-Tiny detector into a bundle for the [OmDet-Turbo example](https://github.com/pisarev/crosspascal/tree/main/examples/omdet-turbo). CUDA targets are read from the installed device and remain editable. The ready bundles cover `sm_75`, `sm_86`, `sm_89`, and `sm_120`.

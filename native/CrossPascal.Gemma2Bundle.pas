@@ -131,7 +131,7 @@ begin
           WriteSymmetricInt8Rows(Mapped.AtOffset(0, FloatBytes), Shape[0], Shape[1], Stream, Scales);
         finally
           Mapped.Free;
-          SysUtils.DeleteFile(TemporaryPath);
+          {$IFDEF FPC}SysUtils{$ELSE}System.SysUtils{$ENDIF}.DeleteFile(TemporaryPath);
         end;
         Expected := Expected div SizeOf(Single);
         ScaleName := Name + ':scale';
@@ -175,7 +175,7 @@ begin
         Status := FindNext(Item);
       end;
     finally
-      SysUtils.FindClose(Item);
+      {$IFDEF FPC}SysUtils{$ELSE}System.SysUtils{$ENDIF}.FindClose(Item);
     end;
   RemoveDir(Folder);
 end;

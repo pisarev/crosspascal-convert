@@ -1,0 +1,4 @@
+# Preserve the exact vendor/adaptation bytes checked by the native compiler.
+packed_decode.cu -text
+ggml-common.h -text
+LICENSE -text

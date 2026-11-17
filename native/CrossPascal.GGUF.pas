@@ -89,10 +89,12 @@ type
     function Count: Int64;
     function Tensor(const Index: Int64): TGGUFTensor; overload;
     function Tensor(const Name: string): TGGUFTensor; overload;
+    function HasMetadata(const Name: string): Boolean;
     function Text(const Name: string): string;
     function Unsigned(const Name: string): UInt32; overload;
     function Unsigned(const Name: string; const DefaultValue: UInt32): UInt32; overload;
-    function Float(const Name: string): Single;
+    function Float(const Name: string): Single; overload;
+    function Float(const Name: string; const DefaultValue: Single): Single; overload;
     function Flag(const Name: string): Boolean; overload;
     function Flag(const Name: string; const DefaultValue: Boolean): Boolean; overload;
     function TokenPieces(const Name: string): TArray<UTF8String>;
@@ -100,12 +102,28 @@ type
     function FloatArray(const Name: string): TArray<Single>;
     function FlagArray(const Name: string): TArray<Boolean>;
     procedure WriteFloat32(const Name: string; const Dest: TStream);
+    { Raw views are valid only while this checkpoint remains open. }
+    function RawTensorRange(const Name: string; const ByteOffset, ByteCount: Int64): Pointer;
+    { Preserve original Q8_0 values and widen block scales without requantization. }
+    procedure WriteQ8_0Range(const Name: string; const FirstElement, Rows, Width: Int64;
+      const Quantized, Scales: TStream);
+    procedure ReadFloat32Range(const Name: string; const FirstElement, ElementCount: Int64;
+      const Destination: PSingle);
   end;
 
 implementation
 
 uses
   {$IFDEF FPC}SysUtils{$ELSE}System.SysUtils{$ENDIF};
+
+{$IF not Declared(LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR)}
+const
+  LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR = $00000100;
+{$IFEND}
+{$IF not Declared(LOAD_LIBRARY_SEARCH_SYSTEM32)}
+const
+  LOAD_LIBRARY_SEARCH_SYSTEM32 = $00000800;
+{$IFEND}
 
 const
   U32Type = 4;
@@ -254,6 +272,14 @@ begin
   RequireCpu((Result <> nil) or (Count = 0), 'Missing GGUF array data: ' + Name);
 end;
 
+function TGGUFCheckpoint.HasMetadata(const Name: string): Boolean;
+var
+  Encoded: UTF8String;
+begin
+  Encoded := UTF8Encode(Name);
+  Result := FFindKey(FContext, PAnsiChar(Encoded)) >= 0;
+end;
+
 function TGGUFCheckpoint.Text(const Name: string): string;
 begin
   Result := UTF8Decode(UTF8String(FValueString(FContext, Key(Name, StringType))));
@@ -276,6 +302,15 @@ end;
 function TGGUFCheckpoint.Float(const Name: string): Single;
 begin
   Result := FValueF32(FContext, Key(Name, F32Type));
+end;
+
+function TGGUFCheckpoint.Float(const Name: string; const DefaultValue: Single): Single;
+var
+  Index: Int64;
+begin
+  Index := Key(Name, F32Type, False);
+  if Index < 0 then Exit(DefaultValue);
+  Result := FValueF32(FContext, Index);
 end;
 
 function TGGUFCheckpoint.Flag(const Name: string): Boolean;
@@ -396,6 +431,128 @@ end;
 procedure TGGUFCheckpoint.WriteFloat32(const Name: string; const Dest: TStream);
 begin
   WriteTensor(Tensor(Name), Dest);
+end;
+
+function TGGUFCheckpoint.RawTensorRange(const Name: string;
+  const ByteOffset, ByteCount: Int64): Pointer;
+var
+  Info: TGGUFTensor;
+begin
+  Info := Tensor(Name);
+  RequireCpu((ByteOffset >= 0) and (ByteCount >= 0) and (ByteOffset <= Info.DataBytes) and
+    (ByteCount <= Info.DataBytes - ByteOffset), 'GGUF raw range is out of bounds: ' + Name);
+  if ByteCount = 0 then Exit(nil);
+  Result := FFile.AtOffset(Info.DataOffset + ByteOffset, ByteCount);
+end;
+
+function Q8ScaleToSingle(const Value: Word): Single;
+var
+  Bits, Mantissa: UInt32;
+  Exponent: Integer;
+begin
+  RequireCpu((Value and $7C00) <> $7C00, 'Non-finite source Q8_0 block scale');
+  Bits := UInt32(Value and $8000) shl 16;
+  Exponent := (Value shr 10) and $1F;
+  Mantissa := Value and $03FF;
+  if Exponent = 0 then
+  begin
+    if Mantissa <> 0 then
+    begin
+      Exponent := 113;
+      while (Mantissa and $0400) = 0 do
+      begin
+        Mantissa := Mantissa shl 1;
+        Dec(Exponent);
+      end;
+      Bits := Bits or (UInt32(Exponent) shl 23) or ((Mantissa and $03FF) shl 13);
+    end;
+  end
+  else
+    Bits := Bits or (UInt32(Exponent + 112) shl 23) or (Mantissa shl 13);
+  Move(Bits, Result, SizeOf(Result));
+end;
+
+procedure TGGUFCheckpoint.WriteQ8_0Range(const Name: string; const FirstElement, Rows, Width: Int64;
+  const Quantized, Scales: TStream);
+const
+  BlockElements = 32;
+  BlockBytes = 34;
+  ChunkBlocks = 4096;
+var
+  Info: TGGUFTensor;
+  Source: PByte;
+  Q: array[0..ChunkBlocks * BlockElements - 1] of ShortInt;
+  Factors: array[0..ChunkBlocks - 1] of Single;
+  Half: Word;
+  Elements, Blocks, Count, I: Int64;
+begin
+  RequireCpu((Rows > 0) and (Width > 0) and (Width mod BlockElements = 0) and
+    (Quantized <> nil) and (Scales <> nil), 'Invalid source Q8_0 output dimensions');
+  RequireCpu(Rows <= High(Int64) div Width, 'Source Q8_0 element count overflow');
+  Elements := Rows * Width;
+  Info := Tensor(Name);
+  RequireCpu((Info.Format = 8) and (Info.Dimensions[0] = Width) and
+    (FirstElement >= 0) and (FirstElement mod BlockElements = 0) and
+    (FirstElement <= Info.Elements) and (Elements <= Info.Elements - FirstElement),
+    'Invalid source Q8_0 tensor, width or element range: ' + Name);
+  RequireCpu((FBlockSize(Info.Format) = BlockElements) and
+    (FTypeSize(Info.Format) = BlockBytes) and (Info.Elements mod BlockElements = 0),
+    'Unexpected GGML Q8_0 block layout');
+  RequireCpu(Info.Elements div BlockElements <= High(Int64) div BlockBytes,
+    'Source Q8_0 tensor byte count overflow');
+  RequireCpu(Info.DataBytes = (Info.Elements div BlockElements) * BlockBytes,
+    'Source Q8_0 tensor byte count mismatch');
+  Blocks := Elements div BlockElements;
+  RequireCpu(Blocks <= High(Int64) div BlockBytes, 'Source Q8_0 byte count overflow');
+  Source := RawTensorRange(Name, (FirstElement div BlockElements) * BlockBytes,
+    Blocks * BlockBytes);
+  while Blocks > 0 do
+  begin
+    Count := Blocks;
+    if Count > ChunkBlocks then Count := ChunkBlocks;
+    for I := 0 to Count - 1 do
+    begin
+      Move(Source^, Half, SizeOf(Half));
+      Factors[I] := Q8ScaleToSingle(Half);
+      Move((Source + SizeOf(Half))^, Q[I * BlockElements], BlockElements);
+      Inc(Source, BlockBytes);
+    end;
+    Quantized.WriteBuffer(Q[0], Count * BlockElements);
+    Scales.WriteBuffer(Factors[0], Count * SizeOf(Single));
+    Dec(Blocks, Count);
+  end;
+end;
+
+procedure TGGUFCheckpoint.ReadFloat32Range(const Name: string;
+  const FirstElement, ElementCount: Int64; const Destination: PSingle);
+var
+  Info: TGGUFTensor;
+  BlockSize, TypeSize, Offset, Bytes: Int64;
+  Source: Pointer;
+  Decode: TDecode;
+begin
+  Info := Tensor(Name);
+  RequireCpu((FirstElement >= 0) and (ElementCount >= 0) and (FirstElement <= Info.Elements) and
+    (ElementCount <= Info.Elements - FirstElement), 'GGUF element range is out of bounds: ' + Name);
+  RequireCpu(ElementCount <= High(NativeInt) div SizeOf(Single), 'GGUF decoded range is too large');
+  if ElementCount = 0 then Exit;
+  RequireCpu(Destination <> nil, 'GGUF range destination is nil');
+  BlockSize := FBlockSize(Info.Format);
+  TypeSize := FTypeSize(Info.Format);
+  RequireCpu((BlockSize > 0) and (TypeSize > 0) and
+    (FirstElement mod BlockSize = 0) and (ElementCount mod BlockSize = 0),
+    'GGUF decoded ranges must align with packed blocks: ' + Name);
+  Offset := (FirstElement div BlockSize) * TypeSize;
+  Bytes := (ElementCount div BlockSize) * TypeSize;
+  RequireCpu((Offset <= Info.DataBytes) and (Bytes <= Info.DataBytes - Offset),
+    'GGUF packed range exceeds its tensor: ' + Name);
+  Decode := nil;
+  if Info.Format <> 0 then Decode := DecodeFunction(Info.Format);
+  Source := FFile.AtOffset(Info.DataOffset + Offset, Bytes);
+  if Assigned(Decode) then
+    Decode(Source, Destination, ElementCount)
+  else
+    Move(Source^, Destination^, ElementCount * SizeOf(Single));
 end;
 
 end.

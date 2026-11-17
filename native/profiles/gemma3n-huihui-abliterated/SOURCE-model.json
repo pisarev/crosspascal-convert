@@ -1,0 +1,69 @@
+{
+  "schema": "crosspascal.model-source.v1",
+  "base_model": {
+    "repository": "google/gemma-3n-E4B-it",
+    "license": "gemma"
+  },
+  "community_checkpoint": {
+    "repository": "huihui-ai/Huihui-gemma-3n-E4B-it-abliterated",
+    "revision": "41baa2bf7d97a5a7e18a4943a5a896e9f4cea529",
+    "license": "gemma",
+    "modification": "Community abliteration of the text model, as described by its publisher"
+  },
+  "quantized_source": {
+    "repository": "bartowski/huihui-ai_Huihui-gemma-3n-E4B-it-abliterated-GGUF",
+    "revision": "19d84eb522d97e9e16eecaf49662f9f84404eefa",
+    "file": "huihui-ai_Huihui-gemma-3n-E4B-it-abliterated-Q8_0.gguf",
+    "bytes": 7353292800,
+    "sha256": "4980dba55c9d9892a99d527a4ebb791f54996abdb93783f8e2d9cbec381ee35d",
+    "tensor_formats": [
+      "BF16",
+      "F32",
+      "Q8_0"
+    ]
+  },
+  "conversion": {
+    "entry_point": "ConvertGemma3n",
+    "generated_text_graphs_required": true,
+    "projector_argument": "- for text; the pinned optional Gemma 3n projector for images",
+    "cpu_weights": "float32 decoded from the pinned mixed-format GGUF",
+    "cuda_weights": "Original Q8_0 signed blocks and exact FP16 block-scale values widened to FP32; auxiliary BF16/F32 matrices expand to FP32; FP32 activations",
+    "modalities_without_projector": [
+      "text"
+    ],
+    "modalities_with_projector": [
+      "text",
+      "image"
+    ],
+    "default_context_tokens": 4096,
+    "image_tokenizer": "Two media markers appended when absent; all existing token IDs retained"
+  },
+  "model_terms": {
+    "agreement": "LICENSE-model.txt",
+    "usage_policy": "USE-POLICY-model.txt",
+    "notice": "NOTICE.txt",
+    "modifications": "MODIFICATIONS-model.txt",
+    "publisher": "Google LLC",
+    "official_documents": [
+      {
+        "file": "LICENSE-model.txt",
+        "source_url": "https://ai.google.dev/gemma/terms",
+        "sha256": "c2ec12ad3312f8f90bea92dbcbc8f73040f56dc7f417ec1ba436a6228f2fc8bf"
+      },
+      {
+        "file": "USE-POLICY-model.txt",
+        "source_url": "https://ai.google.dev/gemma/prohibited_use_policy",
+        "sha256": "0554d5d774a16e9553d2d32b1e1392bd101b85409e96ad9adda1e8e0f3d1695c"
+      }
+    ]
+  },
+  "optional_vision_projector": {
+    "repository": "Anthonyg5005/gemma-3n-e4b-mmproj-gguf",
+    "revision": "0f9947517b54ab73db110da2664d8f929c256330",
+    "file": "gemma-3n-mmproj.gguf",
+    "bytes": 1967809440,
+    "sha256": "ea48671680ccc6a0e5a2a81815c564cb9594cf1eec0cc3c792498bc476bf036a",
+    "base_model": "google/gemma-3n-E4B-it",
+    "vision_parameters_fp32_sha256": "2ccf89b9b003e9d8bc2c5c731716a1ea40c1fcd23178f5a71a656868fcbbe6bb"
+  }
+}

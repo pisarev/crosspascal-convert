@@ -1,0 +1,14 @@
+{
+  "schema": "crosspascal.model-distribution.v1",
+  "source_sha256": "4980dba55c9d9892a99d527a4ebb791f54996abdb93783f8e2d9cbec381ee35d",
+  "source_repository": "bartowski/huihui-ai_Huihui-gemma-3n-E4B-it-abliterated-GGUF",
+  "source_revision": "19d84eb522d97e9e16eecaf49662f9f84404eefa",
+  "license": "gemma",
+  "files": {
+    "LICENSE-model.txt": "c2ec12ad3312f8f90bea92dbcbc8f73040f56dc7f417ec1ba436a6228f2fc8bf",
+    "USE-POLICY-model.txt": "0554d5d774a16e9553d2d32b1e1392bd101b85409e96ad9adda1e8e0f3d1695c",
+    "NOTICE.txt": "afdc3c706361eda3521cd98c21c9c2ad83b0ad9872c3a995f8573327554a8fa7",
+    "MODIFICATIONS-model.txt": "86864d60f8e00eb0e2d7da131580dacdf170dd90c6587dab05eb10b368550d12",
+    "SOURCE-model.json": "fe359e8f21d169c854c04d0e51bc1de8993b40fdb999657b69a8e17f2436c765"
+  }
+}

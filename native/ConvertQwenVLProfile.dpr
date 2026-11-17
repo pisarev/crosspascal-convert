@@ -425,7 +425,7 @@ begin
         Status := FindNext(Item);
       end;
     finally
-      SysUtils.FindClose(Item);
+      {$IFDEF FPC}SysUtils{$ELSE}System.SysUtils{$ENDIF}.FindClose(Item);
     end;
   RemoveDir(Folder);
 end;

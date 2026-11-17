@@ -1,0 +1,55 @@
+{
+  "schema": "crosspascal.gguf-reader-source.v1",
+  "release": "ollama-v0.40.14",
+  "release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.14",
+  "archive": {
+    "file": "ollama-windows-amd64.zip",
+    "url": "https://github.com/ollama/ollama/releases/download/v0.40.14/ollama-windows-amd64.zip",
+    "bytes": 1601954968,
+    "sha256": "65d68cade6cf6375f398b518224f8c8a15e062387f38cf477abfc848de7e7e29"
+  },
+  "binary_modifications_by_crosspascal": false,
+  "files": [
+    {
+      "file": "ggml-base.dll",
+      "member": "lib/ollama/ggml-base.dll",
+      "bytes": 821640,
+      "sha256": "a63add2beb37c7b55e715028f772e4da828fa7cc6d687f4c3e087c26cdbcce89"
+    },
+    {
+      "file": "libc++.dll",
+      "member": "lib/ollama/libc++.dll",
+      "bytes": 1767816,
+      "sha256": "8429f6970e0ac54c8566e0a55d64f9fbfeb79173a17dcca32c9a0056f8617684"
+    },
+    {
+      "file": "libomp.dll",
+      "member": "lib/ollama/libomp.dll",
+      "bytes": 965000,
+      "sha256": "69dfa59cf05e8ff7c6b32e2c80e2b86d423f16f21da00203aa1a7da5b6a9fc13"
+    },
+    {
+      "file": "libunwind.dll",
+      "member": "lib/ollama/libunwind.dll",
+      "bytes": 107912,
+      "sha256": "814389e7fab11d650c3b4c795a189d8270634647361c31d8582676a13463180f"
+    }
+  ],
+  "upstream_build": "Vendor release binaries, not a claim of an unmodified standalone llama.cpp source build.",
+  "purpose": "GGUF metadata and tensor decoding only. Native CrossPascal TVM graphs execute the model; no Ollama application or model engine is included.",
+  "notices": [
+    "LICENSE-GGML.txt",
+    "LICENSE-GGML-vendors.txt",
+    "LICENSE-LLVM.txt",
+    "LICENSE-OLLAMA.txt"
+  ],
+  "ollama_notice": {
+    "archive_member": "lib/ollama/GO_LICENSE",
+    "member_sha256": "4285a95875d7a3ae3790910d59ee88f82339d0ba37b1cbadde4124113bd04308",
+    "section": "github.com/ollama/ollama/LICENSE",
+    "byte_offset": 91794,
+    "bytes": 1079,
+    "sha256": "95fa997c6886685f7c1d54ccdfb906519a7e0b33be58d5c1958708688abaa1fd",
+    "action": "Copy the complete named MIT license section byte for byte, excluding the surrounding collection separators."
+  }
+}

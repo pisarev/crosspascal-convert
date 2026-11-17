@@ -50,6 +50,8 @@ type
   public
     constructor Create(const LibraryFile, Architecture: string);
     destructor Destroy; override;
+    function CompileRawKernel(const Source: UTF8String;
+      const HeaderNames, HeaderSources: TArray<UTF8String>): TBytes;
     function BuildDeviceModule(const IR, Target: TTVMFFIObjectHandle): TTVMFFIObjectHandle;
   end;
 
@@ -57,6 +59,15 @@ implementation
 
 uses
   TVM.CpuGraph;
+
+{$IF not Declared(LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR)}
+const
+  LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR = $00000100;
+{$IFEND}
+{$IF not Declared(LOAD_LIBRARY_SEARCH_SYSTEM32)}
+const
+  LOAD_LIBRARY_SEARCH_SYSTEM32 = $00000800;
+{$IFEND}
 
 var
   CallbackRegistered, HeaderRegistered, IntrinsicsRegistered: Boolean;
@@ -76,7 +87,7 @@ begin
         RequireCpu(ArrayView^.Size <= High(Integer), 'CUDA source is too large');
         SetString(Result, ArrayView^.Data, ArrayView^.Size);
       end;
-    kTVMFFISmallStr: SetString(Result, @Arg^.VBytes[0], Arg^.Padding and $FF);
+    kTVMFFISmallStr: SetString(Result, PAnsiChar(@Arg^.VBytes[0]), Arg^.Padding and $FF);
   else
     raise ECpuGraph.Create('TVM did not supply CUDA source text');
   end;
@@ -116,6 +127,7 @@ const
     'using cuda::std::int32_t; using cuda::std::uint32_t;'#10 +
     'using cuda::std::int64_t; using cuda::std::uint64_t;'#10 +
     'using uint = unsigned int;'#10 +
+    'using ushort = unsigned short;'#10 +
     'namespace std {'#10 +
     'using cuda::std::is_same; using cuda::std::is_same_v;'#10 +
     'using cuda::std::is_integral; using cuda::std::is_signed;'#10 +
@@ -273,6 +285,57 @@ begin
     RequireCpu((Size > 0) and (Size <= High(Integer)), 'Invalid compiled CUDA size');
     SetLength(Result, Size);
     Check(FCubin(ProgramHandle, PAnsiChar(Pointer(Result))), 'Read compiled CUDA program');
+  finally
+    FDestroy(ProgramHandle);
+  end;
+end;
+
+function TNvrtcCompiler.CompileRawKernel(const Source: UTF8String;
+  const HeaderNames, HeaderSources: TArray<UTF8String>): TBytes;
+var
+  ProgramHandle: Pointer;
+  Names, Sources: TArray<PAnsiChar>;
+  Options: array[0..4] of PAnsiChar;
+  Size: NativeUInt;
+  I, Status: Integer;
+  Log: TBytes;
+begin
+  Result := nil;
+  RequireCpu((Length(Source) > 0) and (Pos(#0, Source) = 0) and
+    (Length(HeaderNames) = Length(HeaderSources)), 'Invalid raw CUDA source');
+  SetLength(Names, Length(HeaderNames));
+  SetLength(Sources, Length(HeaderSources));
+  for I := 0 to High(Names) do
+  begin
+    RequireCpu((HeaderNames[I] <> '') and (Pos(#0, HeaderNames[I]) = 0) and
+      (Pos(#0, HeaderSources[I]) = 0), 'Invalid CUDA header');
+    Names[I] := PAnsiChar(HeaderNames[I]);
+    Sources[I] := PAnsiChar(HeaderSources[I]);
+  end;
+  ProgramHandle := nil;
+  Check(FCreate(ProgramHandle, PAnsiChar(Source), 'crosspascal_packed.cu', Length(Names),
+    Pointer(Sources), Pointer(Names)), 'Create raw CUDA program');
+  try
+    Options[0] := PAnsiChar(FArchitecture);
+    Options[1] := PAnsiChar(FIncludePath);
+    Options[2] := '--std=c++17';
+    Options[3] := '--diag-suppress=177';
+    Options[4] := '--fmad=false';
+    Status := FCompile(ProgramHandle, Length(Options), @Options[0]);
+    if Status <> 0 then
+    begin
+      if (FLogSize(ProgramHandle, Size) = 0) and (Size > 0) and (Size <= High(Integer)) then
+      begin
+        SetLength(Log, Size);
+        if FLog(ProgramHandle, PAnsiChar(Pointer(Log))) = 0 then
+          raise ECpuGraph.Create(UTF8Decode(UTF8String(PAnsiChar(Pointer(Log)))));
+      end;
+      Check(Status, 'Compile raw CUDA program');
+    end;
+    Check(FCubinSize(ProgramHandle, Size), 'Read raw CUDA size');
+    RequireCpu((Size > 0) and (Size <= High(Integer)), 'Invalid raw CUDA size');
+    SetLength(Result, Size);
+    Check(FCubin(ProgramHandle, PAnsiChar(Pointer(Result))), 'Read raw CUDA program');
   finally
     FDestroy(ProgramHandle);
   end;

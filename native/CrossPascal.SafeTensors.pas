@@ -23,6 +23,12 @@ type
     Shape: TArray<Int64>;
     ElementCount: Int64;
   end;
+  TSafeTensorStorage = record
+    FileName: string;
+    FileSize: Int64;
+    ByteOffset: Int64;
+    ByteCount: Int64;
+  end;
 
   TSafeTensorFile = class
   private
@@ -32,7 +38,8 @@ type
         Offset: Int64;
       end;
   private
-    FFile: TFileStream;
+    FFile: TStream;
+    FFileName: string;
     FTensors: TDictionary<string, TEntry>;
     function Entry(const Name: string): TEntry;
   public
@@ -40,6 +47,9 @@ type
     destructor Destroy; override;
     function TensorNames: TArray<string>;
     function TensorInfo(const Name: string): TSafeTensorInfo;
+    function TensorStorage(const Name: string): TSafeTensorStorage;
+    procedure CopyRawElements(const Name: string; const FirstElement, ElementCount: Int64;
+      const Destination: TStream);
     procedure WriteFloat32(const Name: string; const Destination: TStream);
   end;
 
@@ -54,6 +64,9 @@ type
     destructor Destroy; override;
     function TensorNames: TArray<string>;
     function TensorInfo(const Name: string): TSafeTensorInfo;
+    function TensorStorage(const Name: string): TSafeTensorStorage;
+    procedure CopyRawElements(const Name: string; const FirstElement, ElementCount: Int64;
+      const Destination: TStream);
     procedure WriteFloat32(const Name: string; const Destination: TStream);
   end;
 
@@ -61,6 +74,36 @@ implementation
 
 uses
   CrossPascal.Json, CrossVision.Float16;
+
+type
+  TTensorReadStream = class(THandleStream)
+  private
+    FOwnsHandle: Boolean;
+  public
+    constructor Create(const FileName: string);
+    destructor Destroy; override;
+  end;
+
+constructor TTensorReadStream.Create(const FileName: string);
+var
+  FileHandle: THandle;
+begin
+  FileHandle := FileOpen(FileName, fmOpenRead or fmShareDenyWrite);
+  if FileHandle = THandle(-1) then
+    {$IFDEF FPC}
+    raise EFOpenError.Create('Cannot open safetensors file: ' + FileName);
+    {$ELSE}
+    raise EFOpenError.CreateFmt('Cannot open safetensors file: %s', [FileName]);
+    {$ENDIF}
+  inherited Create(FileHandle);
+  FOwnsHandle := True;
+end;
+
+destructor TTensorReadStream.Destroy;
+begin
+  if FOwnsHandle then FileClose(Handle);
+  inherited;
+end;
 
 procedure Check(const Condition: Boolean; const MessageText: string);
 begin
@@ -98,8 +141,9 @@ var
   I, J, Width: Integer;
 begin
   inherited Create;
+  FFileName := ExpandFileName(FileName);
   FTensors := TDictionary<string, TEntry>.Create;
-  FFile := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+  FFile := TTensorReadStream.Create(FFileName);
   Check(FFile.Size >= 8, 'Safetensors file is missing its header length');
   FFile.ReadBuffer(HeaderSize, SizeOf(HeaderSize));
   Check((HeaderSize > 0) and (HeaderSize <= MaxHeader) and
@@ -206,6 +250,38 @@ begin
   Result.Shape := Copy(Result.Shape);
 end;
 
+function TSafeTensorFile.TensorStorage(const Name: string): TSafeTensorStorage;
+var
+  Tensor: TEntry;
+begin
+  Tensor := Entry(Name);
+  Result.FileName := FFileName;
+  Result.FileSize := FFile.Size;
+  Result.ByteOffset := Tensor.Offset;
+  Result.ByteCount := Tensor.Info.ElementCount * ByteWidth(Tensor.Info.DType);
+end;
+
+procedure TSafeTensorFile.CopyRawElements(const Name: string;
+  const FirstElement, ElementCount: Int64; const Destination: TStream);
+var
+  Tensor: TEntry;
+  Width: Integer;
+  ByteCount: Int64;
+begin
+  Tensor := Entry(Name);
+  Check(Destination <> nil, 'A safetensors destination stream is required');
+  Check((FirstElement >= 0) and (ElementCount >= 0), 'Invalid safetensors element range');
+  Check(FirstElement <= Tensor.Info.ElementCount, 'Safetensors element offset is out of range');
+  Check(ElementCount <= Tensor.Info.ElementCount - FirstElement,
+    'Safetensors element count is out of range');
+  if ElementCount = 0 then Exit;
+  Width := ByteWidth(Tensor.Info.DType);
+  ByteCount := ElementCount * Width;
+  FFile.Position := Tensor.Offset + FirstElement * Width;
+  Check(Destination.CopyFrom(FFile, ByteCount) = ByteCount,
+    'Could not copy the complete safetensors element range');
+end;
+
 procedure TSafeTensorFile.WriteFloat32(const Name: string; const Destination: TStream);
 const
   ChunkElements = 262144;
@@ -270,7 +346,7 @@ constructor TSafeTensorCheckpoint.Create(const Directory: string);
 var
   Folder, IndexName, Name, ShardName: string;
   Raw: UTF8String;
-  FileStream: TFileStream;
+  FileStream: TStream;
   Parsed, Value: TJSONValue;
   Map: TJSONObject;
   Shard, Mapped: TSafeTensorFile;
@@ -287,7 +363,7 @@ begin
     for Name in Shard.TensorNames do FWeights.Add(Name, Shard);
     Exit;
   end;
-  FileStream := TFileStream.Create(IndexName, fmOpenRead or fmShareDenyWrite);
+  FileStream := TTensorReadStream.Create(IndexName);
   try
     Check((FileStream.Size > 0) and (FileStream.Size <= 64 * 1024 * 1024),
       'Invalid safetensors index size');
@@ -353,6 +429,17 @@ end;
 function TSafeTensorCheckpoint.TensorInfo(const Name: string): TSafeTensorInfo;
 begin
   Result := WeightFile(Name).TensorInfo(Name);
+end;
+
+function TSafeTensorCheckpoint.TensorStorage(const Name: string): TSafeTensorStorage;
+begin
+  Result := WeightFile(Name).TensorStorage(Name);
+end;
+
+procedure TSafeTensorCheckpoint.CopyRawElements(const Name: string;
+  const FirstElement, ElementCount: Int64; const Destination: TStream);
+begin
+  WeightFile(Name).CopyRawElements(Name, FirstElement, ElementCount, Destination);
 end;
 
 procedure TSafeTensorCheckpoint.WriteFloat32(const Name: string; const Destination: TStream);

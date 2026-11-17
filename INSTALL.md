@@ -1,6 +1,6 @@
 # Install and use CrossPascal Converter
 
-Download and extract the [Windows x64 SDK](https://github.com/pisarev/crosspascal/releases/tag/early-access-022).
+Download and extract the [Windows x64 SDK](https://github.com/pisarev/crosspascal/releases/tag/early-access-023).
 The SDK contains the desktop converter, the native TVM compiler and the runtime libraries.
 The converter needs the x64 MSVC linker and the Windows SDK libraries. For CUDA
 conversion use NVIDIA CUDA Toolkit 12.8 with NVRTC. It can compile both Pascal
@@ -16,6 +16,9 @@ Select the generated bundle in GemmaChat, QwenChat, VisionModels, PaddleOCR, BiR
 | --- | --- |
 | Gemma 3n E4B CPU or CUDA | GGUF. For image input, also select the matching projector GGUF. |
 | Gemma 2 CPU or CUDA | Safetensors checkpoint folder with configuration and tokenizer. |
+| Huihui Gemma 3n E4B abliterated on CPU or CUDA | Community GGUF and the supplied [Huihui profile](docs/HUIHUI-GEMMA3N.md). For image input, also select the matching projector GGUF. |
+| Qwen3.8-27B original mixed GGUF on CPU or CUDA | Supported original GGUF, including UD-Q4_K_M; see the [Qwen3.8 guide](docs/QWEN35.md). For image input, add the original vision shard and configuration to the source identity JSON. |
+| Qwen3.8-27B original BF16 on CUDA | Original sharded Safetensors folder with configuration and tokenizer; CUDA layer streaming. Images use the same optional vision fields. |
 | Dense Qwen2.5 CUDA | Safetensors checkpoint folder with configuration and tokenizer. |
 | Qwen2.5-VL 3B CPU or CUDA | Supported original Qwen2.5-VL-3B-Instruct Safetensors snapshot. |
 | YOLO11n detection and classification on CPU or CUDA | Pinned Ultralytics `.pt` or the matching ONNX. |
@@ -43,6 +46,10 @@ under `[toolchain]`: `COMPILER`, `LINKER`, `FFI_LIB`, `MSVC_LIB`, `UCRT_LIB`,
 to `runtime/converter`.
 
 ## Browser converter in earlier releases
+
+The remaining numbered sections describe the Python-based browser converter
+from earlier SDKs. Their CUDA 13.2 setup belongs to that route. For the current
+native desktop converter, use CUDA 12.8 and the instructions above.
 
 This guide takes you from the Windows x64 SDK to a short Qwen answer in Delphi or Lazarus. It uses the supplied converter and Python environment.
 

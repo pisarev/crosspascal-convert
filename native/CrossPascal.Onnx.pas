@@ -21,6 +21,7 @@ const
   OnnxInt8 = 3;
   OnnxInt64 = 7;
   OnnxBool = 9;
+  OnnxBFloat16 = 16;
 
 type
   TOnnxBytes = record

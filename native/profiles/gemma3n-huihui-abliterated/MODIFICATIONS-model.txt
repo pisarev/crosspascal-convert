@@ -1,0 +1,24 @@
+Model derivative notice
+
+All model parameter, tokenizer and graph artifacts listed in model.json
+are supplied as a derivative of the source identified in SOURCE-model.json.
+They retain the model terms in LICENSE-model.txt and USE-POLICY-model.txt.
+
+Huihui-ai describes its checkpoint as an abliterated derivative of Google's
+Gemma 3n E4B instruction model. Bartowski converted that checkpoint to the
+mixed-format Q8 GGUF identified by the source hash and pinned revision.
+
+CrossPascal generates native TVM text-decoder graphs and file-backed
+parameters from that GGUF. The CPU profile decodes its quantized weights
+to FP32. The CUDA profile copies the original Q8_0 signed integers and each 32-value
+block scale, widening the source FP16 scales exactly to FP32. Auxiliary
+BF16/F32 matrices expand to FP32. The graph uses FP32 arithmetic and omits
+unused FP32 projection copies. The selected
+backend, enabled modalities and hashes are recorded in model.json.
+
+When the optional pinned projector is supplied, CrossPascal also generates
+a native TVM vision graph from the Gemma 3n image encoder and projection.
+Visual parameters expand to FP32. Missing media markers are appended to
+the tokenizer without renumbering the original vocabulary. Text-decoder
+weights retain the conversion described above. The selected modalities
+and context are recorded in model.json.

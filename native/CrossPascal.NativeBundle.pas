@@ -77,7 +77,7 @@ begin
         Status := FindNext(Item);
       end;
     finally
-      SysUtils.FindClose(Item);
+      FindClose(Item);
     end;
   RemoveDir(Folder);
 end;

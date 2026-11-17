@@ -1,0 +1,37 @@
+{
+  "source_revision": "acf5d545620203068a87772ee546eb2490de0453",
+  "source_records": [
+    {
+      "path": "ggml/src/ggml-cuda/dequantize.cuh",
+      "bytes": 17625,
+      "sha256": "135b3f11b7e7e49d96b18cc653a0440e79e05591397a3d12f94ce61b58432469"
+    },
+    {
+      "path": "ggml/src/ggml-cuda/convert.cu",
+      "bytes": 27729,
+      "sha256": "38f99f4d21e490639ed03f1cda1bdf9637e057c11b869dfc79ac6704129631fe"
+    },
+    {
+      "path": "ggml/src/ggml-common.h",
+      "bytes": 135161,
+      "sha256": "0061131b615c5721fc88a78feeb22c1f8c450f1c2646a317d80796a653bf595c"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    }
+  ],
+  "functions": [
+    "dequantize_q3_K",
+    "get_scale_min_k4",
+    "dequantize_q4_K",
+    "dequantize_q5_K",
+    "dequantize_q6_K",
+    "dequantize_iq3_s",
+    "dequantize_iq4_nl",
+    "dequantize_iq4_xs"
+  ],
+  "output_sha256": "86c56d36a712b212fdd4e1006b7261689981e7c80efe18832397c40f9676cc8c",
+  "adaptation": "Remove the GNU __extension__ annotation in the standalone NVRTC prefix; vendor header, tensor structures and decoding equations unchanged"
+}

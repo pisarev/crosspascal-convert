@@ -45,6 +45,15 @@ uses
   {$IFDEF FPC}SysUtils, Classes, Windows{$ELSE}System.SysUtils, System.Classes, Winapi.Windows{$ENDIF},
   DLPack, TVM.CpuGraph, QwenCuda, CrossPascal.Nvrtc;
 
+{$IF not Declared(LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR)}
+const
+  LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR = $00000100;
+{$IFEND}
+{$IF not Declared(LOAD_LIBRARY_SEARCH_SYSTEM32)}
+const
+  LOAD_LIBRARY_SEARCH_SYSTEM32 = $00000800;
+{$IFEND}
+
 const
   CompilerName = 'tvm_compiler.dll';
 

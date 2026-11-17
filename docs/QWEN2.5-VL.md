@@ -25,7 +25,7 @@ license. Check the terms accompanying the checkpoint you choose.
 1. Prepare the converter's pinned TVM, LLVM and Windows C++ linker environment
    as described in [INSTALL.md](../INSTALL.md).
 2. Prepare the exporter Python environment described in
-   [Gemma conversion](GEMMA3N.md#conversion-dependencies), with Transformers
+   [Gemma conversion](GEMMA3N.md#earlier-browser-conversion-dependencies), with Transformers
    4.57.6, PyTorch 2.11, Safetensors, ONNX and Tokenizers 0.22.2. The environment
    is used only for conversion; inference does not require these compilers or
    PyTorch. Set `CROSSPASCAL_GEMMA_PYTHON` to its Python executable.

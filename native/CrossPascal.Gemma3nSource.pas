@@ -44,6 +44,7 @@ type
   TGemma3nBinding = record
     Name: string;
     SourceName: string;
+    SourceFormat: Integer;
     Slice: Integer;
     Shape: TArray<Int64>;
   end;
@@ -51,16 +52,31 @@ type
 function ReadGemma3nBindings(const Source: TGGUFCheckpoint;
   out Config: TGemma3nConfig): TArray<TGemma3nBinding>;
 procedure WriteGemma3nTokenizer(const Source: TGGUFCheckpoint; const SentencePieceLibrary: string;
-  const Dest: TStream);
+  const Dest: TStream; const ImageMarkers: Boolean = False);
 procedure WriteGemma3nTextWeights(const Source: TGGUFCheckpoint;
   const SourceSHA256, SentencePieceLibrary, Directory: string; const Config: TGemma3nConfig;
-  const Bindings: TArray<TGemma3nBinding>);
+  const Bindings: TArray<TGemma3nBinding>; const ImageMarkers: Boolean = False);
+function Gemma3nImageVocabOffset(const Source: TGGUFCheckpoint): Integer;
 
 implementation
 
 uses
   {$IFDEF FPC}Math, SysUtils, Windows{$ELSE}System.Math, System.SysUtils, Winapi.Windows{$ENDIF},
   CrossPascal.Json, CrossPascal.SHA256, TVM.CpuGraph;
+
+{$IF not Declared(LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR)}
+const
+  LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR = $00000100;
+{$IFEND}
+{$IF not Declared(LOAD_LIBRARY_SEARCH_SYSTEM32)}
+const
+  LOAD_LIBRARY_SEARCH_SYSTEM32 = $00000800;
+{$IFEND}
+
+{$IF not Declared(PInt32)}
+type
+  PInt32 = ^Int32;
+{$IFEND}
 
 function ErrorFunction(Value: Double): Double; cdecl; external 'ucrtbase.dll' name 'erf';
 
@@ -101,6 +117,7 @@ var
       RequireCpu(Weight.Dimensions[I] = 1, 'Wrong GGUF tensor rank: ' + SourceName);
     Bindings[Count].Name := Name;
     Bindings[Count].SourceName := SourceName;
+    Bindings[Count].SourceFormat := Weight.Format;
     Bindings[Count].Slice := Slice;
     SetLength(Bindings[Count].Shape, Length(Shape));
     for I := 0 to High(Shape) do Bindings[Count].Shape[I] := Shape[I];
@@ -120,16 +137,32 @@ begin
   Config.LayerInput := Dimension('embedding_length_per_layer_input', 1, 65536);
   Config.Heads := Dimension('attention.head_count', 1, 1024);
   Config.KVHeads := Dimension('attention.head_count_kv', 1, Config.Heads);
-  Config.HeadSize := Dimension('head_dim', 1, 65536);
+  if Source.HasMetadata('gemma3n.head_dim') then
+    Config.HeadSize := Dimension('head_dim', 1, 65536)
+  else begin
+    Config.HeadSize := Dimension('attention.key_length', 1, 65536);
+    RequireCpu(Dimension('attention.value_length', 1, 65536) = Config.HeadSize,
+      'Gemma 3n key and value head dimensions differ');
+  end;
+  if Source.HasMetadata('gemma3n.attention.key_length') then
+    RequireCpu(Dimension('attention.key_length', 1, 65536) = Config.HeadSize,
+      'Conflicting Gemma 3n key head dimensions');
+  if Source.HasMetadata('gemma3n.attention.value_length') then
+    RequireCpu(Dimension('attention.value_length', 1, 65536) = Config.HeadSize,
+      'Conflicting Gemma 3n value head dimensions');
   Config.SharedLayers := Dimension('attention.shared_kv_layers', 0, Config.Layers - 1);
   Config.Context := Dimension('context_length', 1, High(Integer));
   Config.SlidingWindow := Dimension('attention.sliding_window', 1, Config.Context);
   Config.AltUpInputs := Dimension('altup.num_inputs', 2, 1024);
   Config.AltUpActive := Dimension('altup.active_idx', 0, Config.AltUpInputs - 1);
-  Config.AltUpCorrectScale := Source.Flag('gemma3n.altup.correct_scale');
+  Config.AltUpCorrectScale := Source.Flag('gemma3n.altup.correct_scale', True);
   Config.RMSEpsilon := Source.Float('gemma3n.attention.layer_norm_rms_epsilon');
   Config.RopeFrequency := Source.Float('gemma3n.rope.freq_base');
-  Config.LocalRopeFrequency := Source.Float('gemma3n.rope.freq_base_local');
+  Config.LocalRopeFrequency := Source.Float('gemma3n.rope.freq_base_swa',
+    Source.Float('gemma3n.rope.freq_base_local', 10000));
+  if Source.HasMetadata('gemma3n.rope.freq_base_local') then
+    RequireCpu(Source.Float('gemma3n.rope.freq_base_local') = Config.LocalRopeFrequency,
+      'Conflicting Gemma 3n local RoPE frequencies');
   Config.Sliding := Source.FlagArray('gemma3n.attention.sliding_window_pattern');
   Scales := Source.FloatArray('gemma3n.activation_sparsity_scale');
   Config.SparsityScale := Scales;
@@ -208,11 +241,56 @@ begin
   Result := Bindings;
 end;
 
+procedure FindGemma3nImageMarkers(const Pieces: TArray<UTF8String>; out EndOfImage, SoftToken: Integer;
+  out Missing: Boolean);
+var
+  I, StartCount, EndCount, SoftCount: Integer;
+begin
+  StartCount := 0;
+  EndCount := 0;
+  SoftCount := 0;
+  EndOfImage := -1;
+  SoftToken := -1;
+  for I := 0 to High(Pieces) do
+    if Pieces[I] = '<start_of_image>' then
+      Inc(StartCount)
+    else if Pieces[I] = '<end_of_image>' then
+    begin
+      Inc(EndCount);
+      EndOfImage := I;
+    end
+    else if Pieces[I] = '<image_soft_token>' then
+    begin
+      Inc(SoftCount);
+      SoftToken := I;
+    end;
+  RequireCpu(StartCount = 1, 'The checkpoint has no Gemma 3n image vocabulary');
+  RequireCpu((EndCount = SoftCount) and (EndCount <= 1),
+    'The Gemma 3n image vocabulary is incomplete or ambiguous');
+  Missing := EndCount = 0;
+  if Missing then
+  begin
+    RequireCpu(Length(Pieces) <= High(Integer) - 2, 'Gemma 3n vocabulary is too large');
+    EndOfImage := Length(Pieces);
+    SoftToken := EndOfImage + 1;
+  end;
+end;
+
+function Gemma3nImageVocabOffset(const Source: TGGUFCheckpoint): Integer;
+var
+  SoftToken: Integer;
+  Missing: Boolean;
+begin
+  FindGemma3nImageMarkers(Source.TokenPieces('tokenizer.ggml.tokens'), Result, SoftToken, Missing);
+end;
+
 procedure WriteGemma3nTokenizer(const Source: TGGUFCheckpoint; const SentencePieceLibrary: string;
-  const Dest: TStream);
+  const Dest: TStream; const ImageMarkers: Boolean);
 type
   TBuild = function(Pieces: PPAnsiChar; Scores: PSingle; Kinds: PInt32; Count: Integer;
     SpecialIDs: PInt32; AddPrefix: Integer; Output: PAnsiChar; Capacity: Integer): Integer; cdecl;
+  TLoad = function(Bytes: PAnsiChar; Size: Integer): Pointer; cdecl;
+  TFree = procedure(Processor: Pointer); cdecl;
 const
   KeyPrefix = 'tokenizer.ggml.';
   IDNames: array[0..3] of string = ('unknown_token_id', 'bos_token_id', 'eos_token_id', 'padding_token_id');
@@ -228,7 +306,11 @@ var
   Buffer: TBytes;
   LibraryHandle: HMODULE;
   Build: TBuild;
-  I, Count, Size: Integer;
+  Load: TLoad;
+  Release: TFree;
+  Processor: Pointer;
+  I, Count, OriginalCount, Size, EndOfImage, SoftToken: Integer;
+  Missing: Boolean;
   RawID: UInt32;
 begin
   Pieces := Source.TokenPieces(KeyPrefix + 'tokens');
@@ -237,6 +319,24 @@ begin
   Count := Length(Pieces);
   RequireCpu((Count > 0) and (Length(Scores) = Count) and (Length(Kinds) = Count),
     'Gemma 3n tokenizer arrays have different lengths');
+  OriginalCount := Count;
+  if ImageMarkers then
+  begin
+    FindGemma3nImageMarkers(Pieces, EndOfImage, SoftToken, Missing);
+    if Missing then
+    begin
+      Count := OriginalCount + 2;
+      SetLength(Pieces, Count);
+      SetLength(Scores, Count);
+      SetLength(Kinds, Count);
+      Pieces[EndOfImage] := '<end_of_image>';
+      Pieces[SoftToken] := '<image_soft_token>';
+      Scores[EndOfImage] := 0;
+      Scores[SoftToken] := 0;
+      Kinds[EndOfImage] := 4;
+      Kinds[SoftToken] := 4;
+    end;
+  end;
   Empty := #0;
   SetLength(Pointers, Count);
   for I := 0 to Count - 1 do
@@ -250,10 +350,14 @@ begin
     if RawID = High(UInt32) then
       IDs[I] := -1
     else begin
-      RequireCpu(RawID < UInt32(Count), 'Gemma 3n tokenizer ID is out of range: ' + IDNames[I]);
+      RequireCpu(RawID < UInt32(OriginalCount), 'Gemma 3n tokenizer ID is out of range: ' + IDNames[I]);
       IDs[I] := Int32(RawID);
     end;
   end;
+  RequireCpu(IDs[0] >= 0, 'Gemma 3n tokenizer requires an unknown token');
+  { Some GGUF exporters classify every special token as CONTROL. SentencePiece
+    requires the declared unknown token to have the UNKNOWN piece type. }
+  Kinds[IDs[0]] := 2;
   Prefix := Ord(Source.Flag(KeyPrefix + 'add_space_prefix', False));
   LibraryHandle := LoadLibraryExW(PWideChar(ExpandFileName(SentencePieceLibrary)), 0,
     LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR or LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -261,11 +365,17 @@ begin
   try
     Build := TBuild(GetProcAddress(LibraryHandle, 'cp_sp_build_bpe'));
     RequireCpu(Assigned(Build), 'The SentencePiece library cannot build a BPE tokenizer');
+    Load := TLoad(GetProcAddress(LibraryHandle, 'cp_sp_load'));
+    Release := TFree(GetProcAddress(LibraryHandle, 'cp_sp_free'));
+    RequireCpu(Assigned(Load) and Assigned(Release), 'The SentencePiece library cannot validate a tokenizer');
     Size := Build(@Pointers[0], @Scores[0], @Kinds[0], Count, @IDs[0], Prefix, nil, 0);
     RequireCpu(Size > 0, 'Could not build the Gemma 3n tokenizer');
     SetLength(Buffer, Size);
     RequireCpu(Build(@Pointers[0], @Scores[0], @Kinds[0], Count, @IDs[0], Prefix, PAnsiChar(@Buffer[0]), Size) = Size,
       'Could not serialize the Gemma 3n tokenizer');
+    Processor := Load(PAnsiChar(@Buffer[0]), Size);
+    RequireCpu(Processor <> nil, 'The generated Gemma 3n tokenizer could not be loaded');
+    Release(Processor);
     Dest.WriteBuffer(Buffer[0], Size);
   finally
     FreeLibrary(LibraryHandle);
@@ -322,7 +432,7 @@ end;
 
 procedure WriteGemma3nTextWeights(const Source: TGGUFCheckpoint;
   const SourceSHA256, SentencePieceLibrary, Directory: string; const Config: TGemma3nConfig;
-  const Bindings: TArray<TGemma3nBinding>);
+  const Bindings: TArray<TGemma3nBinding>; const ImageMarkers: Boolean);
 var
   Binding: TGemma3nBinding;
   Tensor: TGGUFTensor;
@@ -392,7 +502,7 @@ begin
     end;
     Stream := TFileStream.Create(BundleMember(Directory, 'tokenizer.model'), fmCreate);
     try
-      WriteGemma3nTokenizer(Source, SentencePieceLibrary, Stream);
+      WriteGemma3nTokenizer(Source, SentencePieceLibrary, Stream, ImageMarkers);
     finally
       Stream.Free;
     end;

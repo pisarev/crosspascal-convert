@@ -1,0 +1,11 @@
+Gemma is provided under and subject to the Gemma Terms of Use found at ai.google.dev/gemma/terms
+
+Use and distribution of this model and its derivatives are governed by
+LICENSE-model.txt, including its Section 3.2 and the incorporated Gemma
+Prohibited Use Policy supplied in USE-POLICY-model.txt. These conditions
+continue to apply to this community model and its converted parameters.
+
+SOURCE-model.json identifies the base model, community checkpoint and
+quantized source. MODIFICATIONS-model.txt describes the model changes.
+Original CrossPascal software has its own license; it does not replace
+the model's terms. Google does not endorse this conversion.

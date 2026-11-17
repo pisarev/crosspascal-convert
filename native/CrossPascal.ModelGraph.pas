@@ -50,6 +50,8 @@ type
     function GELU(const Input: string): string;
     function Rotary(const Position: string; const Base: Single;
       const Chunk, HeadSize: Integer): TRotaryEmbedding;
+    function RotaryPerFrequency(const Positions: string; const Base: Single;
+      const Chunk, HeadSize: Integer): TRotaryEmbedding;
     function ApplyRotary(const Input: string; const Factors: TRotaryEmbedding;
       const HeadSize: Integer): string;
     function RepeatHeads(const Input: string; const Heads, KVHeads, Context, HeadSize: Integer): string;
@@ -281,6 +283,33 @@ begin
     Inverse[I] := 1 / Denominator;
   end;
   Phase := Op('Mul', [Reshape(Cast(Position, 1), [Chunk, 1]),
+    Constant(@Inverse[0], Length(Inverse) * SizeOf(Single), 1, [1, Half])]);
+  Both := Reshape(AxisOp('Concat', [Phase, Phase], 1), [1, Chunk, 1, HeadSize]);
+  Result.Cosine := Op('Cos', [Both]);
+  Result.Sine := Op('Sin', [Both]);
+end;
+
+{ Same FP32 inverse frequencies, multiplication and Cos/Sin order as Rotary,
+  but every frequency receives its own int64 position. Positions holds
+  Chunk * HeadSize / 2 values ordered by row, then frequency. }
+function TModelGraphBuilder.RotaryPerFrequency(const Positions: string; const Base: Single;
+  const Chunk, HeadSize: Integer): TRotaryEmbedding;
+var
+  Inverse: TArray<Single>;
+  I, Half: Integer;
+  Phase, Both: string;
+  Denominator: Single;
+begin
+  Half := HeadSize div 2;
+  RequireCpu((Base > 0) and (Half > 0) and (HeadSize mod 2 = 0) and (Chunk > 0),
+    'Invalid rotary embedding configuration');
+  SetLength(Inverse, Half);
+  for I := 0 to High(Inverse) do
+  begin
+    Denominator := Power(Base, I / Half);
+    Inverse[I] := 1 / Denominator;
+  end;
+  Phase := Op('Mul', [Reshape(Cast(Positions, 1), [Chunk, Half]),
     Constant(@Inverse[0], Length(Inverse) * SizeOf(Single), 1, [1, Half])]);
   Both := Reshape(AxisOp('Concat', [Phase, Phase], 1), [1, Chunk, 1, HeadSize]);
   Result.Cosine := Op('Cos', [Both]);

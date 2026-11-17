@@ -148,6 +148,8 @@ type
     function Gemm(const Node: TOnnxNode): TGraphValue;
     function MatMul(const Node: TOnnxNode): TGraphValue;
     function Q8MatMul(const Node: TOnnxNode): TGraphValue;
+    function BF16MatMul(const Node: TOnnxNode): TGraphValue;
+    function Float32RowMatMul(const Node: TOnnxNode): TGraphValue;
     function Transpose(const Node: TOnnxNode): TGraphValue;
     function Softmax(const Node: TOnnxNode): TGraphValue;
     function Resize(const Node: TOnnxNode): TGraphValue;
@@ -389,6 +391,12 @@ begin
         Result.bits := 8;
       end;
     OnnxInt64: Result := FIntDType;
+    OnnxBFloat16:
+      begin
+        Result.code := Ord(kDLBfloat);
+        Result.bits := 16;
+        Result.lanes := 1;
+      end;
     OnnxBool:
       begin
         Result.code := Ord(kDLBool);
@@ -730,7 +738,8 @@ end;
 function TOnnxBuilder.VectorReductionKernel(const Kernel: TTVMFFIAny; const BlockName: PAnsiChar;
   const SpatialRank, VectorWidth: Integer): TTVMFFIAny;
 var
-  Schedule, Block, Loops, Split, Outer, Inner, Rows: TTVMFFIAny;
+  Schedule, Block, Loops, Split, Outer, Inner, Rows, ParallelLoop: TTVMFFIAny;
+  MatMulTiles: Boolean;
   Spatial, Reduction, Order: TArray<TTVMFFIAny>;
   I, Count: Integer;
 begin
@@ -756,13 +765,24 @@ begin
   Outer := Make('ffi.ArrayGetItem', [Split, TTVMRuntime.AnyInt(0)]);
   Inner := Make('ffi.ArrayGetItem', [Split, TTVMRuntime.AnyInt(1)]);
   SetLength(Order, Length(Reduction) + 3);
-  Order[0] := Rows;
-  Order[1] := Outer;
+  MatMulTiles := StrComp(BlockName, 'matmul') = 0;
+  if MatMulTiles then
+    Order[0] := Outer
+  else
+    Order[0] := Rows;
+  if MatMulTiles then
+    Order[1] := Rows
+  else
+    Order[1] := Outer;
   for I := 0 to High(Reduction) do Order[I + 2] := Reduction[I];
   Order[High(Order)] := Inner;
   Invoke('s_tir.schedule.ScheduleReorder', [Schedule, Make('ffi.Array', Order)]);
   Invoke('s_tir.schedule.ScheduleVectorize', [Schedule, Inner]);
-  Invoke('s_tir.schedule.ScheduleParallel', [Schedule, Rows]);
+  ParallelLoop := Rows;
+  if MatMulTiles then
+    ParallelLoop := Make('s_tir.schedule.ScheduleFuse',
+      [Schedule, Make('ffi.Array', [Outer, Rows]), TTVMRuntime.AnyBool(True)]);
+  Invoke('s_tir.schedule.ScheduleParallel', [Schedule, ParallelLoop]);
   Make('s_tir.schedule.ScheduleDecomposeReduction', [Schedule, Block, Reduction[0]]);
   Result := ScheduledFunction(Schedule);
 end;
@@ -1568,16 +1588,23 @@ var
   Iter, Axes, SourceIndices: TArray<TTVMFFIAny>;
   X, Q, Scale, Column, Axis, Value, Coefficient, Factor, Product, Compute: TTVMFFIAny;
   I, Last: Integer;
+  BlockScales: Boolean;
 begin
+  RequireCpu(Length(Node.Inputs) = 3, 'Int8 matrix multiplication needs three inputs');
   Source := Input(Node, 0);
   Weights := Input(Node, 1);
   Scales := Input(Node, 2);
   Last := High(Source.Shape);
+  BlockScales := Length(Scales.Shape) = 2;
   RequireCpu((Last >= 1) and (Source.DataType = OnnxFloat) and
     (Weights.DataType = OnnxInt8) and (Length(Weights.Shape) = 2) and
-    (Scales.DataType = OnnxFloat) and (Length(Scales.Shape) = 1) and
+    (Scales.DataType = OnnxFloat) and (Length(Scales.Shape) in [1, 2]) and
     (Source.Shape[Last] = Weights.Shape[1]) and (Scales.Shape[0] = Weights.Shape[0]),
     'Invalid int8 matrix multiplication dimensions or types');
+  if BlockScales then
+    RequireCpu(not Weights.Transposed and not Scales.Transposed and
+      (Weights.Shape[1] mod 32 = 0) and (Scales.Shape[1] = Weights.Shape[1] div 32),
+      'Invalid source Q8_0 block scale dimensions');
   Shape := Copy(Source.Shape);
   Shape[Last] := Weights.Shape[0];
   SetLength(Iter, Length(Shape));
@@ -1592,11 +1619,86 @@ begin
   Scale := Placeholder(Scales.Shape, 'scales');
   Value := ReadTensor(X, SourceIndices);
   Coefficient := Make('tirx.Cast', [FFloatType, ReadTensor(Q, [Iter[Last], Column]), FEmpty]);
-  Factor := ReadTensor(Scale, [Iter[Last]]);
-  Product := Primitive('tirx.Mul', Primitive('tirx.Mul', Value, Coefficient), Factor);
+  if BlockScales then
+  begin
+    Factor := ReadTensor(Scale, [Iter[Last], Primitive('tirx.FloorDiv', Column, IntImm(32))]);
+    Coefficient := Primitive('tirx.Mul', Coefficient, Factor);
+    Product := Primitive('tirx.Mul', Value, Coefficient);
+  end
+  else begin
+    Factor := ReadTensor(Scale, [Iter[Last]]);
+    Product := Primitive('tirx.Mul', Primitive('tirx.Mul', Value, Coefficient), Factor);
+  end;
   Compute := ComputeTensor('q8_dot', ReduceSum(Product, [Axis]), Axes);
   Result := Emit([Source, Weights, Scales], [X, Q, Scale], Compute, Shape, OnnxFloat, 'q8_dot',
     Length(Shape), True);
+end;
+
+function TOnnxBuilder.BF16MatMul(const Node: TOnnxNode): TGraphValue;
+var
+  Source, Weights: TGraphValue;
+  Shape: TArray<Int64>;
+  Iter, Axes, SourceIndices: TArray<TTVMFFIAny>;
+  X, W, Column, Axis, Value, Coefficient, Compute: TTVMFFIAny;
+  I, Last: Integer;
+begin
+  RequireCpu(Length(Node.Inputs) = 2, 'BF16 matrix multiplication needs two inputs');
+  Source := Input(Node, 0);
+  Weights := Input(Node, 1);
+  Last := High(Source.Shape);
+  RequireCpu((Last >= 1) and (Source.DataType = OnnxFloat) and
+    (Weights.DataType = OnnxBFloat16) and (Length(Weights.Shape) = 2) and
+    (Source.Shape[Last] = Weights.Shape[1]),
+    'Invalid BF16 matrix multiplication dimensions or types');
+  Shape := Copy(Source.Shape);
+  Shape[Last] := Weights.Shape[0];
+  SetLength(Iter, Length(Shape));
+  SetLength(Axes, Length(Shape));
+  for I := 0 to Last do
+    Axes[I] := Iteration(UTF8Encode('axis' + IntToStr(I)), Shape[I], False, Iter[I]);
+  Axis := Iteration('column', Source.Shape[Last], True, Column);
+  SourceIndices := Copy(Iter);
+  SourceIndices[Last] := Column;
+  X := Placeholder(Source.Shape, 'input');
+  W := Placeholder(Weights.Shape, 'weights', OnnxBFloat16);
+  Value := ReadTensor(X, SourceIndices);
+  Coefficient := Make('tirx.Cast', [FFloatType, ReadTensor(W, [Iter[Last], Column]), FEmpty]);
+  Compute := ComputeTensor('bf16_dot', ReduceSum(Primitive('tirx.Mul', Value, Coefficient), [Axis]), Axes);
+  Result := Emit([Source, Weights], [X, W], Compute, Shape, OnnxFloat, 'bf16_dot', Length(Shape), True);
+end;
+
+function TOnnxBuilder.Float32RowMatMul(const Node: TOnnxNode): TGraphValue;
+var
+  Source, Weights: TGraphValue;
+  Shape: TArray<Int64>;
+  Iter, Axes, SourceIndices: TArray<TTVMFFIAny>;
+  X, W, Column, Axis, Value, Coefficient, Compute: TTVMFFIAny;
+  I, Last: Integer;
+begin
+  RequireCpu(Length(Node.Inputs) = 2, 'Row matrix multiplication needs two inputs');
+  Source := Input(Node, 0);
+  Weights := Input(Node, 1);
+  Last := High(Source.Shape);
+  RequireCpu((Last >= 1) and (Source.DataType = OnnxFloat) and
+    (Weights.DataType = OnnxFloat) and (Length(Weights.Shape) = 2) and
+    (Source.Shape[Last] = Weights.Shape[1]), 'Invalid FP32 row matrix dimensions or types');
+  Shape := Copy(Source.Shape);
+  Shape[Last] := Weights.Shape[0];
+  SetLength(Iter, Length(Shape));
+  SetLength(Axes, Length(Shape));
+  for I := 0 to Last do
+    Axes[I] := Iteration(UTF8Encode('axis' + IntToStr(I)), Shape[I], False, Iter[I]);
+  Axis := Iteration('column', Source.Shape[Last], True, Column);
+  SourceIndices := Copy(Iter);
+  SourceIndices[Last] := Column;
+  X := Placeholder(Source.Shape, 'input');
+  W := Placeholder(Weights.Shape, 'weights');
+  Value := ReadTensor(X, SourceIndices);
+  Coefficient := ReadTensor(W, [Iter[Last], Column]);
+  Compute := ComputeTensor('float32_row_dot',
+    ReduceSum(Primitive('tirx.Mul', Value, Coefficient), [Axis]), Axes);
+  Result := Emit([Source, Weights], [X, W], Compute, Shape, OnnxFloat,
+    'float32_row_dot', Length(Shape), True);
 end;
 
 function TOnnxBuilder.Unary(const Node: TOnnxNode; const OperatorName: string): TGraphValue;
@@ -3096,6 +3198,7 @@ procedure TOnnxBuilder.AddNode(const Node: TOnnxNode);
     if Node.OpType = 'Floor' then Exit(Unary(Node, 'topi.floor'));
     if Node.OpType = 'Tanh' then Exit(Unary(Node, 'topi.tanh'));
     if Node.OpType = 'Erf' then Exit(Unary(Node, 'topi.erf'));
+    if Node.OpType = 'Exp' then Exit(Unary(Node, 'topi.exp'));
     if Node.OpType = 'Log' then Exit(Unary(Node, 'topi.log'));
     if Node.OpType = 'Sin' then Exit(Unary(Node, 'topi.sin'));
     if Node.OpType = 'Cos' then Exit(Unary(Node, 'topi.cos'));
@@ -3107,6 +3210,20 @@ procedure TOnnxBuilder.AddNode(const Node: TOnnxNode);
   end;
 
 begin
+  if (Node.Domain = 'crosspascal') and (Node.OpType = 'Float32RowMatMul') then
+  begin
+    RequireCpu((Length(Node.Outputs) = 1) and (Node.Outputs[0] <> ''),
+      'Invalid FP32 row matrix output');
+    FValues.Add(Node.Outputs[0], Float32RowMatMul(Node));
+    Exit;
+  end;
+  if (Node.Domain = 'crosspascal') and (Node.OpType = 'BF16MatMul') then
+  begin
+    RequireCpu((Length(Node.Outputs) = 1) and (Node.Outputs[0] <> ''),
+      'Invalid BF16 matrix multiplication output');
+    FValues.Add(Node.Outputs[0], BF16MatMul(Node));
+    Exit;
+  end;
   if (Node.Domain = 'crosspascal') and (Node.OpType = 'Q8MatMul') then
   begin
     RequireCpu((Length(Node.Outputs) = 1) and (Node.Outputs[0] <> ''),

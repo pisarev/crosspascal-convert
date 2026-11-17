@@ -26,10 +26,11 @@ procedure AddGemma3nVision(const TextBundle, Projector, RecipeDirectory, Destina
 implementation
 
 uses
-  {$IFDEF FPC}Classes, Math, SysUtils, Windows{$ELSE}System.Classes, System.Math, System.SysUtils, Winapi.Windows{$ENDIF},
+  {$IFDEF FPC}Classes, SysUtils, Windows{$ELSE}System.Classes, System.SysUtils, Winapi.Windows{$ENDIF},
   CrossPascal.Gemma3nSource, CrossPascal.Gemma3nGraph, CrossPascal.Gemma3nVisionSource,
-  CrossPascal.GGUF, CrossPascal.Json, CrossPascal.Onnx, CrossPascal.RowQuantization,
-  CrossPascal.SentencePiece, CrossPascal.SHA256, CrossPascal.TVMOnnx, TVM.CpuGraph;
+  CrossPascal.Gemma3nParameters, CrossPascal.Gemma3nDistribution, CrossPascal.GGUF,
+  CrossPascal.Json, CrossPascal.Onnx, CrossPascal.RowQuantization, CrossPascal.SentencePiece,
+  CrossPascal.SHA256, CrossPascal.TVMOnnx, TVM.CpuGraph;
 
 const
   TextOnnx = 'text.onnx';
@@ -107,32 +108,37 @@ begin
   Row.AddPair('kind', Kind);
 end;
 
-procedure QuantizeWeight(const Name, Folder: string; const Shape: TArray<Int64>;
-  const Binding, Spec, Destination, Hashes: TJSONObject);
+procedure PreserveQ8Weight(const Name, Folder: string; const Shape: TArray<Int64>;
+  const Binding, Destination, Hashes: TJSONObject; const Source: TGGUFCheckpoint);
 var
-  Data: TMappedModelFile;
   Quantized, Scales: TFileStream;
   Slice: TJSONValue;
-  Offset, Bytes: Int64;
-  Q8File, ScaleFile, Number: string;
+  First, Elements, Index: Int64;
+  Q8File, ScaleFile, Number, Tensor: string;
   Entry: TJSONObject;
 begin
-  RequireCpu((Length(Shape) = 2) and (Shape[0] <= High(Integer)) and (Shape[1] <= High(Integer)),
-    'Invalid Gemma 3n quantization shape: ' + Name);
-  Bytes := TensorElements(Shape) * SizeOf(Single);
-  Offset := 0;
+  RequireCpu((Source <> nil) and (Length(Shape) = 2) and (Shape[0] <= High(Integer)) and
+    (Shape[1] <= High(Integer)), 'Invalid Gemma 3n source Q8_0 shape: ' + Name);
+  Elements := TensorElements(Shape);
+  First := 0;
   Slice := Binding.GetValue('slice');
-  if not (Slice is TJSONNull) then Offset := ModelInt(Slice, 'weight slice') * Bytes;
+  if (Slice <> nil) and not (Slice is TJSONNull) then
+  begin
+    Index := ModelInt(Slice, 'source Q8_0 slice');
+    RequireCpu((Index >= 0) and (Index <= High(Int64) div Elements),
+      'Gemma 3n source Q8_0 slice overflow');
+    First := Index * Elements;
+  end;
+  Tensor := ModelText(Binding.GetValue('tensor'));
   Number := Format('%.4d.bin', [Destination.Count]);
   Q8File := 'gpu-q8-' + Number;
   ScaleFile := 'gpu-scale-' + Number;
-  Data := TMappedModelFile.Create(BundleMember(Folder, ModelText(Spec.GetValue('file'))));
   Quantized := nil;
   Scales := nil;
   try
     Quantized := TFileStream.Create(BundleMember(Folder, Q8File), fmCreate);
     Scales := TFileStream.Create(BundleMember(Folder, ScaleFile), fmCreate);
-    WriteSymmetricInt8Rows(Data.AtOffset(Offset, Bytes), Shape[0], Shape[1], Quantized, Scales);
+    Source.WriteQ8_0Range(Tensor, First, Shape[0], Shape[1], Quantized, Scales);
     Quantized.Position := 0;
     Scales.Position := 0;
     Hashes.AddPair(Q8File, SHA256Stream(Quantized));
@@ -140,18 +146,20 @@ begin
   finally
     Scales.Free;
     Quantized.Free;
-    Data.Free;
   end;
   Entry := TJSONObject.Create;
   Destination.AddPair(Name, Entry);
   Entry.AddPair('q8', Q8File);
   Entry.AddPair('scale', ScaleFile);
   Entry.AddPair('shape', Dimensions(Shape));
+  Entry.AddPair('block_size', JSONInteger(32));
+  Entry.AddPair('source_gguf_type', JSONInteger(8));
 end;
 
 procedure BindTextGraph(const Graph: TOnnxModel; const Config: TGemma3nConfig;
   const Context, Chunk: Integer; const Folder: string; const RecordData, Manifest: TJSONObject;
-  const Gpu: Boolean = False; const ArtifactHashes: TJSONObject = nil);
+  const Gpu: Boolean = False; const ArtifactHashes: TJSONObject = nil;
+  const Source: TGGUFCheckpoint = nil);
 var
   Inputs, RuntimeInputs, GpuBindings: TJSONArray;
   Weights, Bindings, Params, Binding, Spec, Quantization, QuantizedWeights: TJSONObject;
@@ -189,7 +197,7 @@ begin
     Manifest.AddPair('gpu_bindings', GpuBindings);
     Quantization := TJSONObject.Create;
     Manifest.AddPair('quantization', Quantization);
-    Quantization.AddPair('scheme', 'symmetric-int8-per-row');
+    Quantization.AddPair('scheme', 'source-q8_0-block32-f32-scales');
     Quantization.AddPair('activation_dtype', 'float32');
     QuantizedWeights := TJSONObject.Create;
     Quantization.AddPair('weights', QuantizedWeights);
@@ -229,8 +237,7 @@ begin
     if Kind = 'q8' then
     begin
       RequireValue(InputValue, Name, 3, Shape);
-      Spec := ModelObject(Weights.GetValue(Tensor), Tensor);
-      QuantizeWeight('text.' + Original, Folder, Shape, Binding, Spec, QuantizedWeights, ArtifactHashes);
+      PreserveQ8Weight('text.' + Original, Folder, Shape, Binding, QuantizedWeights, ArtifactHashes, Source);
       AddGpuBinding(GpuBindings, 'text.' + Original, Kind);
       Continue;
     end;
@@ -238,7 +245,7 @@ begin
     begin
       RequireCpu((Length(Shape) = 2) and (QuantizedWeights.GetValue('text.' + Original) <> nil),
         'Gemma 3n scale precedes its quantized weights');
-      RequireValue(InputValue, Name, 1, [Shape[0]]);
+      RequireValue(InputValue, Name, 1, [Shape[0], Shape[1] div 32]);
       AddGpuBinding(GpuBindings, 'text.' + Original, Kind);
       Continue;
     end;
@@ -274,7 +281,7 @@ begin
   Temporary := [Kernel, VM, ChangeFileExt(Output, '.lib'), ChangeFileExt(Output, '.exp')];
   for Extra in Temporary do
     if FileExists(Extra) then
-      RequireCpu(Windows.DeleteFileW(PWideChar(Extra)), 'Could not remove ' + Extra);
+      RequireCpu(DeleteFileW(PWideChar(Extra)), 'Could not remove ' + Extra);
 end;
 
 procedure CopyRecipe(const Recipe, Stage, Name: string; const Hashes: TJSONObject);
@@ -286,16 +293,6 @@ begin
   if not CopyFileW(PWideChar(Source), PWideChar(Target), True) then RaiseLastOSError;
   RequireCpu(SameText(FileHash(Target), ModelText(Hashes.GetValue(Name))),
     'Gemma 3n graph recipe changed: ' + Name);
-end;
-
-function ImageVocabOffset(const Checkpoint: TGGUFCheckpoint): Integer;
-var
-  Tokens: TArray<UTF8String>;
-begin
-  Tokens := Checkpoint.TokenPieces('tokenizer.ggml.tokens');
-  Result := 0;
-  while (Result < Length(Tokens)) and (Tokens[Result] <> '<end_of_image>') do Inc(Result);
-  RequireCpu(Result < Length(Tokens), 'The checkpoint has no Gemma 3n image vocabulary');
 end;
 
 procedure WriteVisionManifest(const Projector: TGGUFCheckpoint;
@@ -381,11 +378,15 @@ begin
       while Status = 0 do
       begin
         if (Item.Attr and faDirectory) = 0 then
-          Windows.DeleteFileW(PWideChar(BundleMember(Folder, Item.Name)));
+          DeleteFileW(PWideChar(BundleMember(Folder, Item.Name)));
         Status := FindNext(Item);
       end;
     finally
+      {$IFDEF FPC}
       SysUtils.FindClose(Item);
+      {$ELSE}
+      System.SysUtils.FindClose(Item);
+      {$ENDIF}
     end;
   RemoveDir(Folder);
 end;
@@ -398,13 +399,14 @@ var
   Config: TGemma3nConfig;
   Bindings: TArray<TGemma3nBinding>;
   RecipeData, ParameterData: TJSONValue;
-  Recipe, RecipeHashes, Manifest, Prefill, Parameters, Weights, Weight, Hashes: TJSONObject;
+  Recipe, RecipeHashes, Manifest, Prefill, Parameters, Weights, Weight, Hashes, Selected: TJSONObject;
   Graph: TOnnxModel;
   Modalities: TJSONArray;
   Stage, Output, SourceHash, ProjectorHash, Name, LanguageLibrary, ImageLibrary: string;
   ID: TGUID;
   I, Context, Chunk: Integer;
   Installed, Gpu: Boolean;
+  UnusedFiles: TArray<string>;
 
   function TextGraph(const Name: string; const TokenCount: Integer): TOnnxModel;
   begin
@@ -432,6 +434,8 @@ begin
       'Unsupported Gemma 3n recipe');
     RecipeHashes := ModelObject(Recipe.GetValue('graph_sha256'), 'Gemma 3n recipe graphs');
     SourceHash := FileHash(Checkpoint);
+    CheckGemma3nDistribution(RecipeDirectory, SourceHash,
+      JSONIsTrue(Recipe.GetValue('distribution_required')));
     if not GenerateTextGraphs then
       RequireCpu(SameText(SourceHash, ModelText(Recipe.GetValue('source_sha256'))),
         'The Gemma 3n checkpoint does not match the graph recipe');
@@ -469,7 +473,9 @@ begin
           CopyRecipe(RecipeDirectory, Stage, PrefillOnnx, RecipeHashes);
         end;
         if VisionSource <> nil then CopyRecipe(RecipeDirectory, Stage, VisionOnnx, RecipeHashes);
-        WriteGemma3nTextWeights(Source, SourceHash, SentencePieceLibrary, Stage, Config, Bindings);
+        WriteGemma3nTextWeights(Source, SourceHash, SentencePieceLibrary, Stage, Config, Bindings,
+          VisionSource <> nil);
+        if (VisionSource = nil) and not Gpu then FreeAndNil(Source);
         ParameterData := ReadModelJSON(BundleMember(Stage, 'parameters.json'));
         Parameters := ModelObject(ParameterData, 'Gemma 3n parameters');
         Manifest := TJSONObject.Create;
@@ -499,7 +505,8 @@ begin
         Manifest.AddPair('artifact_sha256', Hashes);
         Graph := TextGraph(TextOnnx, 1);
         try
-          BindTextGraph(Graph, Config, Context, 1, Stage, Parameters, Manifest, Gpu, Hashes);
+          BindTextGraph(Graph, Config, Context, 1, Stage, Parameters, Manifest, Gpu, Hashes, Source);
+          if VisionSource = nil then FreeAndNil(Source);
           CompileGraph(Stage, LanguageLibrary, Kit, Graph, NvrtcLibrary, Architecture);
         finally
           Graph.Free;
@@ -520,6 +527,21 @@ begin
           end;
           Hashes.AddPair(PrefillLibrary, FileHash(BundleMember(Stage, PrefillLibrary)));
         end;
+        if Gpu then
+        begin
+          Selected := SelectGemma3nCudaParameters(Parameters, Manifest, UnusedFiles);
+          ParameterData.Free;
+          ParameterData := Selected;
+          Parameters := Selected;
+          for Name in UnusedFiles do
+          begin
+            RequireCpu((ExtractFileName(Name) = Name) and (ExtractFileExt(Name) = '.bin') and
+              ((Copy(Name, 1, 7) = 'weight-') or (Copy(Name, 1, 12) = 'coefficient-')),
+              'Unexpected unused Gemma 3n parameter filename');
+            RequireCpu(DeleteFileW(PWideChar(BundleMember(Stage, Name))),
+              'Could not remove an unused staged Gemma 3n parameter: ' + Name);
+          end;
+        end;
         SaveJSON(BundleMember(Stage, 'parameters.json'), Parameters);
         if not GenerateTextGraphs then
         begin
@@ -538,7 +560,9 @@ begin
         end;
         if VisionSource <> nil then
           BuildGemma3nVision(VisionSource, Stage, ProjectorHash, ImageLibrary, NvrtcLibrary,
-            Architecture, Kit, ImageVocabOffset(Source), Manifest);
+            Architecture, Kit, Gemma3nImageVocabOffset(Source), Manifest);
+        AddGemma3nDistribution(RecipeDirectory, Stage, SourceHash, Manifest,
+          JSONIsTrue(Recipe.GetValue('distribution_required')));
         SaveJSON(BundleMember(Stage, 'model.json'), Manifest);
         RequireCpu(RenameFile(Stage, Output), 'Could not install the new Gemma 3n bundle');
         Installed := True;

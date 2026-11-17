@@ -107,22 +107,24 @@ begin
   if FQuantized then
   begin
     RequireCpu(FWeights.TryGetValue(WeightName, Binding), 'Missing Gemma 3n graph weight: ' + WeightName);
-    if (Length(Binding.Shape) = 2) and (TensorElements(Binding.Shape) >= 256) then
-    begin
-      Q8 := 'text.' + WeightName + '_q8';
-      Scale := 'text.' + WeightName + '_scale';
-      if not FUsedWeights.ContainsKey(Q8) then
+    if (Binding.SourceFormat = 8) and (Length(Binding.Shape) = 2) and
+      (TensorElements(Binding.Shape) >= 256) then
       begin
-        FInputs.Add(ValueInfo(Q8, 3, Binding.Shape));
-        FInputs.Add(ValueInfo(Scale, 1, [Binding.Shape[0]]));
-        FUsedWeights.Add(Q8, Q8);
+        Q8 := 'text.' + WeightName + '_q8';
+        Scale := 'text.' + WeightName + '_scale';
+        if not FUsedWeights.ContainsKey(Q8) then
+        begin
+          FInputs.Add(ValueInfo(Q8, 3, Binding.Shape));
+          RequireCpu(Binding.Shape[1] mod 32 = 0, 'Source Q8_0 matrix width must align to32');
+          FInputs.Add(ValueInfo(Scale, 1, [Binding.Shape[0], Binding.Shape[1] div 32]));
+          FUsedWeights.Add(Q8, Q8);
+        end;
+        Result := Op('Q8MatMul', [Input, Q8, Scale]);
+        Node := FNodes.Last;
+        Node.Domain := 'crosspascal';
+        FNodes[FNodes.Count - 1] := Node;
+        Exit;
       end;
-      Result := Op('Q8MatMul', [Input, Q8, Scale]);
-      Node := FNodes.Last;
-      Node.Domain := 'crosspascal';
-      FNodes[FNodes.Count - 1] := Node;
-      Exit;
-    end;
   end;
   Result := Op('MatMul', [Input, Transpose(Weight(WeightName), [1, 0])]);
 end;

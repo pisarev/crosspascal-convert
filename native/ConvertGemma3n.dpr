@@ -30,6 +30,8 @@ begin
 end;
 
 begin
+  SetTextCodePage(Output, 65001);
+  SetTextCodePage(ErrOutput, 65001);
   if ParamStr(1) = '--attach-vision' then
   begin
     if not (ParamCount in [13, 14]) then
