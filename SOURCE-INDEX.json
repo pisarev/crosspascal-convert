@@ -1,6 +1,6 @@
 {
   "schema": "crosspascal-windows-source-index-v1",
-  "release_id": "early-access-023",
+  "release_id": "early-access-024",
   "repository": "crosspascal-convert",
   "local_metadata": [
     {
@@ -16,29 +16,14 @@
       "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da"
     },
     {
-      "path": "INSTALL.md",
-      "bytes": 34330,
-      "sha256": "65f063ba07356e3311943f1ca62e7fa26043b915e286213184309c4d53c180cb"
-    },
-    {
-      "path": "LICENSE",
-      "bytes": 1070,
-      "sha256": "04b643fe3d2d95be3b9a0ad9d3882d00a9b2d9dfb74694f35fe8edfc77e67815"
-    },
-    {
-      "path": "README.md",
-      "bytes": 7566,
-      "sha256": "0552d258abe027b9d5a573a8b7b19af41c196665ca7e46d45e71945f18af932e"
-    },
-    {
       "path": "docs/FIRST-RUN-VALIDATION.md",
       "bytes": 1319,
       "sha256": "51964e9a9b9eef48f816dff31442d09f67a88847c0bec7a16c7218635b2731bd"
     },
     {
       "path": "docs/GEMMA3N.md",
-      "bytes": 13725,
-      "sha256": "45671233bce897ba6c97b19cf42be712b6f12d0311460cc9f534e25d0788c6fe"
+      "bytes": 13611,
+      "sha256": "4095582405293bf4e718673b31ec8293cc9d26f4c414b8ee6ff645e1f0a72ca0"
     },
     {
       "path": "docs/HUIHUI-GEMMA3N.md",
@@ -61,6 +46,26 @@
       "sha256": "f6f3c5a7d8ef70d246762ad03705e4ea66819201d7fd716beca533eb9f3f2c1c"
     },
     {
+      "path": "docs/YOLO-NATIVE.md",
+      "bytes": 5544,
+      "sha256": "9ee554fe2484695a830444c327ee7eb08bf6bb02ba38b92f3b55d4aeca5e4b9b"
+    },
+    {
+      "path": "INSTALL.md",
+      "bytes": 34330,
+      "sha256": "65f063ba07356e3311943f1ca62e7fa26043b915e286213184309c4d53c180cb"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 1070,
+      "sha256": "04b643fe3d2d95be3b9a0ad9d3882d00a9b2d9dfb74694f35fe8edfc77e67815"
+    },
+    {
+      "path": "licenses/ggml-base.md",
+      "bytes": 879,
+      "sha256": "c0241bf77670ad6d1e2203f6d360bc7243736933d7d6c7e0994899fe3d618d49"
+    },
+    {
       "path": "licenses/LLAMA_CPP_LICENSE.txt",
       "bytes": 1099,
       "sha256": "bcd8ec749126d45cb06737d0690295d73df4b6e7e194205bcf91190368f27285"
@@ -69,11 +74,6 @@
       "path": "licenses/LLAMA_CPP_VENDORS_LICENSE.txt",
       "bytes": 7424,
       "sha256": "7547ae6372a35e7382898dd9f5519ebc16e93095f69c2466b5b74b617c33d4da"
-    },
-    {
-      "path": "licenses/ggml-base.md",
-      "bytes": 879,
-      "sha256": "c0241bf77670ad6d1e2203f6d360bc7243736933d7d6c7e0994899fe3d618d49"
     },
     {
       "path": "licenses/timm-LICENSE.txt",
@@ -121,9 +121,19 @@
       "sha256": "d9dbc74d81dc0e7069b10b3eafced964095af7400865a53113f27f45700cd8df"
     },
     {
-      "path": "native/CrossPascal.GGUF.pas",
-      "bytes": 21321,
-      "sha256": "402d2dad04c62559a9a2b7d60c0bbb6ec95abf9f605279c2c3f4c9594970e996"
+      "path": "native/ConvertYolo.dpr",
+      "bytes": 1457,
+      "sha256": "dc4d2fa1aa39d7599648634910dc0d23502c7709545ad76b5aa31fd8e8dd05d1"
+    },
+    {
+      "path": "native/ConvertYolo.dproj",
+      "bytes": 3832,
+      "sha256": "74ccc48d802bb3d8e232726465269b6171de7fc275b9cdc36936e73dae9a34ac"
+    },
+    {
+      "path": "native/ConvertYolo.lpi",
+      "bytes": 1031,
+      "sha256": "7479221d2e5b27a5c80bf1e367c064a63a7334422e3f0629081c564eeca4f8bd"
     },
     {
       "path": "native/CrossPascal.GatedDeltaNetGraph.pas",
@@ -176,6 +186,11 @@
       "sha256": "f568d5bda493cb849c43f279665825978783548cfa4de5e91839d9cd3f2cd2c5"
     },
     {
+      "path": "native/CrossPascal.GGUF.pas",
+      "bytes": 21321,
+      "sha256": "402d2dad04c62559a9a2b7d60c0bbb6ec95abf9f605279c2c3f4c9594970e996"
+    },
+    {
       "path": "native/CrossPascal.ModelGraph.pas",
       "bytes": 11873,
       "sha256": "e9e3eff0548bfb555a4f8b74329bf39d2b1585c304e0db4ceb44ee5c61fa1107"
@@ -187,8 +202,8 @@
     },
     {
       "path": "native/CrossPascal.Nvrtc.pas",
-      "bytes": 15203,
-      "sha256": "43c4312df749bcdd9af928dc5a1e4ffba56e9b839ba8b4362d9f20bbc12c632d"
+      "bytes": 15890,
+      "sha256": "e8a3ecd136ca446180a0756bb5694cd9fc05038deb0d88f0f33a68aa95a177bb"
     },
     {
       "path": "native/CrossPascal.OmDetBundle.pas",
@@ -197,8 +212,8 @@
     },
     {
       "path": "native/CrossPascal.Onnx.pas",
-      "bytes": 18645,
-      "sha256": "6e431b67ff48e0021e554f945525e9315fb97e035bed9211ebe80862964ea895"
+      "bytes": 18681,
+      "sha256": "e3bb81b9ba76c6fd69c9671238b101c1dcaa838a731d7f19ae6f5da62183743f"
     },
     {
       "path": "native/CrossPascal.Qwen2Graph.pas",
@@ -276,24 +291,24 @@
       "sha256": "d0b5a79bf9921d3f16d19d02936c13dbe8a83048f438124fc430c4d1f9064639"
     },
     {
-      "path": "native/CrossPascal.TVMCompiler.pas",
-      "bytes": 28230,
-      "sha256": "ffab818c566bb32ad80d97b59b23e89c747782c176e4429d4840b25a871aff42"
-    },
-    {
-      "path": "native/CrossPascal.TVMOnnx.pas",
-      "bytes": 143334,
-      "sha256": "8a3c11c56bc2b12d1032736ee9468a1dea2ccaf20455ee047126498573b9d3a1"
-    },
-    {
       "path": "native/CrossPascal.TokenizerSource.pas",
       "bytes": 9696,
       "sha256": "a455e02f403dd353c2144a4fb866be0b926a460a935fbb36b13c2da4ca85f543"
     },
     {
       "path": "native/CrossPascal.TorchCheckpoint.pas",
-      "bytes": 20454,
-      "sha256": "e0c049998c1dc6c70ce848eed62ed0c73900cb4d6165abea291f720d12356e7e"
+      "bytes": 20423,
+      "sha256": "5d183ba677e8fd7fe1a7f6e38bc93558c141984e1e979578e221ae2ee5aa1e9d"
+    },
+    {
+      "path": "native/CrossPascal.TVMCompiler.pas",
+      "bytes": 33166,
+      "sha256": "b60c1e3afe7b294615c865fca68c3486c7fe90f6e5bf776927ead775b57afa52"
+    },
+    {
+      "path": "native/CrossPascal.TVMOnnx.pas",
+      "bytes": 147321,
+      "sha256": "4ffeea8826c770dcccab01678ca4df38aeb9041779eb9fcae5f9536cdb8ed7f4"
     },
     {
       "path": "native/CrossPascal.UnicodeJson.pas",
@@ -306,9 +321,14 @@
       "sha256": "fecfd2922a406c20703a7bd7743f4ff27a5ec0cba2ac5d6500496d8519a1a25a"
     },
     {
+      "path": "native/CrossPascal.YoloBundle.pas",
+      "bytes": 18532,
+      "sha256": "e2ba864a70566d88ada76142c85a90a8b16349201e95a75440b0c432bbeea68a"
+    },
+    {
       "path": "native/CrossPascal.YoloSource.pas",
-      "bytes": 5192,
-      "sha256": "082d777672efc6cc8e8f4154b43068f7a69c641ab13a211572d56d4c675f3c44"
+      "bytes": 8218,
+      "sha256": "d0c3290ca8c1c939f5eb88978d4cbd110b972ad6cc3fe28ead995ad49abc7ea9"
     },
     {
       "path": "native/kernels/qwen35-packed/.gitattributes",
@@ -316,19 +336,14 @@
       "sha256": "1b3ccd404f12f7cbc8711d3b3e6ea173a34b2b803442410a0cbd0bd03fea6506"
     },
     {
-      "path": "native/kernels/qwen35-packed/LICENSE",
-      "bytes": 1078,
-      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
-    },
-    {
-      "path": "native/kernels/qwen35-packed/PIN.json",
-      "bytes": 1184,
-      "sha256": "4e4c9ccb528b0d4186d0e8758ac9a9be7a008dbd2f06218ca6a0cb55bebab3b9"
-    },
-    {
       "path": "native/kernels/qwen35-packed/ggml-common.h",
       "bytes": 135161,
       "sha256": "0061131b615c5721fc88a78feeb22c1f8c450f1c2646a317d80796a653bf595c"
+    },
+    {
+      "path": "native/kernels/qwen35-packed/LICENSE",
+      "bytes": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
     },
     {
       "path": "native/kernels/qwen35-packed/packed_decode.cu",
@@ -336,9 +351,14 @@
       "sha256": "86c56d36a712b212fdd4e1006b7261689981e7c80efe18832397c40f9676cc8c"
     },
     {
-      "path": "native/profiles/README.md",
-      "bytes": 1127,
-      "sha256": "a432b0a6c6ff895d4a6879c14f77732e32e20fc8181f2c05f429be0cbe16ce99"
+      "path": "native/kernels/qwen35-packed/PIN.json",
+      "bytes": 1184,
+      "sha256": "4e4c9ccb528b0d4186d0e8758ac9a9be7a008dbd2f06218ca6a0cb55bebab3b9"
+    },
+    {
+      "path": "native/profiles/gemma3n-huihui-abliterated/distribution.json",
+      "bytes": 810,
+      "sha256": "91ea7f7f8c7ca88249786dcf1eaa3caaae0ef676a4a3ad48bb73224fd484c458"
     },
     {
       "path": "native/profiles/gemma3n-huihui-abliterated/LICENSE-model.txt",
@@ -356,6 +376,11 @@
       "sha256": "afdc3c706361eda3521cd98c21c9c2ad83b0ad9872c3a995f8573327554a8fa7"
     },
     {
+      "path": "native/profiles/gemma3n-huihui-abliterated/recipe.json",
+      "bytes": 415,
+      "sha256": "d0e383275cc75e28a85dbd4d4e8203514bca1b0ce7f534a52cdde5a8bdcef4ef"
+    },
+    {
       "path": "native/profiles/gemma3n-huihui-abliterated/SOURCE-model.json",
       "bytes": 2630,
       "sha256": "fe359e8f21d169c854c04d0e51bc1de8993b40fdb999657b69a8e17f2436c765"
@@ -364,16 +389,6 @@
       "path": "native/profiles/gemma3n-huihui-abliterated/USE-POLICY-model.txt",
       "bytes": 3670,
       "sha256": "0554d5d774a16e9553d2d32b1e1392bd101b85409e96ad9adda1e8e0f3d1695c"
-    },
-    {
-      "path": "native/profiles/gemma3n-huihui-abliterated/distribution.json",
-      "bytes": 810,
-      "sha256": "91ea7f7f8c7ca88249786dcf1eaa3caaae0ef676a4a3ad48bb73224fd484c458"
-    },
-    {
-      "path": "native/profiles/gemma3n-huihui-abliterated/recipe.json",
-      "bytes": 415,
-      "sha256": "d0e383275cc75e28a85dbd4d4e8203514bca1b0ce7f534a52cdde5a8bdcef4ef"
     },
     {
       "path": "native/profiles/gemma3n-huihui-abliterated/vision.onnx",
@@ -416,6 +431,11 @@
       "sha256": "49d5e3a4ca9cdebe00bd5b0142301dba101f2632f4d8900171515c2b5d80e98e"
     },
     {
+      "path": "native/profiles/README.md",
+      "bytes": 1127,
+      "sha256": "a432b0a6c6ff895d4a6879c14f77732e32e20fc8181f2c05f429be0cbe16ce99"
+    },
+    {
       "path": "native/profiles/rtdetr-r18vd/bindings.json",
       "bytes": 51253,
       "sha256": "6e941305c6fcde12e46abb9061ddb2a9b059c67f92471e1fc170d581d1153b26"
@@ -449,6 +469,11 @@
       "path": "pyproject.toml",
       "bytes": 1047,
       "sha256": "74fc6d1bb0c432920cd99584c17bd43826c86ca26ae6a1613200c11c640487f6"
+    },
+    {
+      "path": "README.md",
+      "bytes": 8016,
+      "sha256": "f732c683bc5b9fd7e996d3a0906a174df9be695e298ab4100429c2dc8f9b0244"
     },
     {
       "path": "scripts/verify_source.py",
@@ -701,11 +726,6 @@
       "sha256": "a05936a556bd52ddea4731e23e6a119357e2553c94aa521552a36e9ee52a2143"
     },
     {
-      "path": "source/pascalvision_convert/llm_helpers/HELPER-SHA256.json",
-      "bytes": 537,
-      "sha256": "54a672baa2fec5d16096a43ffa8dded719d6adf7832dee0fd6703a12d724dda3"
-    },
-    {
       "path": "source/pascalvision_convert/llm_helpers/__init__.py",
       "bytes": 63,
       "sha256": "c38aef1ecf4333dde1ff77e2417804e66f53696520b7aa76d181e77d35b89466"
@@ -719,6 +739,11 @@
       "path": "source/pascalvision_convert/llm_helpers/gemma2_model.py",
       "bytes": 10821,
       "sha256": "ec57810c0555eec36138087e55f44e15f57f7863ad2f29ab97895c6789c6b9f5"
+    },
+    {
+      "path": "source/pascalvision_convert/llm_helpers/HELPER-SHA256.json",
+      "bytes": 537,
+      "sha256": "54a672baa2fec5d16096a43ffa8dded719d6adf7832dee0fd6703a12d724dda3"
     },
     {
       "path": "source/pascalvision_convert/llm_helpers/qwen2_model.py",
@@ -1031,6 +1056,6 @@
       "sha256": "18e9d8b20d80ad2eaf57997895b013eb06f408db6c6f0c36ab8961900a5640dc"
     }
   ],
-  "documentation_revision": "maintenance-20261110",
-  "source_revision": "early-access-023"
+  "documentation_revision": "ea024-20261125",
+  "source_revision": "early-access-024"
 }
