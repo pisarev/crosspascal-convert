@@ -94,7 +94,7 @@ end;
 procedure TTorchCheckpoint.ReadArchive(const FileName: string);
 var
   Mem: TMemoryStream;
-  FileStream: TFileStream;
+  FileStream: TStream;
   EndRecord: array[0..21] of Byte;
   Central: array[0..45] of Byte;
   Local: array[0..29] of Byte;
@@ -103,7 +103,7 @@ var
   Name, LocalName: UTF8String;
   MemberName: string;
 begin
-  FileStream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+  FileStream := TModelReadStream.Create(FileName);
   try
     RequireCpu((FileStream.Size >= SizeOf(EndRecord)) and (FileStream.Size <= MaximumArchive),
       'Unsupported PyTorch archive size');

@@ -30,7 +30,8 @@ procedure CompileWindowsTvmOnnxLibrary(const Model: TOnnxModel; const Kit: TWind
 implementation
 
 uses
-  {$IFDEF FPC}SysUtils, Math, Windows, Generics.Collections{$ELSE}System.SysUtils, System.Math, Winapi.Windows, System.Generics.Collections{$ENDIF},
+  {$IFDEF FPC}SysUtils, Math, {$IFNDEF UNIX}Windows,{$ENDIF}Generics.Collections
+  {$ELSE}System.SysUtils, System.Math, Winapi.Windows, System.Generics.Collections{$ENDIF},
   DLPack, TVM, TVM.CpuGraph;
 
 type
@@ -101,6 +102,7 @@ type
     function ShapeArray(const Shape: array of Int64): TTVMFFIAny;
     function IndexArray(const Values: array of Int64): TTVMFFIAny;
     function DataType(const Kind: Integer): TDLDataType;
+    function ArgMax(const Node: TOnnxNode): TGraphValue;
     function PrimitiveType(const Kind: Integer): TTVMFFIAny;
     function TensorType(const Shape: array of Int64; const Kind: Integer = OnnxFloat): TTVMFFIAny;
     function Placeholder(const Shape: array of Int64; const Name: UTF8String;
@@ -390,6 +392,17 @@ begin
         Result := FIntDType;
         Result.bits := 8;
       end;
+    OnnxUInt8:
+      begin
+        Result := FIntDType;
+        Result.code := Ord(kDLUInt);
+        Result.bits := 8;
+      end;
+    OnnxInt32:
+      begin
+        Result := FIntDType;
+        Result.bits := 32;
+      end;
     OnnxInt64: Result := FIntDType;
     OnnxBFloat16:
       begin
@@ -602,7 +615,8 @@ var
   Field: PFieldInfo;
   I: Integer;
 begin
-  GetTypeInfo := TGetTypeInfo(GetProcAddress(HMODULE(TTVMRuntime.TModule.Handle), 'TVMFFIGetTypeInfo'));
+  GetTypeInfo := TGetTypeInfo(TTVMRuntime.TModule.GetProcAddress(TTVMRuntime.TModule.Handle,
+    'TVMFFIGetTypeInfo', False));
   RequireCpu(Assigned(GetTypeInfo) and (Value.VObj <> nil), 'TVM compiler reflection is unavailable');
   Info := GetTypeInfo(Value.TypeIndex);
   RequireCpu(Info <> nil, 'TVM compiler object type is unknown');
@@ -1160,13 +1174,16 @@ begin
 end;
 
 function TOnnxBuilder.Concat(const Node: TOnnxNode): TGraphValue;
+const
+  FloatElementLimit = 65536;
 var
   Inputs: TArray<TGraphValue>;
   TensorInputs: TArray<TTVMFFIAny>;
   Shape, Values: TArray<Int64>;
+  Floats: TArray<Single>;
   Axis, Inner, Outer, BlockSize, Group: Int64;
   I, J, Position: Integer;
-  IsStatic: Boolean;
+  IsStatic, IsStaticFloat: Boolean;
   Compute: TTVMFFIAny;
 begin
   RequireCpu(Length(Node.Inputs) > 0, 'ONNX Concat has no inputs');
@@ -1179,6 +1196,7 @@ begin
   RequireCpu((Axis >= 0) and (Axis < Length(Shape)), 'ONNX Concat axis is out of range');
   Shape[Axis] := 0;
   IsStatic := Inputs[0].DataType = OnnxInt64;
+  IsStaticFloat := Inputs[0].DataType = OnnxFloat;
   for I := 0 to High(Inputs) do
   begin
     RequireCpu((Length(Inputs[I].Shape) = Length(Shape)) and (Inputs[I].DataType = Inputs[0].DataType),
@@ -1188,10 +1206,15 @@ begin
         RequireCpu(Inputs[I].Shape[J] = Shape[J], 'ONNX Concat input dimensions differ');
     Inc(Shape[Axis], Inputs[I].Shape[Axis]);
     IsStatic := IsStatic and Inputs[I].StaticInt;
+    IsStaticFloat := IsStaticFloat and Inputs[I].StaticFloat;
   end;
-  if IsStatic then
+  IsStaticFloat := IsStaticFloat and (TensorElements(Shape) <= FloatElementLimit);
+  if IsStatic or IsStaticFloat then
   begin
-    SetLength(Values, TensorElements(Shape));
+    if IsStatic then
+      SetLength(Values, TensorElements(Shape))
+    else
+      SetLength(Floats, TensorElements(Shape));
     Inner := TensorElements(Copy(Shape, Axis + 1, Length(Shape) - Axis - 1));
     Outer := TensorElements(Copy(Shape, 0, Axis));
     Position := 0;
@@ -1200,10 +1223,14 @@ begin
       begin
         BlockSize := Inputs[I].Shape[Axis] * Inner;
         if BlockSize > 0 then
-          Move(Inputs[I].Integers[Group * BlockSize], Values[Position], BlockSize * SizeOf(Int64));
+          if IsStatic then
+            Move(Inputs[I].Integers[Group * BlockSize], Values[Position], BlockSize * SizeOf(Int64))
+          else
+            Move(Inputs[I].Floats[Group * BlockSize], Floats[Position], BlockSize * SizeOf(Single));
         Inc(Position, BlockSize);
       end;
-    Exit(StaticIntegers(Shape, Values));
+    if IsStatic then Exit(StaticIntegers(Shape, Values));
+    Exit(ConstantValue(Floats, Shape));
   end;
   for I := 0 to High(Inputs) do
     TensorInputs[I] := Placeholder(Inputs[I].Shape, 'input', Inputs[I].DataType);
@@ -1361,6 +1388,9 @@ var
 begin
   Left := Input(Node, 0);
   Right := Input(Node, 1);
+  if Node.OpType = 'Mod' then
+    RequireCpu((Left.DataType = OnnxInt64) and (IntAttribute(Node, 'fmod', 0) in [0, 1]),
+      'ONNX Mod needs int64 operands and a valid fmod flag');
   RequireCpu(Left.DataType = Right.DataType, 'ONNX binary operand types differ');
   Kind := Left.DataType;
   if (Node.OpType = 'Less') or (Node.OpType = 'Greater') or
@@ -1458,10 +1488,20 @@ begin
       end;
       if Folded then Exit(ConstantValue(Floats, Shape));
     end;
-  RequireCpu(Node.OpType <> 'Mod', 'ONNX Mod requires constant integer operands');
   LeftTensor := Placeholder(Left.Shape, 'left', Left.DataType);
   RightTensor := Placeholder(Right.Shape, 'right', Right.DataType);
-  Compute := Make(OperatorName, [LeftTensor, RightTensor]);
+  if Node.OpType = 'Mod' then
+  begin
+    if Right.StaticInt then
+      for I := 0 to High(Right.Integers) do
+        RequireCpu(Right.Integers[I] <> 0, 'ONNX modulo by zero');
+    if IntAttribute(Node, 'fmod', 0) = 0 then
+      Compute := Make('topi.floor_mod', [LeftTensor, RightTensor])
+    else
+      Compute := Make('topi.mod', [LeftTensor, RightTensor]);
+  end
+  else
+    Compute := Make(OperatorName, [LeftTensor, RightTensor]);
   Result := Emit([Left, Right], [LeftTensor, RightTensor], Compute, Shape, Kind);
 end;
 
@@ -2086,6 +2126,43 @@ begin
   Result := Emit([Source], [InputTensor], Compute, Shape);
 end;
 
+function TOnnxBuilder.ArgMax(const Node: TOnnxNode): TGraphValue;
+var
+  Source: TGraphValue;
+  Shape: TArray<Int64>;
+  InputTensor, Compute: TTVMFFIAny;
+  Axis, I, Count, KeepDims, SelectLast: Integer;
+begin
+  RequireCpu((Length(Node.Inputs) = 1) and (Length(Node.Outputs) = 1),
+    'ONNX ArgMax needs one input and one output');
+  Source := Input(Node, 0);
+  Axis := IntAttribute(Node, 'axis', 0);
+  if Axis < 0 then Inc(Axis, Length(Source.Shape));
+  KeepDims := IntAttribute(Node, 'keepdims', 1);
+  SelectLast := IntAttribute(Node, 'select_last_index', 0);
+  RequireCpu((Axis >= 0) and (Axis < Length(Source.Shape)) and (KeepDims in [0, 1]) and
+    (SelectLast in [0, 1]), 'Invalid ONNX ArgMax axis or flags');
+  SetLength(Shape, Length(Source.Shape));
+  Count := 0;
+  for I := 0 to High(Source.Shape) do
+  begin
+    if I = Axis then
+    begin
+      if KeepDims = 0 then Continue;
+      Shape[Count] := 1;
+    end
+    else
+      Shape[Count] := Source.Shape[I];
+    Inc(Count);
+  end;
+  SetLength(Shape, Count);
+  InputTensor := Placeholder(Source.Shape, 'input', Source.DataType);
+  Compute := Make('topi.argmax', [InputTensor, IndexArray([Axis]),
+    TTVMRuntime.AnyBool(KeepDims <> 0), TTVMRuntime.AnyBool(SelectLast <> 0)]);
+  Compute := Make('topi.cast', [Compute, PrimitiveType(OnnxInt64)]);
+  Result := Emit([Source], [InputTensor], Compute, Shape, OnnxInt64);
+end;
+
 function TOnnxBuilder.Cast(const Node: TOnnxNode): TGraphValue;
 var
   Source: TGraphValue;
@@ -2648,8 +2725,11 @@ var
   Axes, Iter: array[0..3] of TTVMFFIAny;
   Lower, Upper, Weight: array[0..1] of TTVMFFIAny;
   InputTensor, Coordinate, FloorValue, Ratio, One, Value, Top, Bottom: TTVMFFIAny;
+  SpatialRatios: array[0..1] of Single;
   I: Integer;
   ScaledExtent: Double;
+  Mode: string;
+  UseSizes: Boolean;
 
   function FloatImm(const Number: Single): TTVMFFIAny;
   begin
@@ -2670,15 +2750,19 @@ var
 
 begin
   Source := Input(Node, 0);
+  Mode := StringAttribute(Node, 'coordinate_transformation_mode', 'half_pixel');
   RequireCpu((Source.DataType = OnnxFloat) and (Length(Source.Shape) = 4) and
     (Length(Node.Inputs) in [3, 4]) and
-    (StringAttribute(Node, 'coordinate_transformation_mode', 'half_pixel') = 'align_corners') and
+    ((Mode = 'align_corners') or (Mode = 'half_pixel') or (Mode = 'pytorch_half_pixel') or
+    (Mode = 'asymmetric')) and
     (IntAttribute(Node, 'antialias', 0) = 0), 'Unsupported ONNX linear Resize signature');
-  if (Length(Node.Inputs) = 4) and (Node.Inputs[3] <> '') then
+  UseSizes := (Length(Node.Inputs) = 4) and (Node.Inputs[3] <> '');
+  if UseSizes then
     Shape := StaticInput(Node, 3)
   else begin
     Scale := Input(Node, 2);
-    RequireCpu(Scale.StaticFloat and (Length(Scale.Floats) = 4),
+    RequireCpu(Scale.StaticFloat and (Length(Scale.Floats) = 4) and
+      (Scale.Floats[0] = 1) and (Scale.Floats[1] = 1),
       'ONNX linear Resize needs constant scales');
     SetLength(Shape, 4);
     for I := 0 to 3 do
@@ -2692,6 +2776,11 @@ begin
   RequireCpu((Length(Shape) = 4) and (Shape[0] = Source.Shape[0]) and (Shape[1] = Source.Shape[1]),
     'ONNX Resize changes batch or channels');
   TensorElements(Shape);
+  for I := 0 to 1 do
+    if UseSizes then
+      SpatialRatios[I] := Source.Shape[I + 2] / Shape[I + 2]
+    else
+      SpatialRatios[I] := 1.0 / Scale.Floats[I + 2];
   for I := 0 to 3 do
     Axes[I] := Iteration(UTF8Encode('axis' + IntToStr(I)), Shape[I], False, Iter[I]);
   One := FloatImm(1);
@@ -2699,12 +2788,27 @@ begin
   for I := 0 to 1 do
   begin
     Coordinate := FZero;
-    if Shape[I + 2] > 1 then
+    if Mode = 'align_corners' then
     begin
-      Ratio := FloatImm((Source.Shape[I + 2] - 1) / (Shape[I + 2] - 1));
-      Coordinate := Primitive('tirx.Mul', Make('tirx.Cast', [FFloatType, Iter[I + 2], FEmpty]), Ratio);
+      if Shape[I + 2] > 1 then
+      begin
+        Ratio := FloatImm((Source.Shape[I + 2] - 1) / (Shape[I + 2] - 1));
+        Coordinate := Primitive('tirx.Mul', Make('tirx.Cast', [FFloatType, Iter[I + 2], FEmpty]), Ratio);
+      end;
+    end
+    else begin
+      Ratio := FloatImm(SpatialRatios[I]);
+      Coordinate := Make('tirx.Cast', [FFloatType, Iter[I + 2], FEmpty]);
+      if Mode = 'asymmetric' then
+        Coordinate := Primitive('tirx.Mul', Coordinate, Ratio)
+      else if (Mode = 'pytorch_half_pixel') and (Shape[I + 2] = 1) then
+        Coordinate := FZero
+      else
+        Coordinate := Primitive('tirx.Sub', Primitive('tirx.Mul',
+          Primitive('tirx.Add', Coordinate, FloatImm(0.5)), Ratio), FloatImm(0.5));
     end;
-    Coordinate := Primitive('tirx.Min', Coordinate, FloatImm(Source.Shape[I + 2] - 1));
+    Coordinate := Primitive('tirx.Max', FZero,
+      Primitive('tirx.Min', Coordinate, FloatImm(Source.Shape[I + 2] - 1)));
     FloorValue := Intrinsic('tirx.floor', FFloatType, [Coordinate]);
     Weight[I] := Primitive('tirx.Sub', Coordinate, FloorValue);
     Lower[I] := Make('tirx.Cast', [FIntType, FloorValue, FEmpty]);
@@ -2714,7 +2818,7 @@ begin
   Top := Blend(Sample(Lower[0], Lower[1]), Sample(Lower[0], Upper[1]), Weight[1]);
   Bottom := Blend(Sample(Upper[0], Lower[1]), Sample(Upper[0], Upper[1]), Weight[1]);
   Value := Blend(Top, Bottom, Weight[0]);
-  Result := Emit([Source], [InputTensor], ComputeTensor('resize_linear_align_corners', Value, Axes), Shape);
+  Result := Emit([Source], [InputTensor], ComputeTensor('resize_linear', Value, Axes), Shape);
 end;
 
 function TOnnxBuilder.Resize(const Node: TOnnxNode): TGraphValue;
@@ -3172,6 +3276,7 @@ procedure TOnnxBuilder.AddNode(const Node: TOnnxNode);
     if Node.OpType = 'Range' then Exit(Range(Node));
     if Node.OpType = 'Mod' then Exit(Binary(Node, ''));
     if Node.OpType = 'Cast' then Exit(Cast(Node));
+    if Node.OpType = 'ArgMax' then Exit(ArgMax(Node));
     if (Node.OpType = 'Expand') or (Node.OpType = 'Tile') then Exit(ExpandOrTile(Node));
     if Node.OpType = 'ConstantOfShape' then Exit(ConstantOfShape(Node));
     if Node.OpType = 'LayerNormalization' then Exit(LayerNormalization(Node));
@@ -3422,7 +3527,8 @@ begin
       [Kit.MsvcLibraries, Kit.UcrtLibraries, Kit.WindowsLibraries]);
   finally
     for Extra in Temporary do
-      if FileExists(Extra) then DeleteFileW(PWideChar(Extra));
+      if FileExists(Extra) then
+        {$IFDEF UNIX}DeleteFile(UTF8Encode(Extra)){$ELSE}DeleteFileW(PWideChar(Extra)){$ENDIF};
   end;
 end;
 

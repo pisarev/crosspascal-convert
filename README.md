@@ -23,6 +23,8 @@ The native converter includes **BiRefNet HR800 background removal | CPU** and **
 
 For text-guided detection, select **OmDet-Turbo text-guided detection | CPU** or **CUDA** and the supplied five-file ONNX source folder. The native converter builds both the CLIP text encoder and trained Swin-Tiny detector into a bundle for the [OmDet-Turbo example](https://github.com/pisarev/crosspascal/tree/main/examples/omdet-turbo). CUDA targets are read from the installed device and remain editable. The ready bundles cover `sm_75`, `sm_86`, `sm_89`, and `sm_120`.
 
+For YOLO, `native/ConvertYolo.dpr` builds a CPU or CUDA bundle from an original `.pt` checkpoint and a pinned, weight-free ONNX recipe. The 23 profiles cover seven tasks. You can also choose a YOLO profile in `CrossPascalConvert.exe`. See [Native YOLO conversion](docs/YOLO-NATIVE.md) for the request format, and the [YoloModels example](https://github.com/pisarev/crosspascal/tree/main/examples/yolo-models) for the ready bundles.
+
 ## Browser converter in earlier releases
 
 CrossPascal Convert builds native model libraries and weights for Pascal applications. The converter runs on your computer and opens a local browser interface. This repository contains its Python package, browser interface, model adapters, and language-model compiler integration.
@@ -53,7 +55,7 @@ Gemma 3n has a separate native TVM text backend with AltUp, LAuReL, per-layer em
 
 An additional **compatible local Qwen2 dense-text** profile is available for explicitly selected local original Safetensors folders. It derives supported topology and resource requirements from verified configuration and tensor headers instead of a model-specific name or official-source catalog entry. The local route retains Windows x64, CUDA FP32, one batch, a 2,048-token context and the exact established Qwen byte-BPE tokenizer semantics. Use the **Compatible local Qwen2** dropdown entry, inspect the Preview memory/disk requirements and source SHA-256, and supply the existing native Qwen tokenizer/runtime kit; this kit does not establish an official identity for the selected local weights. It is **not** general support for Qwen-VL, MoE, arbitrary tokenizers, quantized formats or arbitrary context lengths. The Pascal consumer checks bundle structure and available GPU memory before loading.
 
-The documented CPU routes cover SqueezeNet 1.1, ResNet50, YOLO11n classification, YOLO11n detection, and RT-DETR R18vd. Other families and compilation paths in the source tree are outside the verified early access scope.
+The documented browser-converter CPU routes cover SqueezeNet 1.1, ResNet50, YOLO11n classification, YOLO11n detection, and RT-DETR R18vd. Other browser-converter families and compilation paths are outside the verified early access scope.
 
 Open the generated bundle in the corresponding Pascal example and run an input. For advanced use, see the [source notes](docs/SOURCE-NOTES.md).
 

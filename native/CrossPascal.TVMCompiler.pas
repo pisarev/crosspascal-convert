@@ -38,12 +38,17 @@ procedure CompileCpuDense(const CompilerDirectory, TargetJSON, KernelObject, VMO
   const Rows, Columns, Features: Integer);
 procedure LinkWindowsTvmLibrary(const Linker, OutputFile: string;
   const Objects, Libraries, LibraryDirectories: array of string);
+{$IFDEF UNIX}
+procedure LinkLinuxTvmLibrary(const Linker, OutputFile, FfiLibrary: string;
+  const Objects: array of string);
+{$ENDIF}
 
 implementation
 
 uses
-  {$IFDEF FPC}SysUtils, Classes, Windows{$ELSE}System.SysUtils, System.Classes, Winapi.Windows{$ENDIF},
-  DLPack, TVM.CpuGraph, QwenCuda, CrossPascal.Nvrtc;
+  {$IFDEF FPC}SysUtils, Classes, {$IFDEF UNIX}Dynlibs, Process{$ELSE}Windows{$ENDIF}
+  {$ELSE}System.SysUtils, System.Classes, Winapi.Windows{$ENDIF},
+  {$IFNDEF UNIX}QwenCuda,{$ENDIF}DLPack, TVM.CpuGraph, CrossPascal.Nvrtc, CrossPascal.NativeIO;
 
 {$IF not Declared(LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR)}
 const
@@ -55,11 +60,71 @@ const
 {$IFEND}
 
 const
-  CompilerName = 'tvm_compiler.dll';
+  CompilerName = {$IFDEF UNIX}'libtvm_compiler.so'{$ELSE}'tvm_compiler.dll'{$ENDIF};
 
 var
-  CompilerHandle: HMODULE;
+  CompilerHandle: {$IFDEF UNIX}TLibHandle{$ELSE}HMODULE{$ENDIF};
   LoadedCompiler: string;
+  {$IFDEF UNIX}
+  CompilerRuntimeDirectory: string;
+  {$ENDIF}
+
+{$IFDEF UNIX}
+procedure InitializeRuntime(const Directory: string; const NeedCuda: Boolean);
+var
+  Handles: array[0..3] of TLibHandle;
+  Names: array[0..3] of string;
+  I, Last: Integer;
+  Version: TTVMFFIVersion;
+begin
+  if CompilerRuntimeDirectory <> '' then
+  begin
+    RequireCpu(CompilerRuntimeDirectory = Directory, 'Restart before changing the compiler runtime');
+    if NeedCuda and (TTVMRuntime.TModule.CudaRuntimeHandle = 0) then
+    begin
+      TTVMRuntime.TModule.CudaRuntimeHandle := LoadLibrary(UTF8Encode(Directory +
+        TTVMRuntime.TModule.CudaRuntimeName));
+      RequireCpu(TTVMRuntime.TModule.CudaRuntimeHandle <> 0, 'Cannot load CUDA runtime: ' + GetLoadErrorStr);
+    end;
+    Exit;
+  end;
+  RequireCpu((TTVMRuntime.TModule.Handle = 0) and (TTVMRuntime.TModule.RuntimeHandle = 0),
+    'TVM was initialized before selecting the compiler runtime');
+  Names[0] := TTVMRuntime.TModule.FFIName;
+  Names[1] := TTVMRuntime.TModule.RuntimeName;
+  Names[2] := TTVMRuntime.TModule.ExtraRuntimeName;
+  Names[3] := TTVMRuntime.TModule.CudaRuntimeName;
+  FillChar(Handles, SizeOf(Handles), 0);
+  Last := 2;
+  if NeedCuda then Last := 3;
+  try
+    for I := 0 to Last do
+    begin
+      RequireCpu(FileExists(Directory + Names[I]), 'Compiler runtime library is absent: ' + Names[I]);
+      Handles[I] := LoadLibrary(UTF8Encode(Directory + Names[I]));
+      RequireCpu(Handles[I] <> 0, 'Cannot load compiler runtime ' + Names[I] + ': ' + GetLoadErrorStr);
+    end;
+  except
+    for I := Last downto 0 do
+      if Handles[I] <> 0 then UnloadLibrary(Handles[I]);
+    raise;
+  end;
+  TTVMRuntime.TModule.Handle := Handles[0];
+  TTVMRuntime.TModule.RuntimeHandle := Handles[1];
+  TTVMRuntime.TModule.ExtraRuntimeHandle := Handles[2];
+  TTVMRuntime.TModule.CudaRuntimeHandle := Handles[3];
+  TTVMRuntime.TModule.LibraryPath := Directory;
+  TTVMRuntime.TModule.LibraryName := Directory + Names[1];
+  TTVMRuntime.TModule.Initialize(Handles[0], True);
+  TTVMBackend.TModule.Handle := Handles[1];
+  TTVMBackend.TModule.Initialize(Handles[1], True);
+  TTVMRuntime.TModule.TVMFFIGetVersion(Version);
+  RequireCpu((Version.Major = 0) and (Version.Minor = 1) and (Version.Patch = 14),
+    'The native compiler requires TVM FFI ABI 0.1.14');
+  TTVMRuntime.TModule.ResolveGlobals;
+  CompilerRuntimeDirectory := Directory;
+end;
+{$ENDIF}
 
 function GlobalObject(const Name: string; const Args: array of TTVMFFIAny): TTVMFFIObjectHandle;
 var
@@ -89,11 +154,17 @@ begin
     Exit;
   end;
   InitializeRuntime(Directory, False);
+  {$IFDEF UNIX}
+  CompilerHandle := LoadLibrary(UTF8Encode(FileName));
+  if CompilerHandle = NilHandle then
+    raise ECpuGraph.Create('Cannot load TVM compiler: ' + GetLoadErrorStr);
+  {$ELSE}
   RequireCpu(GetModuleHandleW(PWideChar(CompilerName)) = 0,
     'The TVM compiler was already loaded from outside the selected directory');
   CompilerHandle := LoadLibraryExW(PWideChar(FileName), 0,
     LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR or LOAD_LIBRARY_SEARCH_SYSTEM32);
   if CompilerHandle = 0 then RaiseLastOSError;
+  {$ENDIF}
   LoadedCompiler := FileName;
   { Registered compiler functions remain in the TVM FFI registry for this process. }
 end;
@@ -105,9 +176,9 @@ end;
 
 function ReadIR(const FileName: string): UTF8String;
 var
-  Stream: TFileStream;
+  Stream: TStream;
 begin
-  Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+  Stream := TNativeReadStream.Create(FileName);
   try
     RequireCpu((Stream.Size > 0) and (Stream.Size <= High(Integer)), 'Invalid TVM IR file size');
     SetLength(Result, Integer(Stream.Size));
@@ -673,9 +744,13 @@ procedure LinkWindowsTvmLibrary(const Linker, OutputFile: string;
   const Objects, Libraries, LibraryDirectories: array of string);
 var
   Tool, Command, Destination, Item: string;
+  {$IFDEF UNIX}
+  Child: TProcess;
+  {$ELSE}
   Startup: TStartupInfoW;
   Process: TProcessInformation;
   ExitCode: DWORD;
+  {$ENDIF}
 begin
   Tool := ExpandFileName(Linker);
   Destination := ExpandFileName(OutputFile);
@@ -689,6 +764,26 @@ begin
       LinkArgument('/LIBPATH:' + ExcludeTrailingPathDelimiter(ExpandFileName(Item)));
   for Item in Objects do Command := Command + LinkArgument(ExpandFileName(Item));
   for Item in Libraries do Command := Command + LinkArgument(Item);
+  {$IFDEF UNIX}
+  Child := TProcess.Create(nil);
+  try
+    Child.Executable := UTF8Encode(Tool);
+    Child.Parameters.Add('/NOLOGO');
+    Child.Parameters.Add('/DLL');
+    Child.Parameters.Add('/MACHINE:X64');
+    Child.Parameters.Add('/BREPRO');
+    Child.Parameters.Add(UTF8Encode('/OUT:' + Destination));
+    for Item in LibraryDirectories do
+      Child.Parameters.Add(UTF8Encode('/LIBPATH:' + ExcludeTrailingPathDelimiter(ExpandFileName(Item))));
+    for Item in Objects do Child.Parameters.Add(UTF8Encode(ExpandFileName(Item)));
+    for Item in Libraries do Child.Parameters.Add(UTF8Encode(Item));
+    Child.Options := [poWaitOnExit];
+    Child.Execute;
+    RequireCpu(Child.ExitStatus = 0, Format('Windows linker exited with code %d', [Child.ExitStatus]));
+  finally
+    Child.Free;
+  end;
+  {$ELSE}
   FillChar(Startup, SizeOf(Startup), 0);
   Startup.cb := SizeOf(Startup);
   UniqueString(Command);
@@ -702,6 +797,35 @@ begin
     CloseHandle(Process.hThread);
     CloseHandle(Process.hProcess);
   end;
+  {$ENDIF}
 end;
+
+{$IFDEF UNIX}
+procedure LinkLinuxTvmLibrary(const Linker, OutputFile, FfiLibrary: string;
+  const Objects: array of string);
+var
+  Child: TProcess;
+  Item: string;
+begin
+  RequireCpu(FileExists(Linker) and FileExists(FfiLibrary), 'Linux linker or TVM FFI library is absent');
+  RequireCpu((Length(Objects) > 0) and DirectoryExists(ExtractFileDir(ExpandFileName(OutputFile))),
+    'Choose model objects and an existing output directory');
+  Child := TProcess.Create(nil);
+  try
+    Child.Executable := UTF8Encode(Linker);
+    Child.Parameters.Add('-shared');
+    Child.Parameters.Add('-Wl,--no-undefined');
+    Child.Parameters.Add('-o');
+    Child.Parameters.Add(UTF8Encode(ExpandFileName(OutputFile)));
+    for Item in Objects do Child.Parameters.Add(UTF8Encode(ExpandFileName(Item)));
+    Child.Parameters.Add(UTF8Encode(ExpandFileName(FfiLibrary)));
+    Child.Options := [poWaitOnExit];
+    Child.Execute;
+    RequireCpu(Child.ExitStatus = 0, Format('Linux linker exited with code %d', [Child.ExitStatus]));
+  finally
+    Child.Free;
+  end;
+end;
+{$ENDIF}
 
 end.

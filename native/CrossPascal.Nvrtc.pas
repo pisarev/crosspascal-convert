@@ -14,7 +14,8 @@ unit CrossPascal.Nvrtc;
 interface
 
 uses
-  {$IFDEF FPC}SysUtils, Windows{$ELSE}System.SysUtils, Winapi.Windows{$ENDIF}, TVM;
+  {$IFDEF FPC}SysUtils, {$IFDEF UNIX}Dynlibs{$ELSE}Windows{$ENDIF}
+  {$ELSE}System.SysUtils, Winapi.Windows{$ENDIF}, TVM;
 
 type
   TNvrtcCompiler = class
@@ -30,8 +31,8 @@ type
       TGetVersion = function(out Major, Minor: Integer): Integer; cdecl;
       TBytesFromArray = function(const Data: PTVMFFIByteArray; Output: PTVMFFIAny): Integer; cdecl;
   private
-    FLibrary: HMODULE;
-    FBuiltins: HMODULE;
+    FLibrary: {$IFDEF UNIX}TLibHandle{$ELSE}HMODULE{$ENDIF};
+    FBuiltins: {$IFDEF UNIX}TLibHandle{$ELSE}HMODULE{$ENDIF};
     FArchitecture: UTF8String;
     FIncludePath: UTF8String;
     FCreate: TCreate;
@@ -127,6 +128,7 @@ const
     'using cuda::std::int32_t; using cuda::std::uint32_t;'#10 +
     'using cuda::std::int64_t; using cuda::std::uint64_t;'#10 +
     'using uint = unsigned int;'#10 +
+    'using uchar = unsigned char;'#10 +
     'using ushort = unsigned short;'#10 +
     'namespace std {'#10 +
     'using cuda::std::is_same; using cuda::std::is_same_v;'#10 +
@@ -214,9 +216,14 @@ begin
   RequireCpu(DirectoryExists(IncludePath), 'CUDA Toolkit headers not found: ' + IncludePath);
   FArchitecture := UTF8Encode('--gpu-architecture=' + Architecture);
   FIncludePath := UTF8Encode('--include-path=' + IncludePath);
+  {$IFDEF UNIX}
+  FLibrary := LoadLibrary(UTF8Encode(FileName));
+  if FLibrary = NilHandle then raise ECpuGraph.Create('Cannot load NVRTC: ' + GetLoadErrorStr);
+  {$ELSE}
   FLibrary := LoadLibraryExW(PWideChar(FileName), 0,
     LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR or LOAD_LIBRARY_SEARCH_SYSTEM32);
   if FLibrary = 0 then RaiseLastOSError;
+  {$ENDIF}
   FCreate := TCreate(Entry('nvrtcCreateProgram'));
   FDestroy := TDestroy(Entry('nvrtcDestroyProgram'));
   FCompile := TCompile(Entry('nvrtcCompileProgram'));
@@ -227,14 +234,21 @@ begin
   FError := TGetErrorString(Entry('nvrtcGetErrorString'));
   Version := TGetVersion(Entry('nvrtcVersion'));
   Check(Version(Major, Minor), 'Read NVRTC version');
+  {$IFDEF UNIX}
+  BuiltinsPath := ExtractFilePath(FileName) + Format('libnvrtc-builtins.so.%d.%d', [Major, Minor]);
+  FBuiltins := LoadLibrary(UTF8Encode(BuiltinsPath));
+  if FBuiltins = NilHandle then
+    raise ECpuGraph.Create('Cannot load NVRTC builtins: ' + GetLoadErrorStr);
+  {$ELSE}
   BuiltinsPath := ExtractFilePath(FileName) + Format('nvrtc-builtins64_%d%d.dll', [Major, Minor]);
   FBuiltins := LoadLibraryExW(PWideChar(BuiltinsPath), 0,
     LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR or LOAD_LIBRARY_SEARCH_SYSTEM32);
   if FBuiltins = 0 then RaiseLastOSError;
-  FBytesFromArray := TBytesFromArray(GetProcAddress(HMODULE(TTVMRuntime.TModule.Handle),
-    'TVMFFIBytesFromByteArray'));
-  FStringFromArray := TBytesFromArray(GetProcAddress(HMODULE(TTVMRuntime.TModule.Handle),
-    'TVMFFIStringFromByteArray'));
+  {$ENDIF}
+  FBytesFromArray := TBytesFromArray(TTVMRuntime.TModule.GetProcAddress(TTVMRuntime.TModule.Handle,
+    'TVMFFIBytesFromByteArray', False));
+  FStringFromArray := TBytesFromArray(TTVMRuntime.TModule.GetProcAddress(TTVMRuntime.TModule.Handle,
+    'TVMFFIStringFromByteArray', False));
   RequireCpu(Assigned(FBytesFromArray) and Assigned(FStringFromArray) and
     Assigned(TTVMRuntime.TModule.TVMFFIErrorSetRaisedFromCStr),
     'The TVM FFI library cannot pass CUDA compiler output');

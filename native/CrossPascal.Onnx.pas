@@ -18,7 +18,9 @@ uses
 
 const
   OnnxFloat = 1;
+  OnnxUInt8 = 2;
   OnnxInt8 = 3;
+  OnnxInt32 = 6;
   OnnxInt64 = 7;
   OnnxBool = 9;
   OnnxBFloat16 = 16;

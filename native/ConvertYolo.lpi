@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12"/>
+    <General><Title Value="ConvertYolo"/><ResourceType Value="res"/></General>
+    <BuildModes><Item Name="Release" Default="True"/></BuildModes>
+    <Units><Unit><Filename Value="ConvertYolo.dpr"/><IsPartOfProject Value="True"/></Unit></Units>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <Target><Filename Value="bin/lazarus-win64/ConvertYolo"/></Target>
+    <SearchPaths>
+      <OtherUnitFiles Value="../../crosspascal-tvm/pascal;../../crosspascal-opencv/pascal;../../crosspascal/rtl-algorithms/src"/>
+      <UnitOutputDirectory Value="build/lazarus-win64/units"/>
+    </SearchPaths>
+    <CodeGeneration><Optimizations><OptimizationLevel Value="2"/></Optimizations></CodeGeneration>
+    <Linking><Debugging><GenerateDebugInfo Value="False"/></Debugging></Linking>
+    <Other><CustomOptions Value="-Mdelphiunicode -dTVM_LAZY_INIT -dNO_LOCAL_TVM -Xs"/></Other>
+  </CompilerOptions>
+</CONFIG>
