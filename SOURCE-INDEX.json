@@ -1,6 +1,6 @@
 {
   "schema": "crosspascal-windows-source-index-v1",
-  "release_id": "early-access-024-r1",
+  "release_id": "early-access-025",
   "repository": "crosspascal-convert",
   "local_metadata": [
     {
@@ -47,8 +47,8 @@
     },
     {
       "path": "docs/YOLO-NATIVE.md",
-      "bytes": 5544,
-      "sha256": "9ee554fe2484695a830444c327ee7eb08bf6bb02ba38b92f3b55d4aeca5e4b9b"
+      "bytes": 5984,
+      "sha256": "372092bb1037d213120c7ec34bfe86173b41a71fd74cc0b372e94cc7cdf5d030"
     },
     {
       "path": "INSTALL.md",
@@ -356,16 +356,6 @@
       "sha256": "4e4c9ccb528b0d4186d0e8758ac9a9be7a008dbd2f06218ca6a0cb55bebab3b9"
     },
     {
-      "path": "native/profiles/gemma3n/recipe.json",
-      "bytes": 382,
-      "sha256": "2b60c18cf52cff20f8d984fd7d31316720ad8621cfde47d67ef10e261dd8bf05"
-    },
-    {
-      "path": "native/profiles/gemma3n/vision.onnx",
-      "bytes": 1027366,
-      "sha256": "ae5a3057747cf6d0654e469294a2576b7d5a7572f26c617a7b597f0f3e65b69d"
-    },
-    {
       "path": "native/profiles/gemma3n-huihui-abliterated/distribution.json",
       "bytes": 810,
       "sha256": "91ea7f7f8c7ca88249786dcf1eaa3caaae0ef676a4a3ad48bb73224fd484c458"
@@ -402,6 +392,16 @@
     },
     {
       "path": "native/profiles/gemma3n-huihui-abliterated/vision.onnx",
+      "bytes": 1027366,
+      "sha256": "ae5a3057747cf6d0654e469294a2576b7d5a7572f26c617a7b597f0f3e65b69d"
+    },
+    {
+      "path": "native/profiles/gemma3n/recipe.json",
+      "bytes": 382,
+      "sha256": "2b60c18cf52cff20f8d984fd7d31316720ad8621cfde47d67ef10e261dd8bf05"
+    },
+    {
+      "path": "native/profiles/gemma3n/vision.onnx",
       "bytes": 1027366,
       "sha256": "ae5a3057747cf6d0654e469294a2576b7d5a7572f26c617a7b597f0f3e65b69d"
     },
@@ -446,14 +446,14 @@
       "sha256": "1c007787eddb20f0bedd6319a391bfa57f31e106435fb56e0f35b4a510da0c9b"
     },
     {
-      "path": "native/profiles/yolo11n/model.onnx",
-      "bytes": 235266,
-      "sha256": "867d40f677e1244f124108ff1383f4e9fc2e1d212aba79a9fdeb704bb66edaa0"
-    },
-    {
       "path": "native/profiles/yolo11n-cls/model.onnx",
       "bytes": 46732,
       "sha256": "aeba9eb9e849684f1a2958273aa7e6fb9b270a7923d258f6b2081bb606efc315"
+    },
+    {
+      "path": "native/profiles/yolo11n/model.onnx",
+      "bytes": 235266,
+      "sha256": "867d40f677e1244f124108ff1383f4e9fc2e1d212aba79a9fdeb704bb66edaa0"
     },
     {
       "path": "native/reader-licenses/LICENSE-OLLAMA.txt",
@@ -1056,6 +1056,6 @@
       "sha256": "18e9d8b20d80ad2eaf57997895b013eb06f408db6c6f0c36ab8961900a5640dc"
     }
   ],
-  "documentation_revision": "ea024-r1-20261125",
-  "source_revision": "early-access-024-r1"
+  "documentation_revision": "ea025-20261126",
+  "source_revision": "early-access-025"
 }
