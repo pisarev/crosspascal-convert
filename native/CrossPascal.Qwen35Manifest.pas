@@ -25,8 +25,8 @@ function BuildQwen35TextManifest(const SourcePath, GGMLLibrary: string;
 implementation
 
 uses
-  {$IFDEF FPC}SysUtils, Classes{$ELSE}System.SysUtils, System.Classes{$ENDIF},
-  CrossPascal.SafeTensors, CrossPascal.GGUF, CrossPascal.Qwen35GGUF, TVM.CpuGraph;
+  {$IFDEF FPC}SysUtils, Classes{$ELSE}System.SysUtils, System.Classes{$ENDIF}, CrossPascal.SafeTensors,
+  CrossPascal.GGUF, CrossPascal.Qwen35GGUF, TVM.CpuGraph;
 
 function BuildQwen35TextManifest(const SourcePath, GGMLLibrary: string;
   const Context, HeadRows: Integer; out Config: TQwen35Config;

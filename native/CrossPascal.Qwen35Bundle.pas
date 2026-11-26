@@ -26,9 +26,8 @@ procedure CompileQwen35TextGraphs(const Manifest: TJSONObject; const Config: TQw
 implementation
 
 uses
-  {$IFDEF FPC}SysUtils, Classes{$ELSE}System.SysUtils, System.Classes{$ENDIF},
-  CrossPascal.Qwen35Graph, CrossPascal.Qwen35PrefillGraph, CrossPascal.Onnx, CrossPascal.TVMOnnx,
-  TVM.CpuGraph;
+  {$IFDEF FPC}SysUtils, Classes{$ELSE}System.SysUtils, System.Classes{$ENDIF}, CrossPascal.Qwen35Graph,
+  CrossPascal.Qwen35PrefillGraph, CrossPascal.Onnx, CrossPascal.TVMOnnx, TVM.CpuGraph;
 
 procedure CompileQwen35TextGraphs(const Manifest: TJSONObject; const Config: TQwen35Config;
   const Destination: string; const Kit: TWindowsTvmKit; const NvrtcLibrary, Architecture: string;

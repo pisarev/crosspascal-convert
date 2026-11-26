@@ -103,7 +103,7 @@
     {
       "path": "native/ConvertQwen2.dpr",
       "bytes": 6110,
-      "sha256": "ebe6670634584135f5596ae825d0952450b8ac3be4966f9bc7fa592ea7cd2fc9"
+      "sha256": "71f3de40971b4e4ea5966ff883c31dfc705fbecf370b0389156eb4af5b32d0f6"
     },
     {
       "path": "native/ConvertQwen35.dpr",
@@ -222,8 +222,8 @@
     },
     {
       "path": "native/CrossPascal.Qwen35Bundle.pas",
-      "bytes": 6684,
-      "sha256": "7126b06dbadb0c471211008f83bf69c2f4d7a2b3c8d62fc804ce0d565b8426b4"
+      "bytes": 6681,
+      "sha256": "15709b7a525f423479c0130ba8ecb84fa9f69ff7034c03504e8e339a9bc23be5"
     },
     {
       "path": "native/CrossPascal.Qwen35GGUF.pas",
@@ -238,7 +238,7 @@
     {
       "path": "native/CrossPascal.Qwen35Manifest.pas",
       "bytes": 7940,
-      "sha256": "721043fe8110614a490587964702cdd0111a51fe233a86de3e06161c2700c90e"
+      "sha256": "39d9190592ac2472f1167455bf3e99736084d4f4c1a4f022fed2811d395f4a4d"
     },
     {
       "path": "native/CrossPascal.Qwen35Package.pas",
