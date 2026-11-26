@@ -11,6 +11,13 @@ The same command handles classification, detection, instance segmentation, pose,
 oriented detection, semantic segmentation and depth estimation. Families and
 model sizes are selected by catalog entries rather than executable name checks.
 
+The Windows SDK supplies weight-free recipes and manifests for 115 profiles.
+Size kits select `n`, `s`, `m`, `b`, `l`, `x`, or `all` in the YoloModels
+example. The desktop converter uses the complete catalog independently of
+the prepared size. For `ConvertYolo`, set the request file's `catalog` field
+to `profiles-all.json` to select from all 115 profiles. The unchanged
+`profiles.json` catalog describes the 23 default `n` profiles.
+
 Build the program with `TVM_LAZY_INIT` and the sibling CrossPascal TVM units on
 the unit search path. The compiler kit and the consumer runtime are distinct:
 the application that opens a finished bundle does not need the compiler library.
@@ -33,7 +40,7 @@ Example Linux request:
 ```json
 {
   "schema": "crosspascal.yolo-convert.v1",
-  "catalog": "profiles.json",
+  "catalog": "profiles-all.json",
   "profile": "yolo26n-seg",
   "checkpoint": "weights/yolo26n-seg.pt",
   "recipe": "recipes/yolo26n-seg.recipe.onnx",
