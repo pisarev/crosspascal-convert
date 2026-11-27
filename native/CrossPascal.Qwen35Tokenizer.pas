@@ -25,7 +25,7 @@ implementation
 
 uses
   {$IFDEF FPC}SysUtils, Classes{$ELSE}System.SysUtils, System.Classes{$ENDIF},
-  CrossPascal.Json, TVM.CpuGraph;
+  CrossPascal.Json, TVM.CpuGraph, CrossPascal.NativeIO;
 
 function ExportQwen35GGUFTokenizer(const Source: TGGUFCheckpoint;
   const DestinationFile: string): Integer;
@@ -37,7 +37,7 @@ var
   Root, Model, Row, Pre, Split, Match, ByteLevel, Normalizer, Decoder: TJSONObject;
   Added, Rules, Sequence: TJSONArray;
   I, BaseCount, Tail: Integer;
-  Stream: TFileStream;
+  Stream: TStream;
   Bytes: UTF8String;
   Serialized: string;
 
@@ -160,7 +160,7 @@ begin
     RequireCpu((Tail > 0) and (Serialized[Tail] = '}'), 'Invalid tokenizer model serialization');
     SetLength(Serialized, Tail - 1);
     Bytes := UTF8Encode(Serialized);
-    Stream := TFileStream.Create(DestinationFile, fmCreate);
+    Stream := TNativeWriteStream.Create(DestinationFile, False);
     try
       WriteUTF8(Bytes);
       WriteUTF8(',"vocab":{');

@@ -26,7 +26,7 @@ implementation
 
 uses
   {$IFDEF FPC}Windows, SysUtils, Classes{$ELSE}Winapi.Windows, System.SysUtils, System.Classes{$ENDIF},
-  CrossPascal.SHA256, TVM.CpuGraph;
+  CrossPascal.SHA256, TVM.CpuGraph, CrossPascal.NativeIO;
 
 function BundleDimensions(const Shape: array of Int64): TJSONArray;
 var
@@ -38,9 +38,9 @@ end;
 
 function BundleFileSHA256(const FileName: string): string;
 var
-  Stream: TFileStream;
+  Stream: TStream;
 begin
-  Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+  Stream := TNativeReadStream.Create(FileName);
   try
     Result := SHA256Stream(Stream);
   finally
@@ -50,11 +50,11 @@ end;
 
 procedure WriteBundleJSON(const FileName: string; const Manifest: TJSONObject);
 var
-  Stream: TFileStream;
+  Stream: TStream;
   Text: UTF8String;
 begin
   Text := UTF8Encode(Manifest.ToJSON + #10);
-  Stream := TFileStream.Create(FileName, fmCreate);
+  Stream := TNativeWriteStream.Create(FileName, False);
   try
     Stream.WriteBuffer(Text[1], Length(Text));
   finally
@@ -64,7 +64,11 @@ end;
 
 procedure DeleteBundleStage(const Folder: string);
 var
+  {$IFDEF FPC}
+  Item: TUnicodeSearchRec;
+  {$ELSE}
   Item: TSearchRec;
+  {$ENDIF}
   Status: Integer;
 begin
   Status := FindFirst(IncludeTrailingPathDelimiter(Folder) + '*', faAnyFile, Item);
@@ -85,7 +89,7 @@ end;
 procedure WriteGraphWeights(const FileName: string; const Checkpoint: TSafeTensorCheckpoint;
   const Decode, Prefill: TOnnxModel; const RuntimeInputs: Integer; const Layout: TJSONArray);
 var
-  Stream: TFileStream;
+  Stream: TStream;
   Weight, Other: TOnnxValue;
   Shape: TArray<Int64>;
   Entry: TJSONObject;
@@ -93,7 +97,7 @@ var
   I, J: Integer;
 begin
   RequireCpu(Length(Decode.Inputs) = Length(Prefill.Inputs), 'Graph input count changed');
-  Stream := TFileStream.Create(FileName, fmCreate);
+  Stream := TNativeWriteStream.Create(FileName, False);
   try
     for I := RuntimeInputs to High(Decode.Inputs) do
     begin

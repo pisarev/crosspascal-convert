@@ -13,7 +13,7 @@ program ConvertQwen35;
 
 uses
   {$IFDEF FPC}Windows, SysUtils{$ELSE}Winapi.Windows, System.SysUtils{$ENDIF}, CrossPascal.Json,
-  CrossPascal.Qwen35Source, CrossPascal.Qwen35Package, TVM.CpuGraph;
+  CrossPascal.Qwen35Source, CrossPascal.Qwen35Package, TVM.CpuGraph, CrossPascal.NativeIO;
 
 type
   TLogger = class
@@ -79,20 +79,20 @@ var
   Identity, Root, Kit, Licenses: TJSONObject;
   LicenseFile, Name, IdentityFolder: string;
 begin
-  RequireCpu(ParamCount = 17, 'Invalid native launcher arguments');
-  IdentityData := ReadModelJSON(ParamStr(4));
+  RequireCpu(NativeParamCount = 17, 'Invalid native launcher arguments');
+  IdentityData := ReadModelJSON(NativeParamStr(4));
   Root := TJSONObject.Create;
   try
     Identity := ModelObject(IdentityData, 'source identity');
-    IdentityFolder := ExtractFilePath(ExpandFileName(ParamStr(4)));
-    Root.AddPair('source', ParamStr(2));
-    Root.AddPair('destination', ParamStr(3));
-    Root.AddPair('context', JSONInteger(StrToInt(ParamStr(5))));
+    IdentityFolder := ExtractFilePath(ExpandFileName(NativeParamStr(4)));
+    Root.AddPair('source', NativeParamStr(2));
+    Root.AddPair('destination', NativeParamStr(3));
+    Root.AddPair('context', JSONInteger(StrToInt(NativeParamStr(5))));
     Root.AddPair('head_rows', JSONInteger(4096));
-    Root.AddPair('target', ParamStr(6));
-    Root.AddPair('cuda_arch', ParamStr(7));
-    Root.AddPair('ggml', ParamStr(8));
-    Root.AddPair('packed_kernel_directory', ParamStr(9));
+    Root.AddPair('target', NativeParamStr(6));
+    Root.AddPair('cuda_arch', NativeParamStr(7));
+    Root.AddPair('ggml', NativeParamStr(8));
+    Root.AddPair('packed_kernel_directory', NativeParamStr(9));
     Root.AddPair('source_repository', ModelText(Identity.GetValue('source_repository')));
     Root.AddPair('source_revision', ModelText(Identity.GetValue('source_revision')));
     LicenseFile := ModelText(Identity.GetValue('license_file'));
@@ -104,21 +104,21 @@ begin
     Licenses := TJSONObject.Create;
     Root.AddPair('reader_licenses', Licenses);
     for Name in ReaderLicenseNames do
-      Licenses.AddPair(Name, IncludeTrailingPathDelimiter(ParamStr(10)) + Name);
+      Licenses.AddPair(Name, IncludeTrailingPathDelimiter(NativeParamStr(10)) + Name);
     for Name in ReaderProvenanceNames do
     begin
-      LicenseFile := IncludeTrailingPathDelimiter(ParamStr(10)) + Name;
+      LicenseFile := IncludeTrailingPathDelimiter(NativeParamStr(10)) + Name;
       if FileExists(LicenseFile) then Licenses.AddPair(Name, LicenseFile);
     end;
     Kit := TJSONObject.Create;
     Root.AddPair('kit', Kit);
-    Kit.AddPair('compiler', ParamStr(11));
-    Kit.AddPair('linker', ParamStr(12));
-    Kit.AddPair('ffi_library', ParamStr(13));
-    Kit.AddPair('msvc_libraries', ParamStr(14));
-    Kit.AddPair('ucrt_libraries', ParamStr(15));
-    Kit.AddPair('windows_libraries', ParamStr(16));
-    Kit.AddPair('nvrtc_library', ParamStr(17));
+    Kit.AddPair('compiler', NativeParamStr(11));
+    Kit.AddPair('linker', NativeParamStr(12));
+    Kit.AddPair('ffi_library', NativeParamStr(13));
+    Kit.AddPair('msvc_libraries', NativeParamStr(14));
+    Kit.AddPair('ucrt_libraries', NativeParamStr(15));
+    Kit.AddPair('windows_libraries', NativeParamStr(16));
+    Kit.AddPair('nvrtc_library', NativeParamStr(17));
     Result := Root;
     Root := nil;
   finally
@@ -135,14 +135,14 @@ var
   Logger: TLogger;
   Inspect, Launcher: Boolean;
 begin
-  Inspect := (ParamCount = 2) and (ParamStr(1) = '--inspect');
-  Launcher := (ParamStr(1) = '--launcher') or (ParamStr(1) = '--launcher-inspect');
-  Inspect := Inspect or (ParamStr(1) = '--launcher-inspect');
-  RequireCpu((ParamCount = 1) or Inspect or Launcher, 'Usage: ConvertQwen35 [--inspect] request.json');
+  Inspect := (NativeParamCount = 2) and (NativeParamStr(1) = '--inspect');
+  Launcher := (NativeParamStr(1) = '--launcher') or (NativeParamStr(1) = '--launcher-inspect');
+  Inspect := Inspect or (NativeParamStr(1) = '--launcher-inspect');
+  RequireCpu((NativeParamCount = 1) or Inspect or Launcher, 'Usage: ConvertQwen35 [--inspect] request.json');
   if Launcher then
     Data := LauncherRequest
   else
-    Data := ReadModelJSON(ParamStr(ParamCount));
+    Data := ReadModelJSON(NativeParamStr(NativeParamCount));
   Logger := TLogger.Create;
   try
     Request := ModelObject(Data, 'Qwen conversion request');

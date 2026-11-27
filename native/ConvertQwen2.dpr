@@ -14,7 +14,7 @@ program ConvertQwen2;
 uses
   {$IFDEF FPC}Windows, SysUtils{$ELSE}Winapi.Windows, System.SysUtils{$ENDIF}, CrossPascal.Json,
   CrossPascal.NativeBundle, CrossPascal.Onnx, CrossPascal.Qwen2Graph, CrossPascal.SafeTensors,
-  CrossPascal.TVMCompiler, CrossPascal.TVMOnnx, TVM.CpuGraph;
+  CrossPascal.TVMCompiler, CrossPascal.TVMOnnx, TVM.CpuGraph, CrossPascal.NativeIO;
 
 const
   DecodeLibrary = 'qwen2-cuda.dll';
@@ -113,21 +113,21 @@ var
   Kit: TWindowsTvmKit;
 
 begin
-  if ParamCount <> 12 then
+  if NativeParamCount <> 12 then
   begin
     WriteLn(ErrOutput, 'Usage: ConvertQwen2 checkpoint-directory destination context prefill-chunk');
     WriteLn(ErrOutput, '       TVM-compiler-directory link.exe tvm_ffi.lib msvc-lib ucrt-lib windows-lib nvrtc.dll sm_XX');
     Halt(2);
   end;
   try
-    Kit.CompilerDirectory := ParamStr(5);
-    Kit.Linker := ParamStr(6);
-    Kit.FfiLibrary := ExpandFileName(ParamStr(7));
-    Kit.MsvcLibraries := ParamStr(8);
-    Kit.UcrtLibraries := ParamStr(9);
-    Kit.WindowsLibraries := ParamStr(10);
-    Convert(ParamStr(1), ParamStr(2), StrToInt(ParamStr(3)), StrToInt(ParamStr(4)), ParamStr(11),
-      ParamStr(12), Kit);
+    Kit.CompilerDirectory := NativeParamStr(5);
+    Kit.Linker := NativeParamStr(6);
+    Kit.FfiLibrary := ExpandFileName(NativeParamStr(7));
+    Kit.MsvcLibraries := NativeParamStr(8);
+    Kit.UcrtLibraries := NativeParamStr(9);
+    Kit.WindowsLibraries := NativeParamStr(10);
+    Convert(NativeParamStr(1), NativeParamStr(2), StrToInt(NativeParamStr(3)),
+      StrToInt(NativeParamStr(4)), NativeParamStr(11), NativeParamStr(12), Kit);
   except
     on E: Exception do
     begin

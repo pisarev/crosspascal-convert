@@ -12,7 +12,8 @@ program ConvertGemma3n;
 {$IFDEF FPC}{$MODE DELPHIUNICODE}{$ENDIF}
 
 uses
-  {$IFDEF FPC}SysUtils{$ELSE}System.SysUtils{$ENDIF}, CrossPascal.TVMCompiler, CrossPascal.Gemma3nBundle;
+  {$IFDEF FPC}SysUtils{$ELSE}System.SysUtils{$ENDIF}, CrossPascal.TVMCompiler, CrossPascal.Gemma3nBundle,
+  CrossPascal.NativeIO;
 
 var
   Kit: TWindowsTvmKit;
@@ -21,20 +22,20 @@ var
 
 procedure ReadKit(const First: Integer);
 begin
-  Kit.CompilerDirectory := ParamStr(First);
-  Kit.Linker := ParamStr(First + 1);
-  Kit.FfiLibrary := ExpandFileName(ParamStr(First + 2));
-  Kit.MsvcLibraries := ParamStr(First + 3);
-  Kit.UcrtLibraries := ParamStr(First + 4);
-  Kit.WindowsLibraries := ParamStr(First + 5);
+  Kit.CompilerDirectory := NativeParamStr(First);
+  Kit.Linker := NativeParamStr(First + 1);
+  Kit.FfiLibrary := ExpandFileName(NativeParamStr(First + 2));
+  Kit.MsvcLibraries := NativeParamStr(First + 3);
+  Kit.UcrtLibraries := NativeParamStr(First + 4);
+  Kit.WindowsLibraries := NativeParamStr(First + 5);
 end;
 
 begin
   SetTextCodePage(Output, 65001);
   SetTextCodePage(ErrOutput, 65001);
-  if ParamStr(1) = '--attach-vision' then
+  if NativeParamStr(1) = '--attach-vision' then
   begin
-    if not (ParamCount in [13, 14]) then
+    if not (NativeParamCount in [13, 14]) then
     begin
       WriteLn(ErrOutput,
         'Usage: ConvertGemma3n --attach-vision text-bundle projector.gguf recipe-dir destination');
@@ -46,10 +47,10 @@ begin
     try
       ReadKit(8);
       Nvrtc := '';
-      if ParamCount = 14 then Nvrtc := ParamStr(14);
-      AddGemma3nVision(ParamStr(2), ParamStr(3), ParamStr(4), ParamStr(5), ParamStr(6),
-        ParamStr(7), Nvrtc, Kit);
-      WriteLn(UTF8Encode(ExpandFileName(ParamStr(5))));
+      if NativeParamCount = 14 then Nvrtc := NativeParamStr(14);
+      AddGemma3nVision(NativeParamStr(2), NativeParamStr(3), NativeParamStr(4), NativeParamStr(5),
+        NativeParamStr(6), NativeParamStr(7), Nvrtc, Kit);
+      WriteLn(UTF8Encode(ExpandFileName(NativeParamStr(5))));
     except
       on E: Exception do
       begin
@@ -59,10 +60,11 @@ begin
     end;
     Halt(0);
   end;
-  EffectiveCount := ParamCount;
-  if (ParamCount >= 15) and (ParamStr(ParamCount - 2) = '--context') then Dec(EffectiveCount, 3);
-  if not ((EffectiveCount = 12) or ((EffectiveCount = 13) and (ParamCount = 13) and
-    (ParamStr(13) = '--text-onnx')) or ((EffectiveCount = 15) and (ParamStr(13) = '--cuda'))) then
+  EffectiveCount := NativeParamCount;
+  if (NativeParamCount >= 15) and (NativeParamStr(NativeParamCount - 2) = '--context') then
+    Dec(EffectiveCount, 3);
+  if not ((EffectiveCount = 12) or ((EffectiveCount = 13) and (NativeParamCount = 13) and
+    (NativeParamStr(13) = '--text-onnx')) or ((EffectiveCount = 15) and (NativeParamStr(13) = '--cuda'))) then
     begin
       WriteLn(ErrOutput, 'Usage: ConvertGemma3n checkpoint.gguf projector.gguf-or-- recipe-dir destination');
       WriteLn(ErrOutput,
@@ -74,21 +76,21 @@ begin
   try
     Context := 0;
     Chunk := 0;
-    if EffectiveCount <> ParamCount then
+    if EffectiveCount <> NativeParamCount then
     begin
-      Context := StrToInt(ParamStr(ParamCount - 1));
-      Chunk := StrToInt(ParamStr(ParamCount));
+      Context := StrToInt(NativeParamStr(NativeParamCount - 1));
+      Chunk := StrToInt(NativeParamStr(NativeParamCount));
     end;
-    Projector := ParamStr(2);
+    Projector := NativeParamStr(2);
     if Projector = '-' then Projector := '';
     ReadKit(7);
     if EffectiveCount = 15 then
-      ConvertGemma3nCudaBundle(ParamStr(1), Projector, ParamStr(3), ParamStr(4), ParamStr(5), ParamStr(6),
-        ParamStr(14), ParamStr(15), Kit, Context)
+      ConvertGemma3nCudaBundle(NativeParamStr(1), Projector, NativeParamStr(3), NativeParamStr(4), NativeParamStr(5), NativeParamStr(6),
+        NativeParamStr(14), NativeParamStr(15), Kit, Context)
     else
-      ConvertGemma3nCpuBundle(ParamStr(1), Projector, ParamStr(3), ParamStr(4), ParamStr(5),
-        ParamStr(6), Kit, EffectiveCount <> 13, Context, Chunk);
-    WriteLn(UTF8Encode(ExpandFileName(ParamStr(4))));
+      ConvertGemma3nCpuBundle(NativeParamStr(1), Projector, NativeParamStr(3), NativeParamStr(4),
+        NativeParamStr(5), NativeParamStr(6), Kit, EffectiveCount <> 13, Context, Chunk);
+    WriteLn(UTF8Encode(ExpandFileName(NativeParamStr(4))));
   except
     on E: Exception do
     begin

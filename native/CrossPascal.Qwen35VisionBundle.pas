@@ -31,8 +31,8 @@ implementation
 uses
   {$IFDEF FPC}SysUtils, Classes, Generics.Collections
   {$ELSE}System.SysUtils, System.Classes, System.Generics.Collections{$ENDIF},
-  CrossPascal.Onnx, CrossPascal.TVMOnnx, CrossPascal.Qwen35VisionGraph,
-  CrossPascal.SafeTensors, CrossPascal.SHA256, TVM.CpuGraph;
+  CrossPascal.Onnx, CrossPascal.TVMOnnx, CrossPascal.Qwen35VisionGraph, CrossPascal.SafeTensors,
+  CrossPascal.SHA256, TVM.CpuGraph, CrossPascal.NativeIO;
 
 const
   ManifestSchema = 'crosspascal-qwen35-vision-v1';
@@ -134,10 +134,10 @@ end;
 
 procedure HashFile(const FileName: string; out Size: Int64; out Digest: string);
 var
-  Stream: TFileStream;
+  Stream: TStream;
   I: Integer;
 begin
-  Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+  Stream := TNativeReadStream.Create(FileName);
   try
     Size := Stream.Size;
     Digest := LowerCase(string(SHA256Stream(Stream)));
@@ -166,11 +166,11 @@ end;
 procedure WriteManifestFile(const FileName: string; const Manifest: TJSONObject);
 var
   Text: UTF8String;
-  Stream: TFileStream;
+  Stream: TStream;
 begin
   Text := UTF8Encode(Manifest.ToJSON);
   RequireCpu(Length(Text) > 0, 'Empty Qwen vision manifest');
-  Stream := TFileStream.Create(FileName, fmCreate);
+  Stream := TNativeWriteStream.Create(FileName, False);
   try
     Stream.WriteBuffer(Text[1], Length(Text));
     RequireCpu(Stream.Size = Length(Text), 'Incomplete Qwen vision manifest');
@@ -198,7 +198,7 @@ var
   Weights: TArray<TVisionWeight>;
   Value: TOnnxValue;
   Shape: TArray<Int64>;
-  Output: TFileStream;
+  Output: TStream;
   Vision, Text, Manifest, Entry, Descriptor, WeightMap: TJSONObject;
   Inputs, Files: TJSONArray;
   Cuda, CreatedParameters, CreatedLibrary, CreatedManifest: Boolean;
@@ -310,7 +310,7 @@ begin
         'Qwen vision source shard size changed');
       RequireCpu(not FileExists(ParametersPath), 'Qwen vision parameters already exist');
       CreatedParameters := True;
-      Output := TFileStream.Create(ParametersPath, fmCreate);
+      Output := TNativeWriteStream.Create(ParametersPath, False);
       try
         for I := 0 to High(Weights) do
         begin

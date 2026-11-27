@@ -23,7 +23,7 @@ implementation
 uses
   {$IFDEF FPC}Windows, SysUtils, Classes{$ELSE}Winapi.Windows, System.SysUtils, System.Classes{$ENDIF},
   CrossPascal.Json, CrossPascal.NativeBundle, CrossPascal.Onnx, CrossPascal.SHA256,
-  CrossPascal.TVMOnnx, TVM.CpuGraph;
+  CrossPascal.TVMOnnx, TVM.CpuGraph, CrossPascal.NativeIO;
 
 const
   CheckpointHash = '439d1575d7e237ad565ed6969ea2a2dfcedf2086155e9ca3ac96cd6180a48cfd';
@@ -79,11 +79,11 @@ end;
 procedure ConvertOmDetBundle(const SourceDirectory, Destination: string; const Kit: TWindowsTvmKit;
   const NvrtcLibrary, Architecture: string);
 var
-  Sources: array[0..4] of TFileStream;
+  Sources: array[0..4] of TStream;
   Root, Artifact: TJSONObject;
   Artifacts: TJSONArray;
   Graph: TOnnxModel;
-  Target: TFileStream;
+  Target: TStream;
   Folder, Output, Stage, Device, Name: string;
   ID: TGUID;
   I: Integer;
@@ -106,7 +106,7 @@ begin
     { Keep the exact trained source files read-locked through compilation. }
     for I := 0 to High(Sources) do
     begin
-      Sources[I] := TFileStream.Create(BundleMember(Folder, SourceNames[I]), fmOpenRead or fmShareDenyWrite);
+      Sources[I] := TNativeReadStream.Create(BundleMember(Folder, SourceNames[I]));
       RequireCpu(Sources[I].Size = SourceSizes[I], 'OmDet source size differs: ' + SourceNames[I]);
       RequireCpu(SameText(SHA256Stream(Sources[I]), SourceHashes[I]),
         'OmDet source SHA-256 differs: ' + SourceNames[I]);
@@ -136,7 +136,7 @@ begin
       end
       else begin
         Name := SourceNames[I];
-        Target := TFileStream.Create(BundleMember(Stage, Name), fmCreate);
+        Target := TNativeWriteStream.Create(BundleMember(Stage, Name), False);
         try
           Target.CopyFrom(Sources[I], Sources[I].Size);
         finally
@@ -148,7 +148,7 @@ begin
       Artifact.AddPair('role', Roles[I]);
       Artifact.AddPair('file', Name);
       Artifact.AddPair('sha256', BundleFileSHA256(BundleMember(Stage, Name)));
-      Target := TFileStream.Create(BundleMember(Stage, Name), fmOpenRead or fmShareDenyWrite);
+      Target := TNativeReadStream.Create(BundleMember(Stage, Name));
       try
         Artifact.AddPair('bytes', JSONInteger(Target.Size));
       finally

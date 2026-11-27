@@ -25,7 +25,8 @@ implementation
 uses
   {$IFDEF FPC}SysUtils, Classes, Windows{$ELSE}System.SysUtils, System.Classes, Winapi.Windows{$ENDIF},
   CrossPascal.Json, CrossPascal.NativeBundle, CrossPascal.Onnx, CrossPascal.SHA256,
-  CrossPascal.RtDetrSource, CrossPascal.TVMOnnx, CrossPascal.YoloSource, TVM.CpuGraph;
+  CrossPascal.RtDetrSource, CrossPascal.TVMOnnx, CrossPascal.YoloSource, TVM.CpuGraph,
+  CrossPascal.NativeIO;
 
 function BuildTimeUTC: string;
 var
@@ -38,11 +39,11 @@ end;
 
 procedure WriteUTF8(const FileName, Value: string);
 var
-  Stream: TFileStream;
+  Stream: TStream;
   Encoded: UTF8String;
 begin
   Encoded := UTF8Encode(Value);
-  Stream := TFileStream.Create(FileName, fmCreate);
+  Stream := TNativeWriteStream.Create(FileName, False);
   try
     if Length(Encoded) > 0 then Stream.WriteBuffer(Encoded[1], Length(Encoded));
   finally
@@ -259,7 +260,7 @@ end;
 procedure ConvertVisionBundle(const SourceFile, CatalogFile, ProfileID, Destination: string;
   const Kit: TWindowsTvmKit; const RecipeFile, NvrtcLibrary, Architecture: string);
 var
-  Source, RecipeSource, BindingSource, DictionarySource, DictionaryOutput: TFileStream;
+  Source, RecipeSource, BindingSource, DictionarySource, DictionaryOutput: TStream;
   Catalog, BindingData: TJSONValue;
   Root, Artifact, OCR: TJSONObject;
   Graph, Recipe: TOnnxModel;
@@ -275,7 +276,7 @@ begin
   Output := ExcludeTrailingPathDelimiter(ExpandFileName(Destination));
   RequireCpu((not DirectoryExists(Output)) and (not FileExists(Output)) and
     DirectoryExists(ExtractFileDir(Output)), 'Choose a new bundle directory in an existing parent');
-  Source := TFileStream.Create(SourcePath, fmOpenRead or fmShareDenyWrite);
+  Source := TNativeReadStream.Create(SourcePath);
   Catalog := nil;
   Root := nil;
   RecipeSource := nil;
@@ -296,12 +297,12 @@ begin
         ((IsTorch and ((ProfileID = 'yolo11n') or (ProfileID = 'yolo11n-cls'))) or
         (IsSafeTensors and (ProfileID = 'rtdetr-r18vd'))),
         'Select the graph recipe for the original checkpoint');
-      RecipeSource := TFileStream.Create(RecipeFile, fmOpenRead or fmShareDenyWrite);
+      RecipeSource := TNativeReadStream.Create(RecipeFile);
       RecipeHash := SHA256Stream(RecipeSource);
       if IsSafeTensors then
       begin
         BindingsFile := BundleMember(ExtractFileDir(ExpandFileName(RecipeFile)), 'bindings.json');
-        BindingSource := TFileStream.Create(BindingsFile, fmOpenRead or fmShareDenyWrite);
+        BindingSource := TNativeReadStream.Create(BindingsFile);
         BindingsHash := SHA256Stream(BindingSource);
       end;
     end
@@ -314,12 +315,11 @@ begin
     if ModelText(Root.GetValue('task_kind')) = 'ocr_recognition' then
     begin
       OCR := ModelObject(Root.GetValue('ocr'), 'OCR dictionary');
-      DictionarySource := TFileStream.Create(
+      DictionarySource := TNativeReadStream.Create(
         BundleMember(
           ExtractFileDir(SourcePath),
           'ppocrv5_dict.txt'
-        ),
-        fmOpenRead or fmShareDenyWrite
+        )
       );
       RequireCpu(SameText(SHA256Stream(DictionarySource), ModelText(OCR.GetValue('dictionary_sha256'))),
         'The PaddleOCR dictionary does not match the selected profile');
@@ -349,7 +349,7 @@ begin
     WriteUTF8(BundleMember(Stage, ModelFile + '.inputs'), Sidecar);
     if DictionarySource <> nil then
     begin
-      DictionaryOutput := TFileStream.Create(BundleMember(Stage, 'ppocrv5_dict.txt'), fmCreate);
+      DictionaryOutput := TNativeWriteStream.Create(BundleMember(Stage, 'ppocrv5_dict.txt'), False);
       try
         DictionaryOutput.CopyFrom(DictionarySource, DictionarySource.Size);
       finally

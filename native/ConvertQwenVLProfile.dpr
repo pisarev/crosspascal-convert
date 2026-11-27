@@ -15,7 +15,8 @@ uses
   {$IFDEF FPC}SysUtils, Classes, Windows, Generics.Collections
   {$ELSE}System.SysUtils, System.Classes, Winapi.Windows, System.Generics.Collections{$ENDIF},
   CrossPascal.Json, CrossPascal.Onnx, CrossPascal.RowQuantization, CrossPascal.SafeTensors,
-  CrossPascal.SHA256, CrossPascal.TVMCompiler, CrossPascal.TVMOnnx, TVM.CpuGraph;
+  CrossPascal.SHA256, CrossPascal.TVMCompiler, CrossPascal.TVMOnnx, TVM.CpuGraph,
+  CrossPascal.NativeIO;
 
 procedure Check(const Condition: Boolean; const MessageText: string);
 begin
@@ -47,11 +48,11 @@ end;
 
 function ReadObject(const FileName: string): TJSONObject;
 var
-  Stream: TFileStream;
+  Stream: TStream;
   Raw: UTF8String;
   Value: TJSONValue;
 begin
-  Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+  Stream := TNativeReadStream.Create(FileName);
   try
     Check((Stream.Size > 0) and (Stream.Size <= 64 * 1024 * 1024), 'Invalid profile metadata size');
     SetLength(Raw, Stream.Size);
@@ -70,9 +71,9 @@ end;
 
 function FileHash(const FileName: string): string;
 var
-  Stream: TFileStream;
+  Stream: TStream;
 begin
-  Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+  Stream := TNativeReadStream.Create(FileName);
   try
     Result := SHA256Stream(Stream);
   finally
@@ -87,12 +88,12 @@ end;
 
 procedure CopyChecked(const Source, Target, Expected: string);
 var
-  Input, Output: TFileStream;
+  Input, Output: TStream;
 begin
   CheckHash(Source, Expected);
-  Input := TFileStream.Create(Source, fmOpenRead or fmShareDenyWrite);
+  Input := TNativeReadStream.Create(Source);
   try
-    Output := TFileStream.Create(Target, fmCreate or fmShareExclusive);
+    Output := TNativeWriteStream.Create(Target, False);
     try
       Output.CopyFrom(Input, 0);
     finally
@@ -123,7 +124,7 @@ var
   Info: TSafeTensorInfo;
   Shape: TJSONArray;
   Value: TJSONValue;
-  Output: TFileStream;
+  Output: TStream;
   I, J: Integer;
 begin
   for I := 0 to Specs.Count - 1 do
@@ -147,7 +148,7 @@ begin
       Check(Written.ValueFromIndex[J] = Expected, 'Conflicting profile weight aliases: ' + Target);
       Continue;
     end;
-    Output := TFileStream.Create(FileIn(Destination, Target), fmCreate or fmShareExclusive);
+    Output := TNativeWriteStream.Create(FileIn(Destination, Target), False);
     try
       Checkpoint.WriteFloat32(Original, Output);
     finally
@@ -221,7 +222,7 @@ procedure QuantizeMatrix(const Stage, Original, Quantized, Scales: string;
   const Rows, Columns: Integer; const Written: TStringList);
 var
   Source: TMappedModelFile;
-  Q8File, ScaleFile: TFileStream;
+  Q8File, ScaleFile: TStream;
   Size: Int64;
 begin
   if Written.IndexOfName(Quantized) >= 0 then Exit;
@@ -231,11 +232,13 @@ begin
   try
     Size := Int64(Rows) * Columns * SizeOf(Single);
     Check(Source.Size = Size, 'Invalid matrix size: ' + Original);
-    Q8File := TFileStream.Create(FileIn(Stage, Quantized), fmCreate or fmShareExclusive);
-    ScaleFile := TFileStream.Create(FileIn(Stage, Scales), fmCreate or fmShareExclusive);
+    Q8File := TNativeWriteStream.Create(FileIn(Stage, Quantized), False);
+    ScaleFile := TNativeWriteStream.Create(FileIn(Stage, Scales), False);
     WriteSymmetricInt8Rows(Source.AtOffset(0, Size), Rows, Columns, Q8File, ScaleFile);
-    Q8File.Position := 0;
-    ScaleFile.Position := 0;
+    FreeAndNil(Q8File);
+    FreeAndNil(ScaleFile);
+    Q8File := TNativeReadStream.Create(FileIn(Stage, Quantized));
+    ScaleFile := TNativeReadStream.Create(FileIn(Stage, Scales));
     Written.Values[Quantized] := SHA256Stream(Q8File);
     Written.Values[Scales] := SHA256Stream(ScaleFile);
   finally
@@ -399,11 +402,11 @@ end;
 
 procedure SaveManifest(const FileName: string; const Manifest: TJSONObject);
 var
-  Stream: TFileStream;
+  Stream: TStream;
   Raw: UTF8String;
 begin
   Raw := UTF8Encode(Manifest.ToJSON + #10);
-  Stream := TFileStream.Create(FileName, fmCreate or fmShareExclusive);
+  Stream := TNativeWriteStream.Create(FileName, False);
   try
     Stream.WriteBuffer(Raw[1], Length(Raw));
   finally
@@ -413,7 +416,11 @@ end;
 
 procedure RemoveStage(const Folder: string);
 var
+  {$IFDEF FPC}
+  Item: TUnicodeSearchRec;
+  {$ELSE}
   Item: TSearchRec;
+  {$ENDIF}
   Status: Integer;
 begin
   Status := FindFirst(IncludeTrailingPathDelimiter(Folder) + '*', faAnyFile, Item);
@@ -581,26 +588,26 @@ var
 
 begin
   try
-    if (ParamCount <> 9) and not ((ParamCount = 12) and (ParamStr(10) = '--cuda')) then
+    if (NativeParamCount <> 9) and not ((NativeParamCount = 12) and (NativeParamStr(10) = '--cuda')) then
     begin
       WriteLn(ErrOutput, 'Usage: ConvertQwenVLProfile original-directory profile-directory output-directory');
       WriteLn(ErrOutput, '       TVM-compiler-directory link.exe tvm_ffi.lib msvc-lib ucrt-lib windows-lib');
       WriteLn(ErrOutput, '       [--cuda nvrtc.dll sm_XX]');
       Halt(2);
     end;
-    Kit.CompilerDirectory := ParamStr(4);
-    Kit.Linker := ParamStr(5);
-    Kit.FfiLibrary := ExpandFileName(ParamStr(6));
-    Kit.MsvcLibraries := ParamStr(7);
-    Kit.UcrtLibraries := ParamStr(8);
-    Kit.WindowsLibraries := ParamStr(9);
-    if ParamCount = 12 then
+    Kit.CompilerDirectory := NativeParamStr(4);
+    Kit.Linker := NativeParamStr(5);
+    Kit.FfiLibrary := ExpandFileName(NativeParamStr(6));
+    Kit.MsvcLibraries := NativeParamStr(7);
+    Kit.UcrtLibraries := NativeParamStr(8);
+    Kit.WindowsLibraries := NativeParamStr(9);
+    if NativeParamCount = 12 then
     begin
-      NvrtcLibrary := ParamStr(11);
-      Architecture := ParamStr(12);
+      NvrtcLibrary := NativeParamStr(11);
+      Architecture := NativeParamStr(12);
     end;
-    Convert(ExpandFileName(ParamStr(1)), ExpandFileName(ParamStr(2)), ExpandFileName(ParamStr(3)),
-      Kit, NvrtcLibrary, Architecture);
+    Convert(ExpandFileName(NativeParamStr(1)), ExpandFileName(NativeParamStr(2)),
+      ExpandFileName(NativeParamStr(3)), Kit, NvrtcLibrary, Architecture);
   except
     on E: Exception do
     begin

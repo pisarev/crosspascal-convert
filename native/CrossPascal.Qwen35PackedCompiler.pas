@@ -18,13 +18,13 @@ implementation
 
 uses
   {$IFDEF FPC}SysUtils, Classes{$ELSE}System.SysUtils, System.Classes{$ENDIF},
-  CrossPascal.Nvrtc, CrossPascal.SHA256, TVM.CpuGraph;
+  CrossPascal.Nvrtc, CrossPascal.SHA256, TVM.CpuGraph, CrossPascal.NativeIO;
 
 function ReadSource(const FileName, ExpectedSHA256: string): UTF8String;
 var
-  Stream: TFileStream;
+  Stream: TStream;
 begin
-  Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+  Stream := TNativeReadStream.Create(FileName);
   try
     RequireCpu((Stream.Size > 0) and (Stream.Size <= 1024 * 1024), 'Invalid tensor decoder source size');
     RequireCpu(SameText(SHA256Stream(Stream), ExpectedSHA256), 'Tensor decoder source changed');
@@ -49,7 +49,7 @@ var
   Source, Header: UTF8String;
   Bytes: TBytes;
   Compiler: TNvrtcCompiler;
-  Stream: TFileStream;
+  Stream: TStream;
 begin
   RequireCpu(not FileExists(OutputFile), 'Packed decoder output already exists');
   Source := ReadSource(BundleMember(SourceDirectory, 'packed_decode.cu'),
@@ -62,7 +62,7 @@ begin
   finally
     Compiler.Free;
   end;
-  Stream := TFileStream.Create(OutputFile, fmCreate);
+  Stream := TNativeWriteStream.Create(OutputFile, False);
   try
     Stream.WriteBuffer(Bytes[0], Length(Bytes));
   finally

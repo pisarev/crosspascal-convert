@@ -24,7 +24,7 @@ uses
   {$IFDEF FPC}Windows, SysUtils, Classes{$ELSE}Winapi.Windows, System.SysUtils, System.Classes{$ENDIF},
   CrossPascal.Gemma2Graph, CrossPascal.Json, CrossPascal.Onnx, CrossPascal.RowQuantization,
   CrossPascal.SafeTensors, CrossPascal.SHA256, CrossPascal.TokenizerSource, CrossPascal.TVMOnnx,
-  TVM.CpuGraph;
+  TVM.CpuGraph, CrossPascal.NativeIO;
 
 const
   ParameterFile = 'weights.bin';
@@ -42,9 +42,9 @@ end;
 
 function HashFile(const FileName: string): string;
 var
-  Stream: TFileStream;
+  Stream: TStream;
 begin
-  Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+  Stream := TNativeReadStream.Create(FileName);
   try
     Result := SHA256Stream(Stream);
   finally
@@ -54,11 +54,11 @@ end;
 
 procedure WriteManifest(const Folder: string; const Manifest: TJSONObject);
 var
-  Stream: TFileStream;
+  Stream: TStream;
   Text: UTF8String;
 begin
   Text := UTF8Encode(Manifest.ToJSON + #10);
-  Stream := TFileStream.Create(BundleMember(Folder, 'model.json'), fmCreate);
+  Stream := TNativeWriteStream.Create(BundleMember(Folder, 'model.json'), False);
   try
     Stream.WriteBuffer(Text[1], Length(Text));
   finally
@@ -79,8 +79,8 @@ end;
 procedure WriteWeights(const Folder: string; const Checkpoint: TSafeTensorCheckpoint;
   const Decode, Prefill: TOnnxModel; const RuntimeInputs: Integer; const Layout: TJSONArray);
 var
-  Stream: TFileStream;
-  Temporary: TFileStream;
+  Stream: TStream;
+  Temporary: TStream;
   Mapped: TMappedModelFile;
   Scales: TMemoryStream;
   Weight, Other: TOnnxValue;
@@ -94,7 +94,7 @@ begin
   TemporaryPath := BundleMember(Folder, 'matrix.tmp');
   Scales := nil;
   ScaleName := '';
-  Stream := TFileStream.Create(BundleMember(Folder, ParameterFile), fmCreate);
+  Stream := TNativeWriteStream.Create(BundleMember(Folder, ParameterFile), False);
   try
     for I := RuntimeInputs to High(Decode.Inputs) do
     begin
@@ -117,7 +117,7 @@ begin
         RequireCpu((Scales = nil) and (Length(Shape) = 2) and
           (Copy(Weight.Name, Length(Weight.Name) - 4, 5) = ':int8'), 'Invalid int8 matrix binding');
         Name := Copy(Weight.Name, 1, Length(Weight.Name) - 5);
-        Temporary := TFileStream.Create(TemporaryPath, fmCreate);
+        Temporary := TNativeWriteStream.Create(TemporaryPath, False);
         try
           Checkpoint.WriteFloat32(Name, Temporary);
         finally
@@ -162,7 +162,11 @@ end;
 
 procedure RemoveStage(const Folder: string);
 var
+  {$IFDEF FPC}
+  Item: TUnicodeSearchRec;
+  {$ELSE}
   Item: TSearchRec;
+  {$ENDIF}
   Status: Integer;
 begin
   Status := FindFirst(IncludeTrailingPathDelimiter(Folder) + '*', faAnyFile, Item);

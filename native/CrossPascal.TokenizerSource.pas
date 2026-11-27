@@ -18,7 +18,7 @@ implementation
 
 uses
   {$IFDEF FPC}SysUtils, Classes, Generics.Collections{$ELSE}System.SysUtils, System.Classes, System.Generics.Collections{$ENDIF},
-  CrossPascal.UnicodeJson, TVM.CpuGraph;
+  CrossPascal.UnicodeJson, TVM.CpuGraph, CrossPascal.NativeIO;
 
 function ByteToken(const Text: string; out Value: Integer): Boolean;
 begin
@@ -42,6 +42,18 @@ var
 begin
   UTF8 := TokenizerUTF8(Value);
   if Length(UTF8) > 0 then Stream.WriteBuffer(Pointer(UTF8)^, Length(UTF8));
+end;
+
+procedure SaveMemoryToNativeFile(const Data: TMemoryStream; const FileName: string);
+var
+  Output: TStream;
+begin
+  Output := TNativeWriteStream.Create(FileName, False);
+  try
+    Data.SaveToStream(Output);
+  finally
+    Output.Free;
+  end;
 end;
 
 procedure ExportGemmaTokenizer(const SourceFile, Destination: string; const VocabularySize: Integer);
@@ -227,15 +239,15 @@ begin
       'merges ' + IntToStr(RuleCount) + #10 + 'chars ' + IntToStr(CharacterCount) + #10 +
       'specials ' + IntToStr(SpecialCount) + #10 + 'bytes ' + IntToStr(Pieces.Size) + #10 +
       'bos ' + IntToStr(BOS) + #10 + 'space_meta 2581'#10'normalizer Replace'#10);
-    Pieces.SaveToFile(BundleMember(Destination, 'tokenizer-tokens.bin'));
-    Index.SaveToFile(BundleMember(Destination, 'tokenizer-tokens.index'));
-    Rules.SaveToFile(BundleMember(Destination, 'tokenizer-merges.bin'));
-    Characters.SaveToFile(BundleMember(Destination, 'tokenizer-chars.bin'));
-    Added.SaveToFile(BundleMember(Destination, 'tokenizer-specials.txt'));
-    Metadata.SaveToFile(BundleMember(Destination, 'tokenizer.index'));
+    SaveMemoryToNativeFile(Pieces, BundleMember(Destination, 'tokenizer-tokens.bin'));
+    SaveMemoryToNativeFile(Index, BundleMember(Destination, 'tokenizer-tokens.index'));
+    SaveMemoryToNativeFile(Rules, BundleMember(Destination, 'tokenizer-merges.bin'));
+    SaveMemoryToNativeFile(Characters, BundleMember(Destination, 'tokenizer-chars.bin'));
+    SaveMemoryToNativeFile(Added, BundleMember(Destination, 'tokenizer-specials.txt'));
+    SaveMemoryToNativeFile(Metadata, BundleMember(Destination, 'tokenizer.index'));
     Pieces.Clear;
     Pieces.WriteBuffer(ByteIDs, SizeOf(ByteIDs));
-    Pieces.SaveToFile(BundleMember(Destination, 'tokenizer-bytes.bin'));
+    SaveMemoryToNativeFile(Pieces, BundleMember(Destination, 'tokenizer-bytes.bin'));
   finally
     Metadata.Free;
     Added.Free;

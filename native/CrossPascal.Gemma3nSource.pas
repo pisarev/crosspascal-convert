@@ -62,7 +62,7 @@ implementation
 
 uses
   {$IFDEF FPC}Math, SysUtils, Windows{$ELSE}System.Math, System.SysUtils, Winapi.Windows{$ENDIF},
-  CrossPascal.Json, CrossPascal.SHA256, TVM.CpuGraph;
+  CrossPascal.Json, CrossPascal.SHA256, TVM.CpuGraph, CrossPascal.NativeIO;
 
 {$IF not Declared(LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR)}
 const
@@ -438,7 +438,7 @@ var
   Tensor: TGGUFTensor;
   RecordData, Weights, Parameters, Entry: TJSONObject;
   Names: TStringList;
-  Stream: TFileStream;
+  Stream: TStream;
   Shape: TArray<Int64>;
   Name, FileName, Path, Hash: string;
   Text: UTF8String;
@@ -485,10 +485,11 @@ begin
       RequireCpu(TensorElements(Shape) = Tensor.Elements, 'Invalid Gemma 3n source tensor shape: ' + Name);
       FileName := Format('weight-%.4d.bin', [I]);
       Path := BundleMember(Directory, FileName);
-      Stream := TFileStream.Create(Path, fmCreate);
+      Stream := TNativeWriteStream.Create(Path, False);
       try
         Source.WriteFloat32(Name, Stream);
-        Stream.Position := 0;
+        FreeAndNil(Stream);
+        Stream := TNativeReadStream.Create(Path);
         Hash := SHA256Stream(Stream);
       finally
         Stream.Free;
@@ -500,14 +501,14 @@ begin
       Entry.AddPair('shape', ShapeJSON(Shape));
       Entry.AddPair('sha256', Hash);
     end;
-    Stream := TFileStream.Create(BundleMember(Directory, 'tokenizer.model'), fmCreate);
+    Stream := TNativeWriteStream.Create(BundleMember(Directory, 'tokenizer.model'), False);
     try
       WriteGemma3nTokenizer(Source, SentencePieceLibrary, Stream, ImageMarkers);
     finally
       Stream.Free;
     end;
     Text := UTF8Encode(RecordData.ToJSON + sLineBreak);
-    Stream := TFileStream.Create(BundleMember(Directory, 'parameters.json'), fmCreate);
+    Stream := TNativeWriteStream.Create(BundleMember(Directory, 'parameters.json'), False);
     try
       Stream.WriteBuffer(Pointer(Text)^, Length(Text));
     finally

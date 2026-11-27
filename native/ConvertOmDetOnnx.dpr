@@ -12,7 +12,8 @@ program ConvertOmDetOnnx;
 {$IFDEF FPC}{$MODE DELPHIUNICODE}{$ENDIF}
 
 uses
-  {$IFDEF FPC}SysUtils{$ELSE}System.SysUtils{$ENDIF}, CrossPascal.TVMCompiler, CrossPascal.OmDetBundle;
+  {$IFDEF FPC}SysUtils{$ELSE}System.SysUtils{$ENDIF}, CrossPascal.TVMCompiler, CrossPascal.OmDetBundle,
+  CrossPascal.NativeIO;
 
 var
   Kit: TWindowsTvmKit;
@@ -20,12 +21,12 @@ var
   RequiredEnd: Integer;
 
 begin
-  RequiredEnd := ParamCount;
-  if (ParamCount = 11) and (ParamStr(9) = '--cuda') then
+  RequiredEnd := NativeParamCount;
+  if (NativeParamCount = 11) and (NativeParamStr(9) = '--cuda') then
   begin
     RequiredEnd := 8;
-    Nvrtc := ParamStr(10);
-    Architecture := ParamStr(11);
+    Nvrtc := NativeParamStr(10);
+    Architecture := NativeParamStr(11);
   end;
   if RequiredEnd <> 8 then
   begin
@@ -35,14 +36,14 @@ begin
     Halt(2);
   end;
   try
-    Kit.CompilerDirectory := ParamStr(3);
-    Kit.Linker := ParamStr(4);
-    Kit.FfiLibrary := ExpandFileName(ParamStr(5));
-    Kit.MsvcLibraries := ParamStr(6);
-    Kit.UcrtLibraries := ParamStr(7);
-    Kit.WindowsLibraries := ParamStr(8);
-    ConvertOmDetBundle(ParamStr(1), ParamStr(2), Kit, Nvrtc, Architecture);
-    WriteLn(UTF8Encode(ExpandFileName(ParamStr(2))));
+    Kit.CompilerDirectory := NativeParamStr(3);
+    Kit.Linker := NativeParamStr(4);
+    Kit.FfiLibrary := ExpandFileName(NativeParamStr(5));
+    Kit.MsvcLibraries := NativeParamStr(6);
+    Kit.UcrtLibraries := NativeParamStr(7);
+    Kit.WindowsLibraries := NativeParamStr(8);
+    ConvertOmDetBundle(NativeParamStr(1), NativeParamStr(2), Kit, Nvrtc, Architecture);
+    WriteLn(UTF8Encode(ExpandFileName(NativeParamStr(2))));
   except
     on E: Exception do
     begin

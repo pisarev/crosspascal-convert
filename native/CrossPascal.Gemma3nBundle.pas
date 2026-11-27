@@ -30,7 +30,7 @@ uses
   CrossPascal.Gemma3nSource, CrossPascal.Gemma3nGraph, CrossPascal.Gemma3nVisionSource,
   CrossPascal.Gemma3nParameters, CrossPascal.Gemma3nDistribution, CrossPascal.GGUF,
   CrossPascal.Json, CrossPascal.Onnx, CrossPascal.RowQuantization, CrossPascal.SentencePiece,
-  CrossPascal.SHA256, CrossPascal.TVMOnnx, TVM.CpuGraph;
+  CrossPascal.SHA256, CrossPascal.TVMOnnx, TVM.CpuGraph, CrossPascal.NativeIO;
 
 const
   TextOnnx = 'text.onnx';
@@ -47,9 +47,9 @@ const
 
 function FileHash(const Path: string): string;
 var
-  Stream: TFileStream;
+  Stream: TStream;
 begin
-  Stream := TFileStream.Create(Path, fmOpenRead or fmShareDenyWrite);
+  Stream := TNativeReadStream.Create(Path);
   try
     Result := SHA256Stream(Stream);
   finally
@@ -59,11 +59,11 @@ end;
 
 procedure SaveJSON(const Path: string; const Value: TJSONObject);
 var
-  Stream: TFileStream;
+  Stream: TStream;
   Text: UTF8String;
 begin
   Text := UTF8Encode(Value.ToJSON + sLineBreak);
-  Stream := TFileStream.Create(Path, fmCreate);
+  Stream := TNativeWriteStream.Create(Path, False);
   try
     Stream.WriteBuffer(Pointer(Text)^, Length(Text));
   finally
@@ -111,7 +111,7 @@ end;
 procedure PreserveQ8Weight(const Name, Folder: string; const Shape: TArray<Int64>;
   const Binding, Destination, Hashes: TJSONObject; const Source: TGGUFCheckpoint);
 var
-  Quantized, Scales: TFileStream;
+  Quantized, Scales: TStream;
   Slice: TJSONValue;
   First, Elements, Index: Int64;
   Q8File, ScaleFile, Number, Tensor: string;
@@ -136,11 +136,13 @@ begin
   Quantized := nil;
   Scales := nil;
   try
-    Quantized := TFileStream.Create(BundleMember(Folder, Q8File), fmCreate);
-    Scales := TFileStream.Create(BundleMember(Folder, ScaleFile), fmCreate);
+    Quantized := TNativeWriteStream.Create(BundleMember(Folder, Q8File), False);
+    Scales := TNativeWriteStream.Create(BundleMember(Folder, ScaleFile), False);
     Source.WriteQ8_0Range(Tensor, First, Shape[0], Shape[1], Quantized, Scales);
-    Quantized.Position := 0;
-    Scales.Position := 0;
+    FreeAndNil(Quantized);
+    FreeAndNil(Scales);
+    Quantized := TNativeReadStream.Create(BundleMember(Folder, Q8File));
+    Scales := TNativeReadStream.Create(BundleMember(Folder, ScaleFile));
     Hashes.AddPair(Q8File, SHA256Stream(Quantized));
     Hashes.AddPair(ScaleFile, SHA256Stream(Scales));
   finally
@@ -369,7 +371,11 @@ end;
 
 procedure DiscardStage(const Folder: string);
 var
+  {$IFDEF FPC}
+  Item: TUnicodeSearchRec;
+  {$ELSE}
   Item: TSearchRec;
+  {$ENDIF}
   Status: Integer;
 begin
   Status := FindFirst(IncludeTrailingPathDelimiter(Folder) + '*', faAnyFile, Item);

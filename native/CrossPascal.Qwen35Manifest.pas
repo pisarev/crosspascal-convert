@@ -26,7 +26,7 @@ implementation
 
 uses
   {$IFDEF FPC}SysUtils, Classes{$ELSE}System.SysUtils, System.Classes{$ENDIF}, CrossPascal.SafeTensors,
-  CrossPascal.GGUF, CrossPascal.Qwen35GGUF, TVM.CpuGraph;
+  CrossPascal.GGUF, CrossPascal.Qwen35GGUF, TVM.CpuGraph, CrossPascal.NativeIO;
 
 function BuildQwen35TextManifest(const SourcePath, GGMLLibrary: string;
   const Context, HeadRows: Integer; out Config: TQwen35Config;
@@ -44,7 +44,7 @@ var
   BF16Binding: TQwen35Binding;
   GGUFBinding: TQwen35GGUFBinding;
   Storage: TSafeTensorStorage;
-  Stream: TFileStream;
+  Stream: TStream;
   Total, FileBytes: Int64;
   I, Index, Dot: Integer;
   Name, FileName: string;
@@ -166,7 +166,7 @@ begin
         GGUFBindings := ReadQwen35GGUFBindings(GGUF, Config);
         BeginPlan('gguf', 'float32');
         FileName := ExtractFileName(SourcePath);
-        Stream := TFileStream.Create(SourcePath, fmOpenRead or fmShareDenyWrite);
+        Stream := TNativeReadStream.Create(SourcePath);
         try
           FileBytes := Stream.Size;
         finally

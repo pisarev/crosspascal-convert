@@ -12,14 +12,15 @@ program ConvertGemma2;
 {$IFDEF FPC}{$MODE DELPHIUNICODE}{$ENDIF}
 
 uses
-  {$IFDEF FPC}SysUtils{$ELSE}System.SysUtils{$ENDIF}, CrossPascal.TVMCompiler, CrossPascal.Gemma2Bundle;
+  {$IFDEF FPC}SysUtils{$ELSE}System.SysUtils{$ENDIF}, CrossPascal.TVMCompiler, CrossPascal.Gemma2Bundle,
+  CrossPascal.NativeIO;
 
 var
   Kit: TWindowsTvmKit;
   NvrtcLibrary, Architecture: string;
 
 begin
-  if (ParamCount <> 10) and not ((ParamCount = 13) and (ParamStr(11) = '--cuda')) then
+  if (NativeParamCount <> 10) and not ((NativeParamCount = 13) and (NativeParamStr(11) = '--cuda')) then
   begin
     WriteLn(ErrOutput, 'Usage: ConvertGemma2 checkpoint-directory destination context prefill-chunk');
     WriteLn(ErrOutput, '       TVM-compiler-directory link.exe tvm_ffi.lib msvc-lib ucrt-lib windows-lib');
@@ -27,20 +28,20 @@ begin
     Halt(2);
   end;
   try
-    Kit.CompilerDirectory := ParamStr(5);
-    Kit.Linker := ParamStr(6);
-    Kit.FfiLibrary := ExpandFileName(ParamStr(7));
-    Kit.MsvcLibraries := ParamStr(8);
-    Kit.UcrtLibraries := ParamStr(9);
-    Kit.WindowsLibraries := ParamStr(10);
-    if ParamCount = 13 then
+    Kit.CompilerDirectory := NativeParamStr(5);
+    Kit.Linker := NativeParamStr(6);
+    Kit.FfiLibrary := ExpandFileName(NativeParamStr(7));
+    Kit.MsvcLibraries := NativeParamStr(8);
+    Kit.UcrtLibraries := NativeParamStr(9);
+    Kit.WindowsLibraries := NativeParamStr(10);
+    if NativeParamCount = 13 then
     begin
-      NvrtcLibrary := ParamStr(12);
-      Architecture := ParamStr(13);
+      NvrtcLibrary := NativeParamStr(12);
+      Architecture := NativeParamStr(13);
     end;
-    ConvertGemma2Bundle(ParamStr(1), ParamStr(2), StrToInt(ParamStr(3)), StrToInt(ParamStr(4)),
-      Kit, NvrtcLibrary, Architecture);
-    WriteLn(UTF8Encode(ExpandFileName(ParamStr(2))));
+    ConvertGemma2Bundle(NativeParamStr(1), NativeParamStr(2), StrToInt(NativeParamStr(3)),
+      StrToInt(NativeParamStr(4)), Kit, NvrtcLibrary, Architecture);
+    WriteLn(UTF8Encode(ExpandFileName(NativeParamStr(2))));
   except
     on E: Exception do
     begin

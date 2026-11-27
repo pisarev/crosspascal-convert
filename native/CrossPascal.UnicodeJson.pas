@@ -41,7 +41,7 @@ implementation
 
 uses
   {$IFDEF FPC}Classes, SysUtils{$ELSE}System.Classes, System.SysUtils{$ENDIF},
-  TVM.CpuGraph;
+  TVM.CpuGraph, CrossPascal.NativeIO;
 
 function DecodeTokenizerUTF8(const Bytes: UTF8String): string;
 var
@@ -154,11 +154,11 @@ end;
 
 constructor TUnicodeJsonReader.Create(const FileName: string);
 var
-  Stream: TFileStream;
+  Stream: TStream;
   Bytes: UTF8String;
 begin
   inherited Create;
-  Stream := TFileStream.Create(FileName, fmOpenRead or fmShareDenyWrite);
+  Stream := TNativeReadStream.Create(FileName);
   try
     RequireCpu((Stream.Size > 0) and (Stream.Size <= 64 * 1024 * 1024),
       'Invalid tokenizer JSON size');

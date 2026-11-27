@@ -22,7 +22,7 @@ implementation
 
 uses
   {$IFDEF FPC}Classes, SysUtils{$ELSE}System.Classes, System.SysUtils{$ENDIF},
-  CrossPascal.Json, TVM.CpuGraph;
+  CrossPascal.Json, TVM.CpuGraph, CrossPascal.NativeIO;
 
 const
   HiddenSize = 2048;
@@ -62,7 +62,7 @@ procedure WriteNpy(const Projector: TGGUFCheckpoint; const Name, FileName: strin
 const
   Magic: array[0..7] of Byte = ($93, Ord('N'), Ord('U'), Ord('M'), Ord('P'), Ord('Y'), 1, 0);
 var
-  FileStream: TFileStream;
+  FileStream: TStream;
   Text, Dims: UTF8String;
   HeaderSize: Word;
   I: Integer;
@@ -78,7 +78,7 @@ begin
   Text := '{''descr'': ''<f4'', ''fortran_order'': False, ''shape'': (' + Dims + '), }';
   Text := Text + UTF8String(StringOfChar(' ', 63 - (Length(Text) + 10) mod 64)) + #10;
   HeaderSize := Length(Text);
-  FileStream := TFileStream.Create(FileName, fmCreate);
+  FileStream := TNativeWriteStream.Create(FileName, False);
   try
     FileStream.WriteBuffer(Magic, SizeOf(Magic));
     FileStream.WriteBuffer(HeaderSize, SizeOf(HeaderSize));
@@ -92,7 +92,7 @@ end;
 procedure WriteGemma3nVisionWeights(const Projector: TGGUFCheckpoint; const Graph: TOnnxModel;
   const Directory: string);
 var
-  FileStream: TFileStream;
+  FileStream: TStream;
   Layout, Dimensions: TJSONArray;
   Row: TJSONObject;
   Shape: TArray<Int64>;
@@ -119,7 +119,7 @@ begin
     RequireElements(Projector.Tensor(SourceName(Graph.Inputs[I].Name)), ConcreteShape(Graph.Inputs[I]));
   Layout := TJSONArray.Create;
   try
-    FileStream := TFileStream.Create(BundleMember(Directory, 'vision-params.bin'), fmCreate);
+    FileStream := TNativeWriteStream.Create(BundleMember(Directory, 'vision-params.bin'), False);
     try
       for I := 1 to High(Graph.Inputs) do
       begin
@@ -143,7 +143,7 @@ begin
     {$ELSE}
     Text := UTF8Encode(Layout.ToJSON + sLineBreak);
     {$ENDIF}
-    FileStream := TFileStream.Create(BundleMember(Directory, 'vision-parameters.json'), fmCreate);
+    FileStream := TNativeWriteStream.Create(BundleMember(Directory, 'vision-parameters.json'), False);
     try
       FileStream.WriteBuffer(Pointer(Text)^, Length(Text));
     finally

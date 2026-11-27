@@ -12,7 +12,8 @@ program ConvertVisionOnnx;
 {$IFDEF FPC}{$MODE DELPHIUNICODE}{$ENDIF}
 
 uses
-  {$IFDEF FPC}SysUtils{$ELSE}System.SysUtils{$ENDIF}, CrossPascal.TVMCompiler, CrossPascal.VisionBundle;
+  {$IFDEF FPC}SysUtils{$ELSE}System.SysUtils{$ENDIF}, CrossPascal.TVMCompiler, CrossPascal.VisionBundle,
+  CrossPascal.NativeIO;
 
 var
   Kit: TWindowsTvmKit;
@@ -20,12 +21,12 @@ var
   RequiredEnd: Integer;
 
 begin
-  RequiredEnd := ParamCount;
-  if (ParamCount in [13, 14]) and (ParamStr(ParamCount - 2) = '--cuda') then
+  RequiredEnd := NativeParamCount;
+  if (NativeParamCount in [13, 14]) and (NativeParamStr(NativeParamCount - 2) = '--cuda') then
   begin
-    RequiredEnd := ParamCount - 3;
-    Nvrtc := ParamStr(ParamCount - 1);
-    Architecture := ParamStr(ParamCount);
+    RequiredEnd := NativeParamCount - 3;
+    Nvrtc := NativeParamStr(NativeParamCount - 1);
+    Architecture := NativeParamStr(NativeParamCount);
   end;
   if not (RequiredEnd in [10, 11]) then
   begin
@@ -35,16 +36,17 @@ begin
     Halt(2);
   end;
   try
-    Kit.CompilerDirectory := ParamStr(5);
-    Kit.Linker := ParamStr(6);
-    Kit.FfiLibrary := ExpandFileName(ParamStr(7));
-    Kit.MsvcLibraries := ParamStr(8);
-    Kit.UcrtLibraries := ParamStr(9);
-    Kit.WindowsLibraries := ParamStr(10);
+    Kit.CompilerDirectory := NativeParamStr(5);
+    Kit.Linker := NativeParamStr(6);
+    Kit.FfiLibrary := ExpandFileName(NativeParamStr(7));
+    Kit.MsvcLibraries := NativeParamStr(8);
+    Kit.UcrtLibraries := NativeParamStr(9);
+    Kit.WindowsLibraries := NativeParamStr(10);
     Recipe := '';
-    if RequiredEnd = 11 then Recipe := ParamStr(11);
-    ConvertVisionBundle(ParamStr(1), ParamStr(2), ParamStr(3), ParamStr(4), Kit, Recipe, Nvrtc, Architecture);
-    WriteLn(UTF8Encode(ExpandFileName(ParamStr(4))));
+    if RequiredEnd = 11 then Recipe := NativeParamStr(11);
+    ConvertVisionBundle(NativeParamStr(1), NativeParamStr(2), NativeParamStr(3), NativeParamStr(4),
+      Kit, Recipe, Nvrtc, Architecture);
+    WriteLn(UTF8Encode(ExpandFileName(NativeParamStr(4))));
   except
     on E: Exception do
     begin
